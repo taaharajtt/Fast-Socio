@@ -42,7 +42,27 @@ export async function updateSession(request: NextRequest) {
   );
 
   // Touch the user to trigger a token refresh when needed.
-  await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { pathname } = request.nextUrl;
+  const isAuthRoute = pathname.startsWith("/login");
+  const isPublicRoute = isAuthRoute || pathname.startsWith("/styleguide");
+
+  // Unauthenticated users may only see public routes.
+  if (!user && !isPublicRoute) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    return NextResponse.redirect(url);
+  }
+
+  // Authenticated users have no reason to sit on the login screen.
+  if (user && isAuthRoute) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/home";
+    return NextResponse.redirect(url);
+  }
 
   return supabaseResponse;
 }
