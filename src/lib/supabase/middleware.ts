@@ -48,7 +48,10 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   const isAuthRoute = pathname.startsWith("/login");
-  const isPublicRoute = isAuthRoute || pathname.startsWith("/styleguide");
+  const isPublicRoute =
+    isAuthRoute ||
+    pathname.startsWith("/auth/") ||
+    pathname.startsWith("/styleguide");
 
   // Unauthenticated users may only see public routes.
   if (!user && !isPublicRoute) {

@@ -1,26 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { GlassButton, GlassCard, GlassInput } from "@/components/ui";
 import { createClient } from "@/lib/supabase/client";
 import { isValidFastEmail } from "@/lib/auth/email";
 
-type Step = "email" | "code";
+type Step = "email" | "sent";
 
 export default function LoginPage() {
-  const router = useRouter();
   const supabase = createClient();
 
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const emailInvalid = email.length > 0 && !isValidFastEmail(email);
 
-  async function sendCode(e: React.FormEvent) {
+  async function sendLink(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     if (!isValidFastEmail(email)) {
@@ -30,33 +27,17 @@ export default function LoginPage() {
     setLoading(true);
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim().toLowerCase(),
-      options: { shouldCreateUser: true },
+      options: {
+        shouldCreateUser: true,
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
     });
     setLoading(false);
     if (error) {
       setError(error.message);
       return;
     }
-    setStep("code");
-  }
-
-  async function verifyCode(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-    const { error } = await supabase.auth.verifyOtp({
-      email: email.trim().toLowerCase(),
-      token: code.trim(),
-      type: "email",
-    });
-    setLoading(false);
-    if (error) {
-      setError(error.message);
-      return;
-    }
-    // Session cookies are set; land on the app.
-    router.replace("/home");
-    router.refresh();
+    setStep("sent");
   }
 
   return (
@@ -70,7 +51,7 @@ export default function LoginPage() {
 
       <GlassCard className="space-y-4 p-6">
         {step === "email" ? (
-          <form onSubmit={sendCode} className="space-y-4">
+          <form onSubmit={sendLink} className="space-y-4">
             <div className="space-y-2">
               <label htmlFor="email" className="text-sm font-medium text-white">
                 University email
@@ -98,53 +79,35 @@ export default function LoginPage() {
               className="w-full"
               disabled={loading || !isValidFastEmail(email)}
             >
-              {loading ? "Sending code…" : "Continue"}
+              {loading ? "Sending link…" : "Continue"}
             </GlassButton>
           </form>
         ) : (
-          <form onSubmit={verifyCode} className="space-y-4">
-            <div className="space-y-2">
-              <label htmlFor="code" className="text-sm font-medium text-white">
-                Enter the 6-digit code
-              </label>
-              <p className="text-sm text-white/60">Sent to {email}</p>
-              <GlassInput
-                id="code"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                placeholder="123456"
-                maxLength={6}
-                value={code}
-                onChange={(e) =>
-                  setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
-                }
-                disabled={loading}
-                className="text-center text-lg tracking-[0.4em]"
-              />
+          <div className="space-y-4 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-aura/20 text-2xl">
+              ✉
             </div>
-            <GlassButton
-              type="submit"
-              size="lg"
-              className="w-full"
-              disabled={loading || code.length !== 6}
-            >
-              {loading ? "Verifying…" : "Verify & continue"}
-            </GlassButton>
+            <div className="space-y-1">
+              <h2 className="text-lg font-bold text-white">Check your email</h2>
+              <p className="text-sm text-white/70">
+                We sent a sign-in link to{" "}
+                <span className="font-medium text-white">{email}</span>. Open it
+                on this device to continue.
+              </p>
+            </div>
             <GlassButton
               type="button"
               variant="ghost"
               size="md"
-              className="w-full"
-              disabled={loading}
+              className="w-full text-white/80"
               onClick={() => {
                 setStep("email");
-                setCode("");
                 setError(null);
               }}
             >
               Use a different email
             </GlassButton>
-          </form>
+          </div>
         )}
 
         {error && <p className="text-sm text-error">{error}</p>}
