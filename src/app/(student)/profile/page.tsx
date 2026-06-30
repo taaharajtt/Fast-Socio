@@ -1,5 +1,6 @@
-import { GlassCard } from "@/components/ui";
-import { SignOutButton } from "@/components/sign-out-button";
+import Link from "next/link";
+import { Settings } from "lucide-react";
+import { GlassCard, GlassChip } from "@/components/ui";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function ProfilePage() {
@@ -8,25 +9,77 @@ export default async function ProfilePage() {
     data: { user },
   } = await supabase.auth.getUser();
 
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select(
+      "full_name, department, semester, bio, avatar_url, aura_score, interests"
+    )
+    .eq("id", user!.id)
+    .single();
+
+  const interests: string[] = profile?.interests ?? [];
+
   return (
     <main className="mx-auto w-full max-w-md px-5 py-8">
-      <h1 className="text-3xl font-bold tracking-tight">Profile</h1>
-      <p className="mt-1 text-fg-muted">Your Aura, communities, and posts</p>
+      <div className="flex items-start justify-between">
+        <h1 className="text-3xl font-bold tracking-tight">Profile</h1>
+        <Link
+          href="/settings"
+          aria-label="Settings"
+          className="glass flex h-10 w-10 items-center justify-center rounded-full text-fg-muted hover:text-fg"
+        >
+          <Settings className="h-5 w-5" aria-hidden />
+        </Link>
+      </div>
 
-      <GlassCard className="mt-6 space-y-1 p-6">
-        <p className="text-sm text-fg-muted">Signed in as</p>
-        <p className="text-lg font-medium break-all">{user?.email ?? "—"}</p>
+      <GlassCard radius="card" className="mt-6 overflow-hidden p-6">
+        <div className="flex items-center gap-4">
+          <div className="glass h-20 w-20 shrink-0 overflow-hidden rounded-full">
+            {profile?.avatar_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={profile.avatar_url}
+                alt={profile.full_name ?? "Avatar"}
+                className="h-full w-full object-cover"
+              />
+            ) : null}
+          </div>
+          <div className="min-w-0">
+            <h2 className="truncate text-2xl font-bold">
+              {profile?.full_name ?? "—"}
+            </h2>
+            <p className="truncate text-fg-muted">
+              {profile?.department ?? "—"}
+              {profile?.semester ? ` · Semester ${profile.semester}` : ""}
+            </p>
+            <div className="mt-2">
+              <GlassChip tone="aura">★ {profile?.aura_score ?? 0} Aura</GlassChip>
+            </div>
+          </div>
+        </div>
+
+        {profile?.bio && (
+          <p className="mt-4 text-[15px] text-fg/90">{profile.bio}</p>
+        )}
       </GlassCard>
 
-      <GlassCard className="mt-4 p-6">
+      {interests.length > 0 && (
+        <section className="mt-4">
+          <h3 className="mb-2 text-sm font-medium text-fg-muted">Interests</h3>
+          <div className="flex flex-wrap gap-2">
+            {interests.map((tag) => (
+              <GlassChip key={tag}>{tag}</GlassChip>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <GlassCard className="mt-4 p-5">
         <p className="text-sm text-fg-muted">
-          The full profile experience ships in Phase 1 (Profiles).
+          Communities, Events Attended, and Posts strips arrive with their
+          respective phases.
         </p>
       </GlassCard>
-
-      <div className="mt-4">
-        <SignOutButton />
-      </div>
     </main>
   );
 }
