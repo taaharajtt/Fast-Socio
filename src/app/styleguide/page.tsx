@@ -9,6 +9,7 @@ import {
   SegmentedPills,
 } from "@/components/ui";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { isValidFastEmail } from "@/lib/auth/email";
 
 /**
  * Temporary design-system showcase for the glass primitives (Task #001d).
@@ -17,7 +18,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 export default function Home() {
   const [tab, setTab] = useState("foryou");
   const [email, setEmail] = useState("");
-  const invalid = email.length > 0 && !email.endsWith("@nu.edu.pk");
+  const invalid = email.length > 0 && !isValidFastEmail(email);
 
   return (
     <main className="relative mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-5 py-10">
