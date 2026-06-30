@@ -1,14 +1,11 @@
 import { redirect } from "next/navigation";
-import { FloatingDock } from "@/components/floating-dock";
 import { createClient } from "@/lib/supabase/server";
 
 /**
- * Shell for the logged-in student experience. Hosts the floating glass dock and
- * reserves bottom space so scrollable content clears it. All six primary
- * destinations live under this route group. New users who haven't finished
- * onboarding are sent through the profile wizard first.
+ * Onboarding shell. No dock — this is a focused, single-task flow. If the user
+ * has already completed onboarding, send them into the app.
  */
-export default async function StudentLayout({
+export default async function OnboardingLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -25,11 +22,10 @@ export default async function StudentLayout({
     .eq("id", user.id)
     .single();
 
-  if (!profile?.onboarding_completed) redirect("/onboarding");
+  if (profile?.onboarding_completed) redirect("/home");
 
   return (
     <div className="relative flex min-h-full flex-1 flex-col">
-      {/* Ambient brand glow shared across student screens */}
       <div
         aria-hidden
         className="pointer-events-none fixed inset-0 -z-10 opacity-60"
@@ -38,8 +34,7 @@ export default async function StudentLayout({
             "radial-gradient(40rem 30rem at 15% -10%, rgba(124,92,255,0.22), transparent), radial-gradient(35rem 25rem at 95% 5%, rgba(0,212,255,0.16), transparent)",
         }}
       />
-      <div className="flex-1 pb-28">{children}</div>
-      <FloatingDock />
+      {children}
     </div>
   );
 }
