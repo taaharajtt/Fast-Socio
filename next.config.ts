@@ -14,7 +14,9 @@ const withPWA = withPWAInit({
 });
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // next-pwa injects a webpack config; an empty turbopack config lets `next dev`
+  // run on Turbopack without conflict (the SW is disabled in dev anyway).
+  turbopack: {},
 };
 
 export default withPWA(nextConfig);
