@@ -1,26 +1,139 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+  FAST SOCIO design tokens (UI Spec v2 §2).
+  Dark is the primary identity; .light is the required secondary theme.
+  Theme is class-based (html.dark / html.light) for next-themes (Task #001g).
+*/
+
+:root,
+.dark {
+  color-scheme: dark;
+
+  /* Brand */
+  --aura: #7c5cff; /* Aura Purple (primary) */
+  --cyan: #00d4ff; /* Electric Cyan (secondary) */
+
+  /* Surfaces */
+  --bg: #0a0b10; /* Background primary */
+  --bg-elevated: #11131a; /* Background secondary / elevated */
+  --fg: #f5f6fa; /* Primary text */
+  --fg-muted: rgba(245, 246, 250, 0.62); /* Secondary text */
+
+  /* Glass */
+  --glass-surface: rgba(255, 255, 255, 0.08);
+  --glass-surface-strong: rgba(255, 255, 255, 0.12);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+
+  /* Status */
+  --success: #00ff88;
+  --warning: #ffc857;
+  --error: #ff5e78;
+
+  /* Auth-only gradient (UI Spec §2.2 exception) */
+  --auth-gradient: linear-gradient(160deg, #14163a 0%, #2a1b4d 45%, #00344a 100%);
+}
+
+.light {
+  color-scheme: light;
+
+  --bg: #f4f5fb;
+  --bg-elevated: #ffffff;
+  --fg: #0a0b10;
+  --fg-muted: rgba(10, 11, 16, 0.6);
+
+  /* Glass parity on a light base (UI Spec §2.2: full glass parity required) */
+  --glass-surface: rgba(255, 255, 255, 0.55);
+  --glass-surface-strong: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(10, 11, 16, 0.08);
+  --glass-shadow: 0 8px 32px rgba(31, 38, 80, 0.12);
+
+  --auth-gradient: linear-gradient(160deg, #dfe4ff 0%, #efe4ff 45%, #d8f4ff 100%);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Colors → Tailwind utilities (bg-aura, text-cyan, border-glass, …) */
+  --color-aura: var(--aura);
+  --color-cyan: var(--cyan);
+  --color-bg: var(--bg);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-glass: var(--glass-surface);
+  --color-glass-strong: var(--glass-surface-strong);
+  --color-glass-border: var(--glass-border);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+
+  /* Radius scale (UI Spec §2.5) */
+  --radius-sm: 16px;
+  --radius-md: 24px;
+  --radius-lg: 32px;
+  --radius-card: 36px;
+  --radius-pill: 9999px;
+
+  --font-sans: var(--font-inter);
+
+  /* Motion (UI Spec §2.6: 200–350ms, no bouncy) */
+  --ease-glass: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--glass-border);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-inter), Inter, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/*
+  Glass primitive utility. Every glass element carries: blur, soft transparency,
+  a subtle border, and a soft shadow (UI Spec §2.6).
+  Perf budget: max ~6 simultaneously blurred surfaces on screen.
+*/
+@utility glass {
+  background: var(--glass-surface);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+@utility glass-strong {
+  background: var(--glass-surface-strong);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  backdrop-filter: blur(28px) saturate(160%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+/* Gradient brand fill for primary CTAs and the logo mark. */
+@utility gradient-brand {
+  background-image: linear-gradient(135deg, var(--aura) 0%, var(--cyan) 100%);
+}
+
+@utility gradient-brand-text {
+  background-image: linear-gradient(135deg, var(--aura) 0%, var(--cyan) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Full-bleed auth background (auth screens only — UI Spec §2.2). */
+@utility auth-gradient {
+  background-image: var(--auth-gradient);
+}
+
+/* Graceful fallback where backdrop-filter is unsupported. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass,
+  .glass-strong {
+    background: var(--bg-elevated);
+  }
 }
