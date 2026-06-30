@@ -8,6 +8,7 @@ import {
   GlassInput,
   SegmentedPills,
 } from "@/components/ui";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 /**
  * Temporary design-system showcase for the glass primitives (Task #001d).
@@ -104,6 +105,11 @@ export default function Home() {
         <GlassChip tone="error">Reported</GlassChip>
         <GlassChip>Neutral</GlassChip>
       </div>
+
+      <GlassCard className="space-y-3 p-5">
+        <label className="text-sm font-medium">Appearance</label>
+        <ThemeToggle />
+      </GlassCard>
     </main>
   );
 }
