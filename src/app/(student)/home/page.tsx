@@ -1,5 +1,6 @@
 import { PostComposer } from "@/components/feed/post-composer";
 import { PostCard } from "@/components/feed/post-card";
+import { EventsStrip } from "@/components/feed/events-strip";
 import { createClient } from "@/lib/supabase/server";
 import type { FeedPost } from "@/lib/feed/types";
 
@@ -18,6 +19,8 @@ export default async function HomePage() {
       <h1 className="mb-4 text-2xl font-bold tracking-tight">Home</h1>
 
       <PostComposer />
+
+      <EventsStrip />
 
       <div className="mt-4 space-y-4">
         {posts.length === 0 ? (
