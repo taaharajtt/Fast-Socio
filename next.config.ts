@@ -10,6 +10,8 @@ const withPWA = withPWAInit({
   disable: process.env.NODE_ENV === "development",
   workboxOptions: {
     disableDevLogs: true,
+    // Add our Web Push handlers to the generated service worker.
+    importScripts: ["/push-sw.js"],
   },
 });
 

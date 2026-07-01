@@ -2,6 +2,7 @@ import { PostComposer } from "@/components/feed/post-composer";
 import { PostCard } from "@/components/feed/post-card";
 import { EventsStrip } from "@/components/feed/events-strip";
 import { DeptRivalryStrip } from "@/components/feed/dept-rivalry-strip";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { createClient } from "@/lib/supabase/server";
 import type { FeedPost } from "@/lib/feed/types";
 
@@ -17,7 +18,10 @@ export default async function HomePage() {
 
   return (
     <main className="mx-auto w-full max-w-md px-5 py-6">
-      <h1 className="mb-4 text-2xl font-bold tracking-tight">Home</h1>
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-2xl font-bold tracking-tight">Home</h1>
+        <NotificationBell />
+      </div>
 
       <PostComposer />
 

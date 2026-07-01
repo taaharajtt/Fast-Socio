@@ -4,6 +4,8 @@ import { glassButton } from "@/components/ui/glass-button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SignOutButton } from "@/components/sign-out-button";
 import { DeleteAccountButton } from "@/components/delete-account-button";
+import { NotificationPrefs } from "@/components/settings/notification-prefs";
+import { EnablePush } from "@/components/settings/enable-push";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function SettingsPage() {
@@ -11,6 +13,12 @@ export default async function SettingsPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  const { data: prefs } = await supabase
+    .from("notification_preferences")
+    .select("matches, messages, likes, events, communities, system")
+    .eq("user_id", user!.id)
+    .single();
 
   return (
     <main className="mx-auto w-full max-w-md px-5 py-8">
@@ -28,6 +36,25 @@ export default async function SettingsPage() {
         <h2 className="text-sm font-medium text-fg-muted">Appearance</h2>
         <GlassCard className="p-5">
           <ThemeToggle />
+        </GlassCard>
+      </section>
+
+      <section className="mt-5 space-y-2">
+        <h2 className="text-sm font-medium text-fg-muted">Notifications</h2>
+        <GlassCard className="p-5">
+          <EnablePush />
+        </GlassCard>
+        <GlassCard className="px-5 py-1">
+          <NotificationPrefs
+            initial={{
+              matches: prefs?.matches ?? true,
+              messages: prefs?.messages ?? true,
+              likes: prefs?.likes ?? true,
+              events: prefs?.events ?? true,
+              communities: prefs?.communities ?? true,
+              system: prefs?.system ?? true,
+            }}
+          />
         </GlassCard>
       </section>
 
