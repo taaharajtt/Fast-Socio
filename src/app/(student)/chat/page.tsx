@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { GlassCard, GlassChip } from "@/components/ui";
 import { RequestRow, type IncomingRequest } from "@/components/chat/request-row";
+import { OpenChatButton } from "@/components/chat/open-chat-button";
 import { createClient } from "@/lib/supabase/server";
 
 type ProfileLite = {
@@ -17,26 +18,36 @@ export default async function ChatPage() {
   } = await supabase.auth.getUser();
   const me = user!.id;
 
-  // Incoming pending message requests + matches, resolved to the other person.
-  const [{ data: reqRows }, { data: matchRows }] = await Promise.all([
-    supabase
-      .from("message_requests")
-      .select("id, message, sender_id, created_at")
-      .eq("recipient_id", me)
-      .eq("status", "pending")
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("matches")
-      .select("id, user_low, user_high, created_at")
-      .or(`user_low.eq.${me},user_high.eq.${me}`)
-      .order("created_at", { ascending: false }),
-  ]);
+  // Existing conversations + incoming pending requests + matches.
+  const [{ data: convRows }, { data: reqRows }, { data: matchRows }] =
+    await Promise.all([
+      supabase
+        .from("conversations")
+        .select("id, user_low, user_high, last_message_at")
+        .or(`user_low.eq.${me},user_high.eq.${me}`)
+        .order("last_message_at", { ascending: false }),
+      supabase
+        .from("message_requests")
+        .select("id, message, sender_id, created_at")
+        .eq("recipient_id", me)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("matches")
+        .select("id, user_low, user_high, created_at")
+        .or(`user_low.eq.${me},user_high.eq.${me}`)
+        .order("created_at", { ascending: false }),
+    ]);
 
+  const conversations = convRows ?? [];
   const requests = reqRows ?? [];
   const matches = matchRows ?? [];
 
   // Resolve all referenced profiles in one query.
   const otherIds = new Set<string>();
+  conversations.forEach((c) =>
+    otherIds.add(c.user_low === me ? c.user_high : c.user_low)
+  );
   requests.forEach((r) => otherIds.add(r.sender_id));
   matches.forEach((m) =>
     otherIds.add(m.user_low === me ? m.user_high : m.user_low)
@@ -65,6 +76,44 @@ export default async function ChatPage() {
   return (
     <main className="mx-auto w-full max-w-md px-5 py-8">
       <h1 className="text-3xl font-bold tracking-tight">Messages</h1>
+
+      {conversations.length > 0 && (
+        <section className="mt-6">
+          <h2 className="mb-2 text-sm font-medium text-fg-muted">
+            Conversations
+          </h2>
+          <div className="space-y-2">
+            {conversations.map((c) => {
+              const otherId = c.user_low === me ? c.user_high : c.user_low;
+              const p = profiles.get(otherId);
+              return (
+                <Link key={c.id} href={`/chat/${c.id}`} className="block">
+                  <GlassCard className="flex items-center gap-3 p-4">
+                    <div className="glass h-12 w-12 shrink-0 overflow-hidden rounded-full">
+                      {p?.avatar_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={p.avatar_url}
+                          alt={p.full_name ?? "Match"}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : null}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold">
+                        {p?.full_name ?? "Student"}
+                      </p>
+                      <p className="truncate text-xs text-fg-muted">
+                        {p?.department ?? ""}
+                      </p>
+                    </div>
+                  </GlassCard>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       <section className="mt-6">
         <div className="mb-2 flex items-center gap-2">
@@ -119,7 +168,7 @@ export default async function ChatPage() {
                       {p?.department ?? ""}
                     </p>
                   </div>
-                  <span className="text-xs text-fg-muted">Chat soon</span>
+                  <OpenChatButton otherId={otherId} />
                 </GlassCard>
               );
             })}
@@ -127,13 +176,6 @@ export default async function ChatPage() {
         )}
       </section>
 
-      <p className="mt-6 text-center text-xs text-fg-muted">
-        Conversations open up in{" "}
-        <Link href="/discover" className="text-aura">
-          Phase 3
-        </Link>
-        .
-      </p>
     </main>
   );
 }

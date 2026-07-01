@@ -14,6 +14,10 @@ import { cn } from "@/lib/utils";
 export function FloatingDock() {
   const pathname = usePathname();
 
+  // Hidden on immersive conversation screens (/chat/<id>) so the composer is
+  // unobstructed; the /chat list itself keeps the dock.
+  if (/^\/chat\/.+/.test(pathname)) return null;
+
   return (
     <nav
       aria-label="Primary"
