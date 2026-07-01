@@ -7,7 +7,13 @@ import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { createPost } from "@/app/(student)/home/actions";
 
-export function PostComposer() {
+export function PostComposer({
+  communityId,
+  placeholder = "Share something with campus…",
+}: {
+  communityId?: string;
+  placeholder?: string;
+}) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [body, setBody] = useState("");
   const [anon, setAnon] = useState(false);
@@ -49,7 +55,12 @@ export function PostComposer() {
   function submit() {
     setError(null);
     start(async () => {
-      const res = await createPost({ body, imageUrl, isAnonymous: anon });
+      const res = await createPost({
+        body,
+        imageUrl,
+        isAnonymous: anon,
+        communityId,
+      });
       if (!res.ok) {
         setError(res.error);
         return;
@@ -68,7 +79,7 @@ export function PostComposer() {
       <textarea
         value={body}
         onChange={(e) => setBody(e.target.value.slice(0, 2000))}
-        placeholder="Share something with campus…"
+        placeholder={placeholder}
         rows={3}
         className="w-full resize-none bg-transparent text-[15px] text-fg outline-none placeholder:text-fg-muted/70"
       />

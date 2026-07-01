@@ -8,6 +8,7 @@ export default async function HomePage() {
   const { data } = await supabase
     .from("feed_posts")
     .select("*")
+    .is("community_id", null)
     .order("created_at", { ascending: false })
     .limit(50);
   const posts = (data as FeedPost[]) ?? [];

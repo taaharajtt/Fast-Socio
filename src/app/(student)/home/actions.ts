@@ -4,11 +4,12 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
-/** Create a post (text and/or image), optionally anonymous. */
+/** Create a post (text and/or image), optionally anonymous and/or in a community. */
 export async function createPost(input: {
   body: string;
   imageUrl?: string | null;
   isAnonymous: boolean;
+  communityId?: string | null;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
   const {
@@ -31,10 +32,11 @@ export async function createPost(input: {
     body: body || null,
     image_url: input.imageUrl ?? null,
     is_anonymous: input.isAnonymous,
+    community_id: input.communityId ?? null,
   });
   if (error) return { ok: false, error: error.message };
 
-  revalidatePath("/home");
+  revalidatePath(input.communityId ? `/communities/${input.communityId}` : "/home");
   return { ok: true };
 }
 

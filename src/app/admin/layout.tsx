@@ -37,6 +37,9 @@ export default async function AdminLayout({
             <Link href="/admin/reports?type=profile" className="hover:text-fg">
               Reports
             </Link>
+            <Link href="/admin/communities" className="hover:text-fg">
+              Communities
+            </Link>
           </nav>
           <Link href="/home" className="ml-auto text-sm text-fg-muted hover:text-fg">
             Exit
