@@ -87,6 +87,36 @@ export async function sendMessageRequest(
   return { ok: true };
 }
 
+/** Report a profile for moderator review (writes to the polymorphic reports table). */
+export async function reportProfile(
+  targetId: string,
+  reason: string,
+  details?: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const allowed = await checkRateLimit(
+    "report",
+    RATE_LIMITS.report.max,
+    RATE_LIMITS.report.windowSeconds
+  );
+  if (!allowed) return { ok: false, error: "Too many reports for now." };
+
+  const { error } = await supabase.from("reports").insert({
+    reporter_id: user.id,
+    target_type: "profile",
+    target_id: targetId,
+    reason,
+    details: details ?? null,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
 /** Fetch a fresh page of Discover candidates (used when the deck runs low). */
 export async function fetchCandidates(
   limit = 20

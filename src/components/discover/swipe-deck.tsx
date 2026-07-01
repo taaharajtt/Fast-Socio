@@ -7,10 +7,11 @@ import {
   useTransform,
   type PanInfo,
 } from "framer-motion";
-import { Heart, X, Mail, RotateCcw } from "lucide-react";
+import { Heart, X, Mail, RotateCcw, Flag } from "lucide-react";
 import { GlassButton, GlassChip, GlassSheet, GlassInput } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import type { DiscoverProfile } from "@/lib/profile/types";
+import { ReportSheet } from "@/components/discover/report-sheet";
 import {
   recordSwipe,
   sendMessageRequest,
@@ -27,6 +28,7 @@ export function SwipeDeck({
   const [deck, setDeck] = useState<DiscoverProfile[]>(initial);
   const [matchName, setMatchName] = useState<string | null>(null);
   const [sheetFor, setSheetFor] = useState<DiscoverProfile | null>(null);
+  const [reportFor, setReportFor] = useState<DiscoverProfile | null>(null);
 
   const top = deck[0];
 
@@ -59,7 +61,7 @@ export function SwipeDeck({
 
   // Keyboard fallback for desktop (OQ-13): ← Pass, → Like, M Message.
   useEffect(() => {
-    if (!top || sheetFor || matchName) return;
+    if (!top || sheetFor || matchName || reportFor) return;
     function onKey(e: KeyboardEvent) {
       if (e.key === "ArrowLeft") act(top, "pass");
       else if (e.key === "ArrowRight") act(top, "like");
@@ -67,7 +69,7 @@ export function SwipeDeck({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [top, sheetFor, matchName, act]);
+  }, [top, sheetFor, matchName, reportFor, act]);
 
   if (!top) {
     return (
@@ -88,7 +90,12 @@ export function SwipeDeck({
           .slice(0, 3)
           .map((p, i) =>
             i === 0 ? (
-              <TopCard key={p.id} profile={p} onDecision={act} />
+              <TopCard
+                key={p.id}
+                profile={p}
+                onDecision={act}
+                onReport={() => setReportFor(p)}
+              />
             ) : (
               <StackedCard key={p.id} index={i} />
             )
@@ -131,6 +138,7 @@ export function SwipeDeck({
         profile={sheetFor}
         onClose={() => setSheetFor(null)}
       />
+      <ReportSheet profile={reportFor} onClose={() => setReportFor(null)} />
       {matchName && (
         <MatchOverlay name={matchName} onClose={() => setMatchName(null)} />
       )}
@@ -141,9 +149,11 @@ export function SwipeDeck({
 function TopCard({
   profile,
   onDecision,
+  onReport,
 }: {
   profile: DiscoverProfile;
   onDecision: (p: DiscoverProfile, d: "like" | "pass") => void;
+  onReport: () => void;
 }) {
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-200, 200], [-12, 12]);
@@ -166,6 +176,15 @@ function TopCard({
       whileTap={{ scale: 0.98 }}
     >
       <ProfileCardBody profile={profile}>
+        <button
+          type="button"
+          aria-label="Report"
+          onPointerDownCapture={(e) => e.stopPropagation()}
+          onClick={onReport}
+          className="glass absolute left-4 top-4 flex h-9 w-9 items-center justify-center rounded-full text-white/80 hover:text-white"
+        >
+          <Flag className="h-4 w-4" aria-hidden />
+        </button>
         <motion.div
           style={{ opacity: likeOpacity }}
           className="absolute left-5 top-5 rounded-xl border-2 border-success px-3 py-1 text-lg font-extrabold uppercase text-success"
