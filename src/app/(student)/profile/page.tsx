@@ -78,6 +78,13 @@ export default async function ProfilePage() {
         </section>
       )}
 
+      <Link href="/leaderboard" className="mt-4 block">
+        <GlassCard className="flex items-center justify-between p-4">
+          <span className="font-medium">🏆 Leaderboard</span>
+          <span className="text-sm text-fg-muted">This week ›</span>
+        </GlassCard>
+      </Link>
+
       <GlassCard className="mt-4 p-5">
         <p className="text-sm text-fg-muted">
           Communities, Events Attended, and Posts strips arrive with their
