@@ -43,6 +43,9 @@ export default async function AdminLayout({
             <Link href="/admin/events" className="hover:text-fg">
               Events
             </Link>
+            <Link href="/admin/users" className="hover:text-fg">
+              Users
+            </Link>
           </nav>
           <Link href="/home" className="ml-auto text-sm text-fg-muted hover:text-fg">
             Exit

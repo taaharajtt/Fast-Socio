@@ -53,7 +53,11 @@ export default async function ProfilePage() {
               {profile?.semester ? ` · Semester ${profile.semester}` : ""}
             </p>
             <div className="mt-2">
-              <GlassChip tone="aura">★ {profile?.aura_score ?? 0} Aura</GlassChip>
+              <Link href="/profile/aura">
+                <GlassChip tone="aura">
+                  ★ {profile?.aura_score ?? 0} Aura
+                </GlassChip>
+              </Link>
             </div>
           </div>
         </div>
