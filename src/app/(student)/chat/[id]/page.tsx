@@ -33,7 +33,9 @@ export default async function ConversationPage({
       .single(),
     supabase
       .from("messages")
-      .select("id, sender_id, body, created_at, read_at")
+      .select(
+        "id, sender_id, body, attachment_url, attachment_type, created_at, read_at"
+      )
       .eq("conversation_id", id)
       .order("created_at", { ascending: true }),
   ]);

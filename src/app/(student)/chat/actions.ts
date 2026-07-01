@@ -76,10 +76,13 @@ export async function openConversation(otherId: string) {
   redirect(`/chat/${data}`);
 }
 
+type Attachment = { url: string; type: "image" | "voice" };
+
 /** Send a message in a conversation. Rate-limited; RLS enforces membership + blocks. */
 export async function sendMessage(
   conversationId: string,
-  body: string
+  body: string,
+  attachment?: Attachment
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
   const {
@@ -88,7 +91,7 @@ export async function sendMessage(
   if (!user) return { ok: false, error: "Not signed in." };
 
   const text = body.trim();
-  if (text.length < 1 || text.length > 4000)
+  if (!attachment && (text.length < 1 || text.length > 4000))
     return { ok: false, error: "Message must be 1–4000 characters." };
 
   const allowed = await checkRateLimit(
@@ -101,7 +104,37 @@ export async function sendMessage(
   const { error } = await supabase.from("messages").insert({
     conversation_id: conversationId,
     sender_id: user.id,
-    body: text,
+    body: text || null,
+    attachment_url: attachment?.url ?? null,
+    attachment_type: attachment?.type ?? null,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/** Report a specific message for moderator review (target_type = 'message'). */
+export async function reportMessage(
+  messageId: string,
+  reason: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const allowed = await checkRateLimit(
+    "report",
+    RATE_LIMITS.report.max,
+    RATE_LIMITS.report.windowSeconds
+  );
+  if (!allowed) return { ok: false, error: "Too many reports for now." };
+
+  const { error } = await supabase.from("reports").insert({
+    reporter_id: user.id,
+    target_type: "message",
+    target_id: messageId,
+    reason,
   });
   if (error) return { ok: false, error: error.message };
   return { ok: true };
