@@ -67,5 +67,22 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Defense-in-depth RBAC gate for the admin surface. The /admin layout already
+  // redirects non-admins server-side; this stops a non-admin request before it
+  // reaches any /admin route (including future route handlers that don't share
+  // that layout). The extra profiles read only runs on /admin paths.
+  if (user && pathname.startsWith("/admin")) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_admin")
+      .eq("id", user.id)
+      .single();
+    if (!profile?.is_admin) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/home";
+      return NextResponse.redirect(url);
+    }
+  }
+
   return supabaseResponse;
 }

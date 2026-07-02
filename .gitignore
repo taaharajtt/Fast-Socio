@@ -52,3 +52,6 @@ next-env.d.ts
 # Supabase CLI local artifacts
 /supabase/.temp
 /supabase/.branches
+
+# Local handoff doc (contains secrets) — never commit
+/TASK_STATE.md

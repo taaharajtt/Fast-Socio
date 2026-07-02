@@ -33,7 +33,10 @@ export default async function AdminLayout({
           <Link href="/admin" className="font-bold">
             <span className="gradient-brand-text">FAST SOCIO</span> Admin
           </Link>
-          <nav className="flex gap-3 text-sm text-fg-muted">
+          <nav className="flex flex-wrap gap-3 text-sm text-fg-muted">
+            <Link href="/admin" className="hover:text-fg">
+              Dashboard
+            </Link>
             <Link href="/admin/reports?type=profile" className="hover:text-fg">
               Reports
             </Link>
@@ -45,6 +48,9 @@ export default async function AdminLayout({
             </Link>
             <Link href="/admin/users" className="hover:text-fg">
               Users
+            </Link>
+            <Link href="/admin/audit" className="hover:text-fg">
+              Audit
             </Link>
           </nav>
           <Link href="/home" className="ml-auto text-sm text-fg-muted hover:text-fg">
