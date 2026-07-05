@@ -112,6 +112,71 @@ export async function sendMessage(
   return { ok: true };
 }
 
+export type MatchedFriend = {
+  id: string;
+  full_name: string | null;
+  avatar_url: string | null;
+};
+
+/** List the current user's matched friends (for the share sheet, CR-010). */
+export async function listMatchedFriends(): Promise<MatchedFriend[]> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+  const me = user.id;
+
+  const { data: matchRows } = await supabase
+    .from("matches")
+    .select("user_low, user_high")
+    .or(`user_low.eq.${me},user_high.eq.${me}`);
+
+  const otherIds = (matchRows ?? []).map((m) =>
+    m.user_low === me ? m.user_high : m.user_low
+  );
+  if (otherIds.length === 0) return [];
+
+  const { data: profs } = await supabase
+    .from("profiles")
+    .select("id, full_name, avatar_url")
+    .in("id", otherIds);
+  return (profs as MatchedFriend[]) ?? [];
+}
+
+/**
+ * Share a post to a matched friend via direct message (CR-010). Opens/creates
+ * the conversation (eligibility enforced by get_or_create_conversation) and
+ * inserts a message carrying shared_post_id.
+ */
+export async function sharePostToFriend(
+  friendId: string,
+  postId: string
+): Promise<{ ok: true; conversationId: string } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const { data: conversationId, error: convErr } = await supabase.rpc(
+    "get_or_create_conversation",
+    { other_id: friendId }
+  );
+  if (convErr || !conversationId)
+    return { ok: false, error: convErr?.message ?? "Could not open chat." };
+
+  const { error } = await supabase.from("messages").insert({
+    conversation_id: conversationId,
+    sender_id: user.id,
+    body: "📎 Shared a post",
+    shared_post_id: postId,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  return { ok: true, conversationId: conversationId as string };
+}
+
 /** Report a specific message for moderator review (target_type = 'message'). */
 export async function reportMessage(
   messageId: string,

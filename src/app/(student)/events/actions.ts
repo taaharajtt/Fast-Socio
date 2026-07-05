@@ -50,30 +50,58 @@ export async function createEvent(input: {
   redirect(`/events/${data.id}`);
 }
 
-export async function rsvp(eventId: string) {
+type RsvpResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * RSVP to an event (CR-006). Idempotent: the (event_id, user_id) primary key
+ * means a repeat tap inserts nothing, so Aura is never double-awarded. Rejects
+ * RSVPs to unapproved or already-ended events.
+ */
+export async function rsvp(eventId: string): Promise<RsvpResult> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return;
-  await supabase
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const { data: event } = await supabase
+    .from("events")
+    .select("status, starts_at, ends_at")
+    .eq("id", eventId)
+    .single();
+  if (!event) return { ok: false, error: "Event not found." };
+  if (event.status !== "approved")
+    return { ok: false, error: "This event isn't open for RSVPs." };
+  const endsAt = new Date(event.ends_at ?? event.starts_at).getTime();
+  if (endsAt < Date.now())
+    return { ok: false, error: "This event has already ended." };
+
+  const { error } = await supabase
     .from("event_attendees")
-    .insert({ event_id: eventId, user_id: user.id });
+    .upsert(
+      { event_id: eventId, user_id: user.id },
+      { onConflict: "event_id,user_id", ignoreDuplicates: true }
+    );
+  if (error) return { ok: false, error: error.message };
+
   revalidatePath(`/events/${eventId}`);
+  return { ok: true };
 }
 
-export async function cancelRsvp(eventId: string) {
+export async function cancelRsvp(eventId: string): Promise<RsvpResult> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return;
-  await supabase
+  if (!user) return { ok: false, error: "Not signed in." };
+  const { error } = await supabase
     .from("event_attendees")
     .delete()
     .eq("event_id", eventId)
     .eq("user_id", user.id);
+  if (error) return { ok: false, error: error.message };
   revalidatePath(`/events/${eventId}`);
+  return { ok: true };
 }
 
 /** Report an event (target_type = 'event'), feeds /admin/reports?type=event. */

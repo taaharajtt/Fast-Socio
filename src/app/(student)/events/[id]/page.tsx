@@ -1,10 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, Calendar, MapPin, Users } from "lucide-react";
+import { ChevronLeft, Calendar, MapPin } from "lucide-react";
 import { GlassCard, GlassChip } from "@/components/ui";
 import { RsvpButton } from "@/components/events/rsvp-button";
 import { createClient } from "@/lib/supabase/server";
 import { formatEventDate } from "@/lib/events/format";
+
+/** Whether an event's end (or start, if open-ended) is in the past. */
+function hasEnded(startsAt: string, endsAt: string | null): boolean {
+  return new Date(endsAt ?? startsAt).getTime() < Date.now();
+}
 
 export default async function EventPage({
   params,
@@ -21,11 +26,13 @@ export default async function EventPage({
   const { data: event } = await supabase
     .from("events")
     .select(
-      "id, title, description, category, location, starts_at, attendee_count, status, host_id"
+      "id, title, description, category, location, starts_at, ends_at, attendee_count, status, host_id"
     )
     .eq("id", id)
     .single();
   if (!event) notFound();
+
+  const ended = hasEnded(event.starts_at, event.ends_at);
 
   const { data: attendance } = await supabase
     .from("event_attendees")
@@ -54,6 +61,7 @@ export default async function EventPage({
         <div className="flex items-center gap-2">
           <GlassChip tone="cyan">{event.category}</GlassChip>
           {pending && <GlassChip tone="warning">pending</GlassChip>}
+          {!pending && ended && <GlassChip>ended</GlassChip>}
         </div>
         <h2 className="mt-3 text-2xl font-bold">{event.title}</h2>
 
@@ -68,10 +76,6 @@ export default async function EventPage({
               {event.location}
             </p>
           )}
-          <p className="flex items-center gap-2">
-            <Users className="h-4 w-4" aria-hidden />
-            {event.attendee_count} going
-          </p>
         </div>
 
         {event.description && (
@@ -82,7 +86,12 @@ export default async function EventPage({
 
         {!pending && (
           <div className="mt-5">
-            <RsvpButton eventId={event.id} attending={attending} />
+            <RsvpButton
+              eventId={event.id}
+              attending={attending}
+              count={event.attendee_count}
+              ended={ended}
+            />
           </div>
         )}
         {pending && (

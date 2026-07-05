@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Heart, MessageCircle, Flag, VenetianMask } from "lucide-react";
+import { Heart, MessageCircle, Flag, VenetianMask, Share2 } from "lucide-react";
 import { GlassCard, GlassSheet } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { toggleLike, reportPost } from "@/app/(student)/home/actions";
+import { ShareSheet } from "@/components/feed/share-sheet";
 import type { FeedPost } from "@/lib/feed/types";
 
 const REPORT_REASONS = [
@@ -20,6 +21,7 @@ export function PostCard({ post }: { post: FeedPost }) {
   const [liked, setLiked] = useState(post.liked_by_me);
   const [likes, setLikes] = useState(post.like_count);
   const [reporting, setReporting] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const anon = post.is_anonymous && !post.author_name;
 
   function onLike() {
@@ -32,23 +34,37 @@ export function PostCard({ post }: { post: FeedPost }) {
   return (
     <GlassCard className="p-4">
       <div className="flex items-center gap-3">
-        <div className="glass flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full">
-          {anon ? (
-            <VenetianMask className="h-5 w-5 text-fg-muted" aria-hidden />
-          ) : post.author_avatar ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={post.author_avatar}
-              alt={post.author_name ?? ""}
-              className="h-full w-full object-cover"
-            />
-          ) : null}
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold">
-            {anon ? "Anonymous" : (post.author_name ?? "Student")}
-          </p>
-        </div>
+        {(() => {
+          const inner = (
+            <>
+              <div className="glass flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full">
+                {anon ? (
+                  <VenetianMask className="h-5 w-5 text-fg-muted" aria-hidden />
+                ) : post.author_avatar ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={post.author_avatar}
+                    alt={post.author_name ?? ""}
+                    className="h-full w-full object-cover"
+                  />
+                ) : null}
+              </div>
+              <span className="truncate font-semibold">
+                {anon ? "Anonymous" : (post.author_name ?? "Student")}
+              </span>
+            </>
+          );
+          return !anon && post.author_id ? (
+            <Link
+              href={`/profile/${post.author_id}`}
+              className="flex min-w-0 flex-1 items-center gap-3"
+            >
+              {inner}
+            </Link>
+          ) : (
+            <div className="flex min-w-0 flex-1 items-center gap-3">{inner}</div>
+          );
+        })()}
         <button
           type="button"
           aria-label="Report post"
@@ -92,7 +108,21 @@ export function PostCard({ post }: { post: FeedPost }) {
           <MessageCircle className="h-5 w-5" aria-hidden />
           {post.comment_count}
         </Link>
+        <button
+          type="button"
+          onClick={() => setSharing(true)}
+          aria-label="Share post"
+          className="ml-auto flex items-center gap-1.5 hover:text-fg"
+        >
+          <Share2 className="h-5 w-5" aria-hidden />
+        </button>
       </div>
+
+      <ShareSheet
+        postId={post.id}
+        open={sharing}
+        onClose={() => setSharing(false)}
+      />
 
       <GlassSheet open={reporting} onClose={() => setReporting(false)}>
         <div className="space-y-3">

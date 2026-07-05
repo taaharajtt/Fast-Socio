@@ -3,7 +3,11 @@ import { ChevronLeft } from "lucide-react";
 import { GlassCard } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/server";
-import { notificationView } from "@/lib/notifications/view";
+import {
+  notificationView,
+  notificationActionPhrase,
+  SYSTEM_NOTIFICATION_TYPES,
+} from "@/lib/notifications/view";
 
 type Notif = {
   id: string;
@@ -14,12 +18,77 @@ type Notif = {
   created_at: string;
 };
 
-function bucket(iso: string): "Today" | "This week" | "Earlier" {
-  const d = new Date(iso).getTime();
-  const now = Date.now();
-  if (now - d < 24 * 3600 * 1000) return "Today";
-  if (now - d < 7 * 24 * 3600 * 1000) return "This week";
-  return "Earlier";
+type Actor = { name: string | null; avatar: string | null };
+
+type FeedItem = {
+  key: string;
+  actorId: string | null;
+  actions: Notif[];
+  latestAt: string;
+  anyUnread: boolean;
+};
+
+const GROUP_WINDOW_MS = 60 * 60 * 1000; // bundle same-sender actions within 1h
+
+/**
+ * Bundle consecutive notifications from the same actor that occur within an hour
+ * into one item (CR-013). System notifications (matches, approvals) are never
+ * grouped — each is its own item.
+ */
+function buildFeed(notifs: Notif[]): FeedItem[] {
+  const items: FeedItem[] = [];
+  const open = new Map<string, FeedItem>();
+
+  for (const n of notifs) {
+    const groupable = n.actor_id && !SYSTEM_NOTIFICATION_TYPES.has(n.type);
+    if (!groupable) {
+      items.push({
+        key: n.id,
+        actorId: n.actor_id,
+        actions: [n],
+        latestAt: n.created_at,
+        anyUnread: !n.read_at,
+      });
+      continue;
+    }
+    const actor = n.actor_id as string;
+    const g = open.get(actor);
+    const withinWindow =
+      g &&
+      new Date(g.latestAt).getTime() - new Date(n.created_at).getTime() <=
+        GROUP_WINDOW_MS;
+    if (g && withinWindow) {
+      g.actions.push(n);
+      g.anyUnread = g.anyUnread || !n.read_at;
+    } else {
+      const item: FeedItem = {
+        key: `${actor}:${n.id}`,
+        actorId: actor,
+        actions: [n],
+        latestAt: n.created_at,
+        anyUnread: !n.read_at,
+      };
+      open.set(actor, item);
+      items.push(item);
+    }
+  }
+
+  return items.sort(
+    (a, b) => new Date(b.latestAt).getTime() - new Date(a.latestAt).getTime()
+  );
+}
+
+function summarize(item: FeedItem, actorName: string | null): string {
+  const who = actorName ?? "Someone";
+  const actions = item.actions; // newest-first (source list is desc)
+  if (actions.length === 1) {
+    return notificationView(actions[0].type, actorName, actions[0].data).text;
+  }
+  const first = notificationActionPhrase(actions[0].type);
+  if (actions.length === 2) {
+    return `${who} ${first} and ${notificationActionPhrase(actions[1].type)}`;
+  }
+  return `${who} ${first} and ${actions.length - 1} other activities`;
 }
 
 export default async function NotificationsPage() {
@@ -34,13 +103,13 @@ export default async function NotificationsPage() {
     .select("id, actor_id, type, data, read_at, created_at")
     .eq("user_id", me)
     .order("created_at", { ascending: false })
-    .limit(60);
+    .limit(80);
   const notifs = (rows as Notif[]) ?? [];
 
   const actorIds = [
     ...new Set(notifs.map((n) => n.actor_id).filter(Boolean) as string[]),
   ];
-  const actors = new Map<string, { name: string | null; avatar: string | null }>();
+  const actors = new Map<string, Actor>();
   if (actorIds.length > 0) {
     const { data: profs } = await supabase
       .from("profiles")
@@ -51,11 +120,10 @@ export default async function NotificationsPage() {
     );
   }
 
+  const feed = buildFeed(notifs);
+
   // Mark everything read now that they've opened the feed.
   await supabase.rpc("mark_notifications_read");
-
-  const groups: Record<string, Notif[]> = { Today: [], "This week": [], Earlier: [] };
-  for (const n of notifs) groups[bucket(n.created_at)].push(n);
 
   return (
     <main className="mx-auto w-full max-w-md px-5 py-6">
@@ -70,48 +138,46 @@ export default async function NotificationsPage() {
         <h1 className="text-2xl font-bold tracking-tight">Notifications</h1>
       </div>
 
-      {notifs.length === 0 ? (
+      {feed.length === 0 ? (
         <GlassCard className="p-6 text-center">
           <p className="text-sm text-fg-muted">
             No notifications yet. Matches, likes, and messages will show up here.
           </p>
         </GlassCard>
       ) : (
-        (["Today", "This week", "Earlier"] as const).map((label) =>
-          groups[label].length === 0 ? null : (
-            <section key={label} className="mb-5">
-              <h2 className="mb-2 text-sm font-medium text-fg-muted">{label}</h2>
-              <div className="space-y-2">
-                {groups[label].map((n) => {
-                  const actor = n.actor_id ? actors.get(n.actor_id) : undefined;
-                  const v = notificationView(n.type, actor?.name ?? null, n.data);
-                  return (
-                    <Link key={n.id} href={v.href} className="block">
-                      <GlassCard
-                        className={cn(
-                          "flex items-center gap-3 p-3",
-                          !n.read_at && "border-l-2 border-l-aura"
-                        )}
-                      >
-                        <div className="glass h-10 w-10 shrink-0 overflow-hidden rounded-full">
-                          {actor?.avatar ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={actor.avatar}
-                              alt=""
-                              className="h-full w-full object-cover"
-                            />
-                          ) : null}
-                        </div>
-                        <p className="flex-1 text-sm">{v.text}</p>
-                      </GlassCard>
-                    </Link>
-                  );
-                })}
-              </div>
-            </section>
-          )
-        )
+        <div className="space-y-2">
+          {feed.map((item) => {
+            const actor = item.actorId ? actors.get(item.actorId) : undefined;
+            const latest = item.actions[0];
+            const href = notificationView(
+              latest.type,
+              actor?.name ?? null,
+              latest.data
+            ).href;
+            return (
+              <Link key={item.key} href={href} className="block">
+                <GlassCard
+                  className={cn(
+                    "flex items-center gap-3 p-3",
+                    item.anyUnread && "border-l-2 border-l-aura"
+                  )}
+                >
+                  <div className="glass h-10 w-10 shrink-0 overflow-hidden rounded-full">
+                    {actor?.avatar ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={actor.avatar}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    ) : null}
+                  </div>
+                  <p className="flex-1 text-sm">{summarize(item, actor?.name ?? null)}</p>
+                </GlassCard>
+              </Link>
+            );
+          })}
+        </div>
       )}
     </main>
   );

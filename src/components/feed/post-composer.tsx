@@ -10,9 +10,12 @@ import { createPost } from "@/app/(student)/home/actions";
 export function PostComposer({
   communityId,
   placeholder = "Share something with campus…",
+  reviewNotice,
 }: {
   communityId?: string;
   placeholder?: string;
+  /** Shown after a successful post when submissions require approval. */
+  reviewNotice?: string;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [body, setBody] = useState("");
@@ -20,6 +23,7 @@ export function PostComposer({
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
   async function onPickImage(e: React.ChangeEvent<HTMLInputElement>) {
@@ -54,6 +58,7 @@ export function PostComposer({
 
   function submit() {
     setError(null);
+    setNotice(null);
     start(async () => {
       const res = await createPost({
         body,
@@ -68,6 +73,7 @@ export function PostComposer({
       setBody("");
       setAnon(false);
       setImageUrl(null);
+      if (reviewNotice) setNotice(reviewNotice);
     });
   }
 
@@ -142,6 +148,7 @@ export function PostComposer({
         </GlassButton>
       </div>
       {error && <p className="mt-2 text-sm text-error">{error}</p>}
+      {notice && <p className="mt-2 text-sm text-aura">{notice}</p>}
     </GlassCard>
   );
 }

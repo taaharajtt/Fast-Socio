@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
-import { ChatThread, type ChatMessage } from "@/components/chat/chat-thread";
+import {
+  ChatThread,
+  type ChatMessage,
+  type SharedPostPreview,
+} from "@/components/chat/chat-thread";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function ConversationPage({
@@ -33,12 +37,30 @@ export default async function ConversationPage({
       .single(),
     supabase
       .from("messages")
-      .select(
-        "id, sender_id, body, attachment_url, attachment_type, created_at, read_at"
-      )
+      // select * (not an explicit list) so this query keeps working before the
+      // shared_post_id column exists; the preview shows shares once migrated.
+      .select("*")
       .eq("conversation_id", id)
       .order("created_at", { ascending: true }),
   ]);
+
+  // Resolve previews for any shared posts (feed_posts is the readable view).
+  const messages = (msgs as ChatMessage[]) ?? [];
+  const sharedIds = [
+    ...new Set(
+      messages.map((m) => m.shared_post_id).filter(Boolean) as string[]
+    ),
+  ];
+  const sharedPosts: Record<string, SharedPostPreview> = {};
+  if (sharedIds.length > 0) {
+    const { data: preRows } = await supabase
+      .from("feed_posts")
+      .select("id, body, image_url")
+      .in("id", sharedIds);
+    (preRows ?? []).forEach((p) => {
+      sharedPosts[p.id] = { body: p.body, image_url: p.image_url };
+    });
+  }
 
   return (
     <div className="fixed inset-0 z-40 mx-auto flex max-w-md flex-col bg-bg px-4">
@@ -75,7 +97,8 @@ export default async function ConversationPage({
       <ChatThread
         conversationId={id}
         meId={me}
-        initialMessages={(msgs as ChatMessage[]) ?? []}
+        initialMessages={messages}
+        sharedPosts={sharedPosts}
       />
     </div>
   );

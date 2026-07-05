@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Settings } from "lucide-react";
+import { Settings, Pencil } from "lucide-react";
 import { GlassCard, GlassChip } from "@/components/ui";
 import { createClient } from "@/lib/supabase/server";
 
@@ -23,13 +23,22 @@ export default async function ProfilePage() {
     <main className="mx-auto w-full max-w-md px-5 py-8">
       <div className="flex items-start justify-between">
         <h1 className="text-3xl font-bold tracking-tight">Profile</h1>
-        <Link
-          href="/settings"
-          aria-label="Settings"
-          className="glass flex h-10 w-10 items-center justify-center rounded-full text-fg-muted hover:text-fg"
-        >
-          <Settings className="h-5 w-5" aria-hidden />
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/profile/edit"
+            aria-label="Edit profile"
+            className="glass flex h-10 w-10 items-center justify-center rounded-full text-fg-muted hover:text-fg"
+          >
+            <Pencil className="h-5 w-5" aria-hidden />
+          </Link>
+          <Link
+            href="/settings"
+            aria-label="Settings"
+            className="glass flex h-10 w-10 items-center justify-center rounded-full text-fg-muted hover:text-fg"
+          >
+            <Settings className="h-5 w-5" aria-hidden />
+          </Link>
+        </div>
       </div>
 
       <GlassCard radius="card" className="mt-6 overflow-hidden p-6">

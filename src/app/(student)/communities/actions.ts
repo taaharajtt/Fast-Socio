@@ -39,6 +39,57 @@ export async function createCommunity(input: {
   redirect(`/communities/${data.id}`);
 }
 
+/** Send a message to a community's open chat room (Zone 2). RLS enforces membership. */
+export async function sendCommunityMessage(
+  communityId: string,
+  body: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const text = body.trim();
+  if (text.length < 1 || text.length > 2000)
+    return { ok: false, error: "Message must be 1–2000 characters." };
+
+  const allowed = await checkRateLimit("community_chat", 60, 60);
+  if (!allowed) return { ok: false, error: "You're sending too fast." };
+
+  const { error } = await supabase.from("community_chat_messages").insert({
+    community_id: communityId,
+    sender_id: user.id,
+    body: text,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/**
+ * Approve or reject a pending community post (Zone 1). The RPC verifies the
+ * caller owns/moderates the community and notifies the post author.
+ */
+export async function moderateCommunityPost(
+  postId: string,
+  approve: boolean
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const { error } = await supabase.rpc("moderate_community_post", {
+    p_post_id: postId,
+    p_approve: approve,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/communities");
+  return { ok: true };
+}
+
 export async function joinCommunity(communityId: string) {
   const supabase = await createClient();
   const {

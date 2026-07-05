@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { GlassCard, GlassChip } from "@/components/ui";
 import { AuraAdjustForm } from "@/components/admin/aura-adjust-form";
+import { BanUserButton } from "@/components/admin/ban-user-button";
 import { createClient } from "@/lib/supabase/server";
 import { auraReasonLabel } from "@/lib/aura/labels";
 
@@ -60,6 +61,15 @@ export default async function AdminUserPage({
         </h2>
         <GlassCard className="p-4">
           <AuraAdjustForm userId={profile.id} />
+        </GlassCard>
+      </section>
+
+      <section className="mt-5">
+        <h2 className="mb-2 text-sm font-medium text-fg-muted">
+          {profile.is_banned ? "Restore access" : "Ban user"} (audited)
+        </h2>
+        <GlassCard className="p-4">
+          <BanUserButton userId={profile.id} isBanned={profile.is_banned} />
         </GlassCard>
       </section>
 

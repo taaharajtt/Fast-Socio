@@ -1,5 +1,3 @@
-import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
 import { GlassCard } from "@/components/ui";
 import { createClient } from "@/lib/supabase/server";
 import { LEADERBOARD_TITLES } from "@/lib/leaderboard/titles";
@@ -21,63 +19,65 @@ type DeptRow = {
   rank: number;
 };
 
-export default async function LeaderboardPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ tab?: string }>;
-}) {
-  const { tab } = await searchParams;
-  const isDepts = tab === "departments";
+export default async function LeaderboardPage() {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const me = user!.id;
+
+  const [{ data: deptData }, { data: boardData }] = await Promise.all([
+    supabase.rpc("get_department_rivalry"),
+    supabase.rpc("get_weekly_leaderboard", { p_limit: 50 }),
+  ]);
+  const depts = (deptData as DeptRow[]) ?? [];
+  const rows = (boardData as Row[]) ?? [];
+  const myRow = rows.find((r) => r.user_id === me) ?? null;
 
   return (
     <main className="mx-auto w-full max-w-md px-5 py-6">
-      <div className="mb-1 flex items-center gap-3">
-        <Link
-          href="/profile"
-          aria-label="Back"
-          className="glass flex h-9 w-9 items-center justify-center rounded-full text-fg-muted"
-        >
-          <ChevronLeft className="h-5 w-5" aria-hidden />
-        </Link>
-        <h1 className="text-2xl font-bold tracking-tight">Leaderboard</h1>
-      </div>
-      <p className="mb-4 ml-12 text-sm text-fg-muted">
+      <h1 className="text-2xl font-bold tracking-tight">Leaderboard</h1>
+      <p className="mb-5 text-sm text-fg-muted">
         This week · resets Monday 00:00 PKT
       </p>
 
-      {/* Tabs */}
-      <div className="glass mb-5 flex gap-1 rounded-[var(--radius-pill)] p-1">
-        <Link
-          href="/leaderboard"
-          className={`flex-1 rounded-[var(--radius-pill)] py-2 text-center text-sm font-medium ${!isDepts ? "bg-aura text-white" : "text-fg-muted"}`}
-        >
-          Students
-        </Link>
-        <Link
-          href="/leaderboard?tab=departments"
-          className={`flex-1 rounded-[var(--radius-pill)] py-2 text-center text-sm font-medium ${isDepts ? "bg-aura text-white" : "text-fg-muted"}`}
-        >
-          Departments
-        </Link>
-      </div>
+      {/* CR-007: Department Rivalry at the TOP of the Leaderboard page. */}
+      <section className="mb-7">
+        <h2 className="mb-2 flex items-center gap-2 text-lg font-bold">
+          🏆 Department Rivalry
+        </h2>
+        <p className="mb-2 text-xs text-fg-muted">
+          Ranked by average Aura per member (per-capita).
+        </p>
+        <DepartmentBoard rows={depts} />
+      </section>
 
-      {isDepts ? (
-        <DepartmentBoard supabase={supabase} />
-      ) : (
-        <StudentBoard supabase={supabase} />
-      )}
+      <section className="mb-7">
+        <h2 className="mb-3 flex items-center gap-2 text-lg font-bold">
+          ⚡ Weekly Leaderboard
+        </h2>
+        <StudentBoard rows={rows} />
+      </section>
+
+      {/* Your rank */}
+      <section>
+        <h2 className="mb-2 flex items-center gap-2 text-lg font-bold">
+          📊 Your Rank
+        </h2>
+        <GlassCard strong className="flex items-center justify-between p-4">
+          <span className="font-semibold">
+            {myRow ? `#${myRow.rank} this week` : "Unranked this week"}
+          </span>
+          <span className="text-lg font-bold text-aura">
+            {myRow?.weekly_aura ?? 0} Aura
+          </span>
+        </GlassCard>
+      </section>
     </main>
   );
 }
 
-async function StudentBoard({
-  supabase,
-}: {
-  supabase: Awaited<ReturnType<typeof createClient>>;
-}) {
-  const { data } = await supabase.rpc("get_weekly_leaderboard", { p_limit: 50 });
-  const rows = (data as Row[]) ?? [];
+function StudentBoard({ rows }: { rows: Row[] }) {
   const top3 = rows.filter((r) => r.rank <= 3);
   const rest = rows.filter((r) => r.rank > 3);
 
@@ -176,14 +176,7 @@ async function StudentBoard({
   );
 }
 
-async function DepartmentBoard({
-  supabase,
-}: {
-  supabase: Awaited<ReturnType<typeof createClient>>;
-}) {
-  const { data } = await supabase.rpc("get_department_rivalry");
-  const rows = (data as DeptRow[]) ?? [];
-
+function DepartmentBoard({ rows }: { rows: DeptRow[] }) {
   if (rows.length === 0) {
     return (
       <GlassCard className="p-6 text-center">
@@ -196,9 +189,6 @@ async function DepartmentBoard({
 
   return (
     <div className="space-y-2">
-      <p className="mb-1 text-xs text-fg-muted">
-        Ranked by average Aura per member (per-capita).
-      </p>
       {rows.map((d) => {
         const t = LEADERBOARD_TITLES[d.rank];
         return (

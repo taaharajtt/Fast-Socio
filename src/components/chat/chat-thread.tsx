@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Send, ImagePlus, Mic, Square, Flag } from "lucide-react";
+import Link from "next/link";
+import { Send, ImagePlus, Mic, Square, Flag, FileText } from "lucide-react";
 import { GlassButton, GlassSheet } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -17,9 +18,12 @@ export type ChatMessage = {
   body: string | null;
   attachment_url: string | null;
   attachment_type: "image" | "voice" | null;
+  shared_post_id: string | null;
   created_at: string;
   read_at: string | null;
 };
+
+export type SharedPostPreview = { body: string | null; image_url: string | null };
 
 const REPORT_REASONS = [
   "Harassment or hate",
@@ -32,10 +36,12 @@ export function ChatThread({
   conversationId,
   meId,
   initialMessages,
+  sharedPosts = {},
 }: {
   conversationId: string;
   meId: string;
   initialMessages: ChatMessage[];
+  sharedPosts?: Record<string, SharedPostPreview>;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [draft, setDraft] = useState("");
@@ -222,7 +228,37 @@ export function ChatThread({
                       : "glass rounded-bl-md text-fg cursor-pointer"
                   )}
                 >
-                  {m.attachment_type === "image" && m.attachment_url ? (
+                  {m.shared_post_id ? (
+                    <Link
+                      href={`/post/${m.shared_post_id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="block w-56 max-w-full"
+                    >
+                      <div
+                        className={cn(
+                          "flex items-start gap-2 rounded-xl border p-2.5",
+                          mine
+                            ? "border-white/30 bg-white/10"
+                            : "border-glass-border bg-bg-elevated/40"
+                        )}
+                      >
+                        <FileText className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                        <div className="min-w-0">
+                          <p className="line-clamp-2 text-sm">
+                            {sharedPosts[m.shared_post_id]?.body ?? "Shared a post"}
+                          </p>
+                          <p
+                            className={cn(
+                              "mt-1 text-xs",
+                              mine ? "text-white/70" : "text-fg-muted"
+                            )}
+                          >
+                            Tap to view post →
+                          </p>
+                        </div>
+                      </div>
+                    </Link>
+                  ) : m.attachment_type === "image" && m.attachment_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={m.attachment_url}

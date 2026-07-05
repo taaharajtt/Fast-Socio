@@ -48,8 +48,10 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   const isAuthRoute = pathname.startsWith("/login");
+  const isBannedRoute = pathname.startsWith("/banned");
   const isPublicRoute =
     isAuthRoute ||
+    isBannedRoute ||
     pathname.startsWith("/auth/") ||
     pathname.startsWith("/styleguide");
 
@@ -67,17 +69,24 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Defense-in-depth RBAC gate for the admin surface. The /admin layout already
-  // redirects non-admins server-side; this stops a non-admin request before it
-  // reaches any /admin route (including future route handlers that don't share
-  // that layout). The extra profiles read only runs on /admin paths.
-  if (user && pathname.startsWith("/admin")) {
+  // For authenticated users on a protected route, read the moderation/role flags
+  // once. Banned users are blocked from the entire app (CR-014); non-admins are
+  // kept out of /admin (defense-in-depth behind the /admin layout gate).
+  if (user && !isPublicRoute) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("is_admin")
+      .select("is_admin, is_banned")
       .eq("id", user.id)
       .single();
-    if (!profile?.is_admin) {
+
+    if (profile?.is_banned) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/banned";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+
+    if (pathname.startsWith("/admin") && !profile?.is_admin) {
       const url = request.nextUrl.clone();
       url.pathname = "/home";
       return NextResponse.redirect(url);

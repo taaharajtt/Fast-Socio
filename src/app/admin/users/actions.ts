@@ -18,3 +18,20 @@ export async function adjustAura(
   if (error) return { error: error.message };
   revalidatePath(`/admin/users/${userId}`);
 }
+
+/** Ban or restore a user (audited). Banned users are blocked at the middleware. */
+export async function setUserBan(
+  userId: string,
+  banned: boolean,
+  reason: string
+): Promise<{ error: string } | void> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_set_ban", {
+    p_user_id: userId,
+    p_banned: banned,
+    p_reason: reason,
+  });
+  if (error) return { error: error.message };
+  revalidatePath(`/admin/users/${userId}`);
+  revalidatePath("/admin/users");
+}

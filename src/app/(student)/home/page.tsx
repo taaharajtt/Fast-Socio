@@ -1,7 +1,6 @@
 import { PostComposer } from "@/components/feed/post-composer";
 import { PostCard } from "@/components/feed/post-card";
 import { EventsStrip } from "@/components/feed/events-strip";
-import { DeptRivalryStrip } from "@/components/feed/dept-rivalry-strip";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { createClient } from "@/lib/supabase/server";
 import type { FeedPost } from "@/lib/feed/types";
@@ -26,8 +25,6 @@ export default async function HomePage() {
       <PostComposer />
 
       <EventsStrip />
-
-      <DeptRivalryStrip />
 
       <div className="mt-4 space-y-4">
         {posts.length === 0 ? (

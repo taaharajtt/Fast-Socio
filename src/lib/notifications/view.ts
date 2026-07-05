@@ -1,3 +1,33 @@
+/**
+ * Notification types that are NOT tied to a specific "actor doing something to
+ * you" and must never be bundled (CR-013): system events shown individually.
+ */
+export const SYSTEM_NOTIFICATION_TYPES = new Set([
+  "match",
+  "community_approved",
+  "event_approved",
+]);
+
+/** Short verb phrase for a groupable actor action, e.g. "liked your post". */
+export function notificationActionPhrase(type: string): string {
+  switch (type) {
+    case "post_like":
+      return "liked your post";
+    case "comment":
+      return "commented on your post";
+    case "message":
+      return "sent you a message";
+    case "message_request":
+      return "sent you a message request";
+    case "community_post_approved":
+      return "approved your community post";
+    case "community_post_rejected":
+      return "rejected your community post";
+    default:
+      return "interacted with you";
+  }
+}
+
 /** Maps a notification (type + actor + data) to display text and a link. */
 export function notificationView(
   type: string,
@@ -36,6 +66,20 @@ export function notificationView(
       return {
         text: "Your event was approved 🎉",
         href: data.event_id ? `/events/${data.event_id}` : "/events",
+      };
+    case "community_post_approved":
+      return {
+        text: `${who} approved your community post ✅`,
+        href: data.community_id
+          ? `/communities/${data.community_id}`
+          : "/communities",
+      };
+    case "community_post_rejected":
+      return {
+        text: `${who} rejected your community post`,
+        href: data.community_id
+          ? `/communities/${data.community_id}`
+          : "/communities",
       };
     default:
       return { text: "New notification", href: "/home" };

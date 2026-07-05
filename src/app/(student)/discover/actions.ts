@@ -54,6 +54,37 @@ export async function recordSwipe(
   return { ok: true, matched };
 }
 
+/**
+ * Undo the most recent like/pass on a target (CR-009, edge case 5). Deletes the
+ * swipe row and any match it may have produced, so the profile can reappear.
+ */
+export async function undoSwipe(
+  targetId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const { error } = await supabase
+    .from("swipes")
+    .delete()
+    .eq("swiper_id", user.id)
+    .eq("target_id", targetId);
+  if (error) return { ok: false, error: error.message };
+
+  // If a match had formed from this like, remove it too.
+  const [lo, hi] = [user.id, targetId].sort();
+  await supabase
+    .from("matches")
+    .delete()
+    .eq("user_low", lo)
+    .eq("user_high", hi);
+
+  return { ok: true };
+}
+
 /** Send a first-contact message request. Rate-limited. */
 export async function sendMessageRequest(
   recipientId: string,

@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   motion,
   useMotionValue,
   useTransform,
   type PanInfo,
 } from "framer-motion";
-import { Heart, X, Mail, RotateCcw, Flag } from "lucide-react";
+import { Heart, X, Mail, RotateCcw, Flag, Info } from "lucide-react";
 import { GlassButton, GlassChip, GlassSheet, GlassInput } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import type { DiscoverProfile } from "@/lib/profile/types";
@@ -16,6 +16,7 @@ import {
   recordSwipe,
   sendMessageRequest,
   fetchCandidates,
+  undoSwipe,
 } from "@/app/(student)/discover/actions";
 
 const SWIPE_THRESHOLD = 110;
@@ -29,6 +30,9 @@ export function SwipeDeck({
   const [matchName, setMatchName] = useState<string | null>(null);
   const [sheetFor, setSheetFor] = useState<DiscoverProfile | null>(null);
   const [reportFor, setReportFor] = useState<DiscoverProfile | null>(null);
+  const [detailFor, setDetailFor] = useState<DiscoverProfile | null>(null);
+  const [lastSwiped, setLastSwiped] = useState<DiscoverProfile | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const top = deck[0];
 
@@ -52,16 +56,30 @@ export function SwipeDeck({
 
   const act = useCallback(
     async (profile: DiscoverProfile, direction: "like" | "pass") => {
+      // Optimistic: advance immediately, then persist. Offer a 3s undo window.
       advance();
+      setLastSwiped(profile);
+      if (undoTimer.current) clearTimeout(undoTimer.current);
+      undoTimer.current = setTimeout(() => setLastSwiped(null), 3000);
       const res = await recordSwipe(profile.id, direction);
       if (res.ok && res.matched) setMatchName(profile.full_name ?? "Someone");
     },
     [advance]
   );
 
+  const undo = useCallback(async () => {
+    if (!lastSwiped) return;
+    const p = lastSwiped;
+    setLastSwiped(null);
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    setMatchName(null);
+    setDeck((d) => (d.some((c) => c.id === p.id) ? d : [p, ...d]));
+    await undoSwipe(p.id);
+  }, [lastSwiped]);
+
   // Keyboard fallback for desktop (OQ-13): ← Pass, → Like, M Message.
   useEffect(() => {
-    if (!top || sheetFor || matchName || reportFor) return;
+    if (!top || sheetFor || matchName || reportFor || detailFor) return;
     function onKey(e: KeyboardEvent) {
       if (e.key === "ArrowLeft") act(top, "pass");
       else if (e.key === "ArrowRight") act(top, "like");
@@ -69,7 +87,7 @@ export function SwipeDeck({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [top, sheetFor, matchName, reportFor, act]);
+  }, [top, sheetFor, matchName, reportFor, detailFor, act]);
 
   if (!top) {
     return (
@@ -95,6 +113,7 @@ export function SwipeDeck({
                 profile={p}
                 onDecision={act}
                 onReport={() => setReportFor(p)}
+                onExpand={() => setDetailFor(p)}
               />
             ) : (
               <StackedCard key={p.id} index={i} />
@@ -102,6 +121,20 @@ export function SwipeDeck({
           )
           .reverse()}
       </div>
+
+      {/* Undo affordance (CR-009, edge case 5): appears ~3s after a swipe. */}
+      {lastSwiped && (
+        <div className="mt-3 flex justify-center">
+          <button
+            type="button"
+            onClick={undo}
+            className="glass flex items-center gap-2 rounded-[var(--radius-pill)] px-4 py-2 text-sm font-medium text-fg-muted hover:text-fg"
+          >
+            <RotateCcw className="h-4 w-4" aria-hidden />
+            Undo {lastSwiped.full_name?.split(" ")[0] ?? "swipe"}
+          </button>
+        </div>
+      )}
 
       {/* Action row (UI Spec §5.6: Pass / Message / Like) */}
       <div className="mt-5 flex items-center justify-center gap-6">
@@ -139,6 +172,7 @@ export function SwipeDeck({
         onClose={() => setSheetFor(null)}
       />
       <ReportSheet profile={reportFor} onClose={() => setReportFor(null)} />
+      <DetailSheet profile={detailFor} onClose={() => setDetailFor(null)} />
       {matchName && (
         <MatchOverlay name={matchName} onClose={() => setMatchName(null)} />
       )}
@@ -150,10 +184,12 @@ function TopCard({
   profile,
   onDecision,
   onReport,
+  onExpand,
 }: {
   profile: DiscoverProfile;
   onDecision: (p: DiscoverProfile, d: "like" | "pass") => void;
   onReport: () => void;
+  onExpand: () => void;
 }) {
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-200, 200], [-12, 12]);
@@ -184,6 +220,15 @@ function TopCard({
           className="glass absolute left-4 top-4 flex h-9 w-9 items-center justify-center rounded-full text-white/80 hover:text-white"
         >
           <Flag className="h-4 w-4" aria-hidden />
+        </button>
+        <button
+          type="button"
+          aria-label="View full profile"
+          onPointerDownCapture={(e) => e.stopPropagation()}
+          onClick={onExpand}
+          className="glass absolute bottom-4 right-4 flex h-9 w-9 items-center justify-center rounded-full text-white/80 hover:text-white"
+        >
+          <Info className="h-4 w-4" aria-hidden />
         </button>
         <motion.div
           style={{ opacity: likeOpacity }}
@@ -335,6 +380,51 @@ function MessageRequestSheet({
             </GlassButton>
           </div>
           {error && <p className="text-sm text-error">{error}</p>}
+        </div>
+      )}
+    </GlassSheet>
+  );
+}
+
+function DetailSheet({
+  profile,
+  onClose,
+}: {
+  profile: DiscoverProfile | null;
+  onClose: () => void;
+}) {
+  return (
+    <GlassSheet open={Boolean(profile)} onClose={onClose}>
+      {profile && (
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-2xl font-bold">
+              {profile.full_name ?? "Student"}
+            </h3>
+            <p className="text-fg-muted">
+              {profile.department ?? ""}
+              {profile.semester ? ` · Semester ${profile.semester}` : ""}
+            </p>
+          </div>
+          <GlassChip tone="aura">★ {profile.aura_score} Aura</GlassChip>
+          {profile.bio && (
+            <div>
+              <h4 className="mb-1 text-sm font-medium text-fg-muted">About</h4>
+              <p className="text-[15px]">{profile.bio}</p>
+            </div>
+          )}
+          {profile.interests?.length > 0 && (
+            <div>
+              <h4 className="mb-2 text-sm font-medium text-fg-muted">
+                Interests
+              </h4>
+              <div className="flex flex-wrap gap-2">
+                {profile.interests.map((tag) => (
+                  <GlassChip key={tag}>{tag}</GlassChip>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </GlassSheet>
