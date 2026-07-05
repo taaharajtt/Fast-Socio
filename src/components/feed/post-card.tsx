@@ -46,6 +46,8 @@ export function PostCard({ post }: { post: FeedPost }) {
                     src={post.author_avatar}
                     alt={post.author_name ?? ""}
                     className="h-full w-full object-cover"
+                    loading="lazy"
+                    decoding="async"
                   />
                 ) : null}
               </div>
@@ -82,6 +84,8 @@ export function PostCard({ post }: { post: FeedPost }) {
           src={post.image_url}
           alt="Post image"
           className="mt-3 max-h-96 w-full rounded-2xl object-cover"
+          loading="lazy"
+          decoding="async"
         />
       )}
 

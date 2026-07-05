@@ -71,6 +71,8 @@ export default async function PostDetailPage({
                     src={a.avatar_url}
                     alt={a.full_name ?? ""}
                     className="h-full w-full object-cover"
+                    loading="lazy"
+                    decoding="async"
                   />
                 ) : null}
               </div>

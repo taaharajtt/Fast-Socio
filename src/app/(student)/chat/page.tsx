@@ -161,6 +161,8 @@ export default async function ChatPage({
                               src={p.avatar_url}
                               alt={p.full_name ?? "Match"}
                               className="h-full w-full object-cover"
+                              loading="lazy"
+                              decoding="async"
                             />
                           ) : null}
                         </div>
@@ -209,6 +211,8 @@ export default async function ChatPage({
                               src={p.avatar_url}
                               alt={p.full_name ?? "Match"}
                               className="h-full w-full object-cover"
+                              loading="lazy"
+                              decoding="async"
                             />
                           ) : null}
                         </div>

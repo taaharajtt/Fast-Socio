@@ -117,6 +117,8 @@ function StudentBoard({ rows }: { rows: Row[] }) {
                     src={r.avatar_url}
                     alt={r.full_name ?? ""}
                     className="h-full w-full object-cover"
+                    loading="lazy"
+                    decoding="async"
                   />
                 ) : null}
               </div>
@@ -152,6 +154,8 @@ function StudentBoard({ rows }: { rows: Row[] }) {
                     src={r.avatar_url}
                     alt={r.full_name ?? ""}
                     className="h-full w-full object-cover"
+                    loading="lazy"
+                    decoding="async"
                   />
                 ) : null}
               </div>

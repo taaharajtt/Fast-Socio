@@ -79,6 +79,8 @@ export default async function ConversationPage({
               src={other.avatar_url}
               alt={other.full_name ?? "Match"}
               className="h-full w-full object-cover"
+              loading="lazy"
+              decoding="async"
             />
           ) : null}
         </div>

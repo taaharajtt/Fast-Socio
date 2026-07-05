@@ -93,6 +93,8 @@ function ShareSheetContent({
                     src={f.avatar_url}
                     alt=""
                     className="h-full w-full object-cover"
+                    loading="lazy"
+                    decoding="async"
                   />
                 ) : null}
               </div>

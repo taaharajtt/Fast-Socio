@@ -28,6 +28,8 @@ export function RequestRow({ request }: { request: IncomingRequest }) {
               src={request.senderAvatar}
               alt={request.senderName}
               className="h-full w-full object-cover"
+              loading="lazy"
+              decoding="async"
             />
           ) : null}
         </div>

@@ -67,6 +67,13 @@ export function SwipeDeck({
     [advance]
   );
 
+  // Clear any pending undo timer if the deck unmounts mid-window.
+  useEffect(() => {
+    return () => {
+      if (undoTimer.current) clearTimeout(undoTimer.current);
+    };
+  }, []);
+
   const undo = useCallback(async () => {
     if (!lastSwiped) return;
     const p = lastSwiped;
@@ -278,6 +285,8 @@ function ProfileCardBody({
           alt={profile.full_name ?? "Profile"}
           className="h-full w-full object-cover"
           draggable={false}
+          loading="lazy"
+          decoding="async"
         />
       ) : (
         <div className="flex h-full w-full items-center justify-center bg-bg-elevated text-fg-muted">

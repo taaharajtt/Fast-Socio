@@ -163,6 +163,8 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
               src={avatarUrl}
               alt="Your avatar"
               className="h-full w-full object-cover"
+              loading="lazy"
+              decoding="async"
             />
           ) : (
             <span className="text-2xl font-bold text-fg">{initials}</span>

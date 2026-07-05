@@ -74,6 +74,8 @@ export default async function PublicProfilePage({
                 src={profile.avatar_url}
                 alt={profile.full_name ?? "Avatar"}
                 className="h-full w-full object-cover"
+                loading="lazy"
+                decoding="async"
               />
             ) : (
               <span className="text-xl font-bold text-fg">{initials}</span>

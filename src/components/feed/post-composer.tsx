@@ -97,6 +97,8 @@ export function PostComposer({
             src={imageUrl}
             alt="Selected"
             className="max-h-52 w-full rounded-xl object-cover"
+            loading="lazy"
+            decoding="async"
           />
           <button
             type="button"

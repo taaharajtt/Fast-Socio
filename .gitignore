@@ -55,3 +55,6 @@ next-env.d.ts
 
 # Local handoff doc (contains secrets) — never commit
 /TASK_STATE.md
+
+.vercel
+.env*

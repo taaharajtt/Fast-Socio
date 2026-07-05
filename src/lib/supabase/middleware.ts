@@ -41,10 +41,12 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // Touch the user to trigger a token refresh when needed.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Verify the JWT locally and refresh the session cookie when needed. This
+  // project signs tokens with an asymmetric ES256 key, so getClaims() validates
+  // the signature in-process — no Auth API round-trip on this per-request hot
+  // path (getUser() would call the network on every navigation).
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const userId = claimsData?.claims?.sub ?? null;
 
   const { pathname } = request.nextUrl;
   const isAuthRoute = pathname.startsWith("/login");
@@ -56,14 +58,14 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/styleguide");
 
   // Unauthenticated users may only see public routes.
-  if (!user && !isPublicRoute) {
+  if (!userId && !isPublicRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
   // Authenticated users have no reason to sit on the login screen.
-  if (user && isAuthRoute) {
+  if (userId && isAuthRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/home";
     return NextResponse.redirect(url);
@@ -72,11 +74,11 @@ export async function updateSession(request: NextRequest) {
   // For authenticated users on a protected route, read the moderation/role flags
   // once. Banned users are blocked from the entire app (CR-014); non-admins are
   // kept out of /admin (defense-in-depth behind the /admin layout gate).
-  if (user && !isPublicRoute) {
+  if (userId && !isPublicRoute) {
     const { data: profile } = await supabase
       .from("profiles")
       .select("is_admin, is_banned")
-      .eq("id", user.id)
+      .eq("id", userId)
       .single();
 
     if (profile?.is_banned) {

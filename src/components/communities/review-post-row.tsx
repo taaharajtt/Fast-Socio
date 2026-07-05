@@ -50,6 +50,8 @@ export function ReviewPostRow({ post }: { post: PendingPost }) {
               src={post.author_avatar}
               alt=""
               className="h-full w-full object-cover"
+              loading="lazy"
+              decoding="async"
             />
           ) : null}
         </div>
@@ -67,6 +69,8 @@ export function ReviewPostRow({ post }: { post: PendingPost }) {
           src={post.image_url}
           alt="Pending post"
           className="mt-3 max-h-72 w-full rounded-2xl object-cover"
+          loading="lazy"
+          decoding="async"
         />
       )}
 

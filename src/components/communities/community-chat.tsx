@@ -88,7 +88,7 @@ export function CommunityChat({
     })();
 
     return () => {
-      if (channelRef.current) createClient().removeChannel(channelRef.current);
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
     };
   }, [communityId]);
 
@@ -135,6 +135,8 @@ export function CommunityChat({
                       src={s.avatar}
                       alt=""
                       className="h-full w-full object-cover"
+                      loading="lazy"
+                      decoding="async"
                     />
                   ) : null}
                 </div>

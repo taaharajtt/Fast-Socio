@@ -264,6 +264,8 @@ export function ChatThread({
                       src={m.attachment_url}
                       alt="Shared image"
                       className="max-h-64 rounded-xl object-cover"
+                      loading="lazy"
+                      decoding="async"
                     />
                   ) : m.attachment_type === "voice" && m.attachment_url ? (
                     <audio controls src={m.attachment_url} className="h-10" />

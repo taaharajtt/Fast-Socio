@@ -50,6 +50,8 @@ export default async function ProfilePage() {
                 src={profile.avatar_url}
                 alt={profile.full_name ?? "Avatar"}
                 className="h-full w-full object-cover"
+                loading="lazy"
+                decoding="async"
               />
             ) : null}
           </div>

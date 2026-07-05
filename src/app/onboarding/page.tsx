@@ -133,6 +133,8 @@ export default function OnboardingPage() {
                   src={avatarUrl}
                   alt="Your avatar"
                   className="h-full w-full object-cover"
+                  loading="lazy"
+                  decoding="async"
                 />
               ) : (
                 <span className="text-sm">{uploading ? "Uploading…" : "Tap to add"}</span>

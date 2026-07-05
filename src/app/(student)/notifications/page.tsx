@@ -123,7 +123,7 @@ export default async function NotificationsPage() {
   const feed = buildFeed(notifs);
 
   // Mark everything read now that they've opened the feed.
-  await supabase.rpc("mark_notifications_read");
+  if (notifs.some((n) => !n.read_at)) await supabase.rpc("mark_notifications_read");
 
   return (
     <main className="mx-auto w-full max-w-md px-5 py-6">
@@ -169,6 +169,8 @@ export default async function NotificationsPage() {
                         src={actor.avatar}
                         alt=""
                         className="h-full w-full object-cover"
+                        loading="lazy"
+                        decoding="async"
                       />
                     ) : null}
                   </div>
