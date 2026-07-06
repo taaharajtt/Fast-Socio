@@ -41,7 +41,10 @@ export function PostComposer({
       return;
     }
     const ext = file.name.split(".").pop() ?? "jpg";
-    const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
+    // De-identified path (P3-01): never embed the author's uid in a post image
+    // URL, otherwise anonymous posts leak their author. `shared/` is allowed by
+    // the post-media INSERT policy; the object key is random.
+    const path = `shared/${crypto.randomUUID()}.${ext}`;
     const { error: upErr } = await supabase.storage
       .from("post-media")
       .upload(path, file, { contentType: file.type });
