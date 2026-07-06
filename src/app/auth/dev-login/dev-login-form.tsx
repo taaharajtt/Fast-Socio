@@ -3,7 +3,11 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-const PW = "Demo-Passw0rd!";
+// Never hardcode credentials in source (P1-01). The dev-login password is read
+// from a gitignored env var and only exists in local dev — this page is
+// notFound() in production (see page.tsx). Set NEXT_PUBLIC_DEV_LOGIN_PASSWORD in
+// .env.local to use it.
+const PW = process.env.NEXT_PUBLIC_DEV_LOGIN_PASSWORD ?? "";
 const ACCOUNTS = [
   { label: "Sign in as Student", email: "demo-user@nu.edu.pk", dest: "/home" },
   { label: "Sign in as Admin", email: "demo-admin@nu.edu.pk", dest: "/admin" },
@@ -15,6 +19,10 @@ export function DevLoginForm() {
   const [msg, setMsg] = useState("");
 
   async function signIn(email: string, dest: string) {
+    if (!PW) {
+      setMsg("Set NEXT_PUBLIC_DEV_LOGIN_PASSWORD in .env.local to use dev login.");
+      return;
+    }
     setBusy(email);
     setMsg("");
     const { error } = await supabase.auth.signInWithPassword({ email, password: PW });
@@ -62,7 +70,7 @@ export function DevLoginForm() {
 
       {msg && <p className="text-sm text-red-400">{msg}</p>}
       <p className="text-xs text-fg-muted/70">
-        Student: demo-user@nu.edu.pk · Admin: demo-admin@nu.edu.pk · pw {PW}
+        Student: demo-user@nu.edu.pk · Admin: demo-admin@nu.edu.pk
       </p>
     </main>
   );
