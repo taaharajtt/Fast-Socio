@@ -43,8 +43,13 @@ export default async function EventsPage({
 
   return (
     <main className="mx-auto w-full max-w-md px-5 py-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Events</h1>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-xl font-extrabold tracking-tight">Events</h1>
+          <p className="mt-0.5 text-sm text-fg-muted">
+            What do you want to do?
+          </p>
+        </div>
         <Link
           href="/events/new"
           className="glass flex h-10 w-10 items-center justify-center rounded-full text-fg-muted hover:text-fg"
@@ -60,8 +65,8 @@ export default async function EventsPage({
           href="/events"
           className={
             !category
-              ? "shrink-0 rounded-full bg-aura px-4 py-1.5 text-sm text-white"
-              : "glass shrink-0 rounded-full px-4 py-1.5 text-sm text-fg-muted"
+              ? "gradient-brand shrink-0 rounded-full px-4 py-1.5 text-sm font-medium text-white shadow-[0_4px_16px_rgba(200,80,192,0.4)]"
+              : "glass shrink-0 rounded-full px-4 py-1.5 text-sm text-fg-muted hover:text-fg"
           }
         >
           All
@@ -72,8 +77,8 @@ export default async function EventsPage({
             href={`/events?category=${cat}`}
             className={
               category === cat
-                ? "shrink-0 rounded-full bg-aura px-4 py-1.5 text-sm text-white"
-                : "glass shrink-0 rounded-full px-4 py-1.5 text-sm text-fg-muted"
+                ? "gradient-brand shrink-0 rounded-full px-4 py-1.5 text-sm font-medium text-white shadow-[0_4px_16px_rgba(200,80,192,0.4)]"
+                : "glass shrink-0 rounded-full px-4 py-1.5 text-sm text-fg-muted hover:text-fg"
             }
           >
             {cat}

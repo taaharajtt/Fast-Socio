@@ -1,34 +1,74 @@
-import Link from "next/link";
-import { Bell } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { notificationView } from "@/lib/notifications/view";
+import { timeAgo } from "@/lib/time";
+import {
+  NotificationBellMenu,
+  type BellItem,
+} from "./notification-bell-menu";
 
-/** Bell icon with an unread-count badge, linking to the notifications feed. */
+type NotifRow = {
+  id: string;
+  actor_id: string | null;
+  type: string;
+  data: Record<string, unknown>;
+  read_at: string | null;
+  created_at: string;
+};
+
+/**
+ * Bell with an unread-count dot and an inline dropdown of recent notifications
+ * (Figma prototype). Data is fetched server-side; the dropdown itself is a
+ * client island so it can open/close without a round trip. The full feed remains
+ * at /notifications.
+ */
 export async function NotificationBell() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { count } = await supabase
-    .from("notifications")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", user!.id)
-    .is("read_at", null);
+  const [{ count }, { data: rows }] = await Promise.all([
+    supabase
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user!.id)
+      .is("read_at", null),
+    supabase
+      .from("notifications")
+      .select("id, actor_id, type, data, read_at, created_at")
+      .eq("user_id", user!.id)
+      .order("created_at", { ascending: false })
+      .limit(6),
+  ]);
 
-  const unread = count ?? 0;
+  const notifs = (rows as NotifRow[]) ?? [];
+  const actorIds = [
+    ...new Set(notifs.map((n) => n.actor_id).filter(Boolean) as string[]),
+  ];
+  const actors = new Map<string, { name: string | null; avatar: string | null }>();
+  if (actorIds.length > 0) {
+    const { data: profs } = await supabase
+      .from("profiles")
+      .select("id, full_name, avatar_url")
+      .in("id", actorIds);
+    (profs ?? []).forEach((p) =>
+      actors.set(p.id, { name: p.full_name, avatar: p.avatar_url })
+    );
+  }
 
-  return (
-    <Link
-      href="/notifications"
-      aria-label={`Notifications${unread ? `, ${unread} unread` : ""}`}
-      className="glass relative flex h-10 w-10 items-center justify-center rounded-full text-fg-muted hover:text-fg"
-    >
-      <Bell className="h-5 w-5" aria-hidden />
-      {unread > 0 && (
-        <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-aura px-1 text-[10px] font-bold text-white">
-          {unread > 9 ? "9+" : unread}
-        </span>
-      )}
-    </Link>
-  );
+  const items: BellItem[] = notifs.map((n) => {
+    const actor = n.actor_id ? actors.get(n.actor_id) : undefined;
+    const view = notificationView(n.type, actor?.name ?? null, n.data);
+    return {
+      id: n.id,
+      text: view.text,
+      href: view.href,
+      avatar: actor?.avatar ?? null,
+      unread: !n.read_at,
+      type: n.type,
+      timeAgo: timeAgo(n.created_at),
+    };
+  });
+
+  return <NotificationBellMenu unread={count ?? 0} items={items} />;
 }

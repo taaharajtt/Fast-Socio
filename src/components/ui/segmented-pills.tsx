@@ -31,7 +31,7 @@ export function SegmentedPills({
 }: SegmentedPillsProps) {
   const activeFill =
     accent === "aura"
-      ? "bg-aura text-white shadow-[0_4px_16px_rgba(124,92,255,0.35)]"
+      ? "gradient-brand text-white shadow-[0_4px_16px_rgba(200,80,192,0.4)]"
       : "bg-cyan text-[#001318] shadow-[0_4px_16px_rgba(0,212,255,0.35)]";
 
   return (

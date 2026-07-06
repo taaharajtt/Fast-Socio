@@ -36,9 +36,9 @@ export default async function LeaderboardPage() {
 
   return (
     <main className="mx-auto w-full max-w-md px-5 py-6">
-      <h1 className="text-2xl font-bold tracking-tight">Leaderboard</h1>
+      <h1 className="text-xl font-extrabold tracking-tight">Leaderboard</h1>
       <p className="mb-5 text-sm text-fg-muted">
-        This week · resets Monday 00:00 PKT
+        Who&rsquo;s running campus this week? · resets Monday 00:00 PKT
       </p>
 
       {/* CR-007: Department Rivalry at the TOP of the Leaderboard page. */}

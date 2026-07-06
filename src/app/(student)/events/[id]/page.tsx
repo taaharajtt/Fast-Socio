@@ -4,7 +4,7 @@ import { ChevronLeft, Calendar, MapPin } from "lucide-react";
 import { GlassCard, GlassChip } from "@/components/ui";
 import { RsvpButton } from "@/components/events/rsvp-button";
 import { createClient } from "@/lib/supabase/server";
-import { formatEventDate } from "@/lib/events/format";
+import { formatEventDate, eventBadge } from "@/lib/events/format";
 
 /** Whether an event's end (or start, if open-ended) is in the past. */
 function hasEnded(startsAt: string, endsAt: string | null): boolean {
@@ -63,7 +63,23 @@ export default async function EventPage({
           {pending && <GlassChip tone="warning">pending</GlassChip>}
           {!pending && ended && <GlassChip>ended</GlassChip>}
         </div>
-        <h2 className="mt-3 text-2xl font-bold">{event.title}</h2>
+
+        <div className="mt-3 flex items-start justify-between gap-3">
+          <h2 className="text-2xl font-bold">{event.title}</h2>
+          {(() => {
+            const b = eventBadge(event.starts_at);
+            return (
+              <div className="gradient-brand flex shrink-0 flex-col items-center rounded-[var(--radius-md)] px-3 py-2 text-center shadow-[0_8px_24px_rgba(200,80,192,0.4)]">
+                <span className="text-xl font-extrabold leading-none text-white">
+                  {b.day}
+                </span>
+                <span className="mt-0.5 text-[11px] text-white/75">
+                  {b.month}
+                </span>
+              </div>
+            );
+          })()}
+        </div>
 
         <div className="mt-4 space-y-2 text-sm text-fg-muted">
           <p className="flex items-center gap-2">

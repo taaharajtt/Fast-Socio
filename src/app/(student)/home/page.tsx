@@ -18,7 +18,7 @@ export default async function HomePage() {
   return (
     <main className="mx-auto w-full max-w-md px-5 py-6">
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Home</h1>
+        <h1 className="text-xl font-extrabold tracking-tight">FAST SOCIO</h1>
         <NotificationBell />
       </div>
 

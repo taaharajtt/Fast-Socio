@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Phone, Video } from "lucide-react";
 import {
   ChatThread,
   type ChatMessage,
@@ -72,27 +72,42 @@ export default async function ConversationPage({
         >
           <ChevronLeft className="h-5 w-5" aria-hidden />
         </Link>
-        <div className="glass h-9 w-9 shrink-0 overflow-hidden rounded-full">
-          {other?.avatar_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={other.avatar_url}
-              alt={other.full_name ?? "Match"}
-              className="h-full w-full object-cover"
-              loading="lazy"
-              decoding="async"
-            />
-          ) : null}
+        <div className="relative shrink-0">
+          <div className="glass h-9 w-9 overflow-hidden rounded-full">
+            {other?.avatar_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={other.avatar_url}
+                alt={other.full_name ?? "Match"}
+                className="h-full w-full object-cover"
+                loading="lazy"
+                decoding="async"
+              />
+            ) : null}
+          </div>
+          <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-bg bg-success" />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="truncate font-semibold">
             {other?.full_name ?? "Student"}
           </p>
-          {other?.department && (
-            <p className="truncate text-xs text-fg-muted">
-              {other.department}
-            </p>
-          )}
+          <p className="truncate text-[11px] text-fg-muted">
+            {other?.department ? `${other.department} · ` : ""}Active now
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span
+            aria-hidden
+            className="glass flex h-8 w-8 items-center justify-center rounded-full text-fg-muted"
+          >
+            <Phone className="h-4 w-4" />
+          </span>
+          <span
+            aria-hidden
+            className="glass flex h-8 w-8 items-center justify-center rounded-full text-fg-muted"
+          >
+            <Video className="h-4 w-4" />
+          </span>
         </div>
       </header>
 

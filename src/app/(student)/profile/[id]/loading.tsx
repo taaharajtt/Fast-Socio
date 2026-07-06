@@ -1,14 +1,11 @@
 import { Skeleton } from "@/components/ui/skeleton";
 
-/** Own profile: cover, avatar, name + actions, stats, posts grid. */
-export default function OwnProfileLoading() {
+/** Profile (other user): cover, avatar, name + CTA, stats, posts grid. */
+export default function ProfileLoading() {
   return (
     <div className="mx-auto w-full max-w-md">
       <div className="relative h-44">
         <Skeleton className="h-full w-full rounded-none" />
-        <div className="absolute right-4 top-4">
-          <Skeleton className="h-9 w-9 rounded-full" />
-        </div>
         <div className="absolute -bottom-10 left-5">
           <Skeleton className="h-20 w-20 rounded-full border-[3px] border-bg" />
         </div>
@@ -20,10 +17,7 @@ export default function OwnProfileLoading() {
             <Skeleton className="h-6 w-36" />
             <Skeleton className="mt-2 h-4 w-28" />
           </div>
-          <div className="flex gap-2">
-            <Skeleton className="h-9 w-16 rounded-[var(--radius-pill)]" />
-            <Skeleton className="h-9 w-16 rounded-[var(--radius-pill)]" />
-          </div>
+          <Skeleton className="h-9 w-24 rounded-[var(--radius-pill)]" />
         </div>
 
         <div className="mb-5 flex gap-3">

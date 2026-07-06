@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ChevronLeft } from "lucide-react";
 import { GlassCard } from "@/components/ui";
 import { glassButton } from "@/components/ui/glass-button";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -21,8 +22,17 @@ export default async function SettingsPage() {
     .single();
 
   return (
-    <main className="mx-auto w-full max-w-md px-5 py-8">
-      <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+    <main className="mx-auto w-full max-w-md px-5 py-6">
+      <div className="flex items-center gap-3">
+        <Link
+          href="/profile"
+          aria-label="Back"
+          className="glass flex h-9 w-9 items-center justify-center rounded-full text-fg-muted"
+        >
+          <ChevronLeft className="h-5 w-5" aria-hidden />
+        </Link>
+        <h1 className="text-xl font-extrabold tracking-tight">Settings</h1>
+      </div>
 
       <section className="mt-6 space-y-2">
         <h2 className="text-sm font-medium text-fg-muted">Account</h2>

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Users } from "lucide-react";
+import { Users, Search, Edit3 } from "lucide-react";
 import { GlassCard, GlassChip } from "@/components/ui";
 import { RequestRow, type IncomingRequest } from "@/components/chat/request-row";
 import { OpenChatButton } from "@/components/chat/open-chat-button";
@@ -108,24 +108,48 @@ export default async function ChatPage({
   ];
 
   return (
-    <main className="mx-auto w-full max-w-md px-5 py-8">
-      <h1 className="text-3xl font-bold tracking-tight">Chat</h1>
+    <main className="mx-auto w-full max-w-md px-5 py-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-extrabold tracking-tight">Chat</h1>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/discover"
+            aria-label="Search people"
+            className="glass flex h-9 w-9 items-center justify-center rounded-full text-fg-muted hover:text-fg"
+          >
+            <Search className="h-4 w-4" aria-hidden />
+          </Link>
+          <Link
+            href="/discover"
+            aria-label="New message"
+            className="gradient-brand flex h-9 w-9 items-center justify-center rounded-full text-white"
+          >
+            <Edit3 className="h-4 w-4" aria-hidden />
+          </Link>
+        </div>
+      </div>
 
       {/* Inner tabs (CR-004): Messages · Requests · Communities */}
-      <div className="glass mt-5 flex gap-1 rounded-[var(--radius-pill)] p-1">
+      <div className="glass mt-4 flex gap-1 rounded-[var(--radius-pill)] p-1">
         {tabs.map((t) => {
           const isActive = t.value === active;
           return (
             <Link
               key={t.value}
               href={t.value === "messages" ? "/chat" : `/chat?tab=${t.value}`}
-              className={`flex flex-1 items-center justify-center gap-1.5 rounded-[var(--radius-pill)] py-2 text-center text-sm font-medium ${
-                isActive ? "bg-aura text-white" : "text-fg-muted"
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-[var(--radius-pill)] py-2 text-center text-sm font-medium transition-all ${
+                isActive
+                  ? "gradient-brand text-white shadow-[0_4px_16px_rgba(200,80,192,0.4)]"
+                  : "text-fg-muted hover:text-fg"
               }`}
             >
               {t.label}
               {t.badge ? (
-                <span className="rounded-full bg-white/25 px-1.5 text-xs">
+                <span
+                  className={`rounded-full px-1.5 text-xs ${
+                    isActive ? "bg-white/25" : "gradient-brand text-white"
+                  }`}
+                >
                   {t.badge}
                 </span>
               ) : null}

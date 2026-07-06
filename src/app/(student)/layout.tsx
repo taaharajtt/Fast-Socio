@@ -27,6 +27,22 @@ export default async function StudentLayout({
 
   if (!profile?.onboarding_completed) redirect("/onboarding");
 
+  // Chat dock badge: unread incoming messages + pending message requests.
+  // RLS scopes messages to the caller's own conversations.
+  const [{ count: unreadMsgs }, { count: pendingReqs }] = await Promise.all([
+    supabase
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .neq("sender_id", user.id)
+      .is("read_at", null),
+    supabase
+      .from("message_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("recipient_id", user.id)
+      .eq("status", "pending"),
+  ]);
+  const chatBadge = (unreadMsgs ?? 0) + (pendingReqs ?? 0);
+
   return (
     <div className="relative flex min-h-full flex-1 flex-col">
       {/* Ambient brand glow shared across student screens */}
@@ -39,7 +55,7 @@ export default async function StudentLayout({
         }}
       />
       <div className="flex-1 pb-28">{children}</div>
-      <FloatingDock />
+      <FloatingDock badges={{ "/chat": chatBadge }} />
     </div>
   );
 }

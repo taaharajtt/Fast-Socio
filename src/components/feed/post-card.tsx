@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Heart, MessageCircle, Flag, VenetianMask, Share2 } from "lucide-react";
+import { Heart, MessageCircle, Flag, VenetianMask, Share2, Bookmark } from "lucide-react";
 import { GlassCard, GlassSheet } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { toggleLike, reportPost } from "@/app/(student)/home/actions";
 import { ShareSheet } from "@/components/feed/share-sheet";
+import { timeAgo } from "@/lib/time";
 import type { FeedPost } from "@/lib/feed/types";
 
 const REPORT_REASONS = [
@@ -22,6 +23,7 @@ export function PostCard({ post }: { post: FeedPost }) {
   const [likes, setLikes] = useState(post.like_count);
   const [reporting, setReporting] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [saved, setSaved] = useState(false);
   const anon = post.is_anonymous && !post.author_name;
 
   function onLike() {
@@ -51,8 +53,13 @@ export function PostCard({ post }: { post: FeedPost }) {
                   />
                 ) : null}
               </div>
-              <span className="truncate font-semibold">
-                {anon ? "Anonymous" : (post.author_name ?? "Student")}
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold">
+                  {anon ? "Anonymous" : (post.author_name ?? "Student")}
+                </span>
+                <span className="block text-[11px] text-fg-muted">
+                  {timeAgo(post.created_at)} ago
+                </span>
               </span>
             </>
           );
@@ -89,13 +96,13 @@ export function PostCard({ post }: { post: FeedPost }) {
         />
       )}
 
-      <div className="mt-4 flex items-center gap-5 text-sm text-fg-muted">
+      <div className="mt-4 flex items-center gap-5 border-t border-glass-border pt-3 text-sm text-fg-muted">
         <button
           type="button"
           onClick={onLike}
           className={cn(
-            "flex items-center gap-1.5 transition-colors",
-            liked ? "text-aura" : "hover:text-fg"
+            "flex items-center gap-1.5 transition-all active:scale-90",
+            liked ? "text-error" : "hover:text-fg"
           )}
           aria-pressed={liked}
         >
@@ -116,9 +123,22 @@ export function PostCard({ post }: { post: FeedPost }) {
           type="button"
           onClick={() => setSharing(true)}
           aria-label="Share post"
-          className="ml-auto flex items-center gap-1.5 hover:text-fg"
+          className="flex items-center gap-1.5 transition-all hover:text-fg active:scale-90"
         >
           <Share2 className="h-5 w-5" aria-hidden />
+          Share
+        </button>
+        <button
+          type="button"
+          onClick={() => setSaved((s) => !s)}
+          aria-label={saved ? "Remove bookmark" : "Bookmark post"}
+          aria-pressed={saved}
+          className={cn(
+            "ml-auto transition-all active:scale-90",
+            saved ? "text-accent" : "hover:text-fg"
+          )}
+        >
+          <Bookmark className={cn("h-5 w-5", saved && "fill-current")} aria-hidden />
         </button>
       </div>
 

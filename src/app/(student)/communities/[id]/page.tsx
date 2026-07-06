@@ -245,13 +245,21 @@ function TabLink({
   return (
     <Link
       href={href}
-      className={`flex flex-1 items-center justify-center gap-1.5 rounded-[var(--radius-pill)] py-2 text-center text-sm font-medium ${
-        active ? "bg-aura text-white" : "text-fg-muted"
+      className={`flex flex-1 items-center justify-center gap-1.5 rounded-[var(--radius-pill)] py-2 text-center text-sm font-medium transition-all ${
+        active
+          ? "gradient-brand text-white shadow-[0_4px_16px_rgba(200,80,192,0.4)]"
+          : "text-fg-muted hover:text-fg"
       }`}
     >
       {label}
       {badge ? (
-        <span className="rounded-full bg-white/25 px-1.5 text-xs">{badge}</span>
+        <span
+          className={`rounded-full px-1.5 text-xs ${
+            active ? "bg-white/25" : "gradient-brand text-white"
+          }`}
+        >
+          {badge}
+        </span>
       ) : null}
     </Link>
   );

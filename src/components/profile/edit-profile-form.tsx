@@ -316,7 +316,7 @@ function Pill({
       className={cn(
         "rounded-[var(--radius-pill)] px-4 py-2 text-sm font-medium transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]",
         active
-          ? "bg-aura text-white shadow-[0_4px_16px_rgba(124,92,255,0.35)]"
+          ? "gradient-brand text-white shadow-[0_4px_16px_rgba(200,80,192,0.4)]"
           : "glass text-fg-muted hover:text-fg"
       )}
     >
