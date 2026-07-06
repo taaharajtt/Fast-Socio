@@ -29,6 +29,7 @@ export default async function PostDetailPage({
     .from("post_comments")
     .select("id, author_id, body, created_at")
     .eq("post_id", id)
+    .eq("hidden", false) // moderated-away comments are not shown (P3-03)
     .order("created_at", { ascending: true });
   const comments = commentRows ?? [];
 

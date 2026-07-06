@@ -41,6 +41,7 @@ export default async function ConversationPage({
       // shared_post_id column exists; the preview shows shares once migrated.
       .select("*")
       .eq("conversation_id", id)
+      .eq("hidden", false) // moderated-away messages are not shown (P3-03)
       .order("created_at", { ascending: true }),
   ]);
 
