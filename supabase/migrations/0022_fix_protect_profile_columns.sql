@@ -1,22 +1,25 @@
 -- =============================================================================
--- FAST SOCIO — Fix protect_profile_columns clobbering privileged writes (P1-04)
+-- FAST SOCIO — Fix protect_profile_columns clobbering admin_set_ban (P1-04)
 --
--- ⚠️  DO NOT APPLY until the Phase-1 repro confirms the bug on the live DB
---     (see the audit's P1-04 verification steps). Safe in both outcomes, but
---     gated on evidence per the audit's "no speculative fixes" rule.
+-- VERIFIED against the live DB (rolled-back repros, 2026-07-06):
+--   * admin_set_ban(target, true) leaves is_banned = FALSE — a silent no-op.
+--     Banning a user does nothing; the middleware never sees is_banned, so a
+--     malicious user cannot actually be banned. (P0-adjacent moderation failure.)
+--   * The aura cache is NOT affected: recompute_aura_score runs nested inside
+--     the award-* SECURITY DEFINER triggers and its writes DO land (a real
+--     authenticated post correctly moved aura_score 0 -> 2 in testing).
 --
 -- ROOT CAUSE: protect_profile_columns guarded on `auth.role() = 'authenticated'`.
--- auth.role() reads the PostgREST request GUC (request.jwt.claim.role), which a
--- SECURITY DEFINER function does NOT reset — so the guard also fires during the
--- privileged writes made by recompute_aura_score(), admin_set_ban() and
--- admin_adjust_aura(), reverting aura_score / is_banned back to their old values
--- (silent admin-ban no-op + stale aura cache).
+-- For a direct RPC like admin_set_ban(), auth.role() still resolves to
+-- 'authenticated' inside the SECURITY DEFINER body, so the guard reverts the
+-- is_banned write. current_user, by contrast, is the function owner (verified:
+-- `postgres`) inside any SECURITY DEFINER function.
 --
--- FIX: guard on `current_user` instead. PostgREST runs a direct end-user write
--- as role `authenticated`, but a SECURITY DEFINER function executes as its owner
--- (postgres), so current_user is NOT 'authenticated' there — privileged writes
--- pass while direct self-escalation is still blocked. service_role writes
--- (admin client) also pass, as intended.
+-- FIX: guard on `current_user`. Direct end-user writes run as role
+-- `authenticated` (protection intact — self-escalation still blocked, verified);
+-- SECURITY DEFINER / admin writes run as the owner and now pass. Validated
+-- in a rolled-back transaction: ban persists, aura unaffected, is_admin still
+-- protected against direct self-escalation.
 -- =============================================================================
 
 create or replace function public.protect_profile_columns()
