@@ -19,13 +19,22 @@ const withPWA = withPWAInit({
 // 'unsafe-inline' for now because Next injects inline bootstrap; this is
 // tightened with nonces during Phase 12 hardening. connect-src permits Supabase
 // REST + Realtime (wss). frame-ancestors 'none' blocks clickjacking.
+//
+// Pin the Supabase host to THIS project (audit P2-03) instead of a *.supabase.co
+// wildcard, and add an explicit media-src so voice-note audio served from
+// storage actually loads (it was falling back to default-src 'self' and being
+// blocked). Falls back to the wildcard only if the env var is unset at build.
+const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
+  ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).host
+  : "*.supabase.co";
 const csp = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' blob: data: https://*.supabase.co",
+  `img-src 'self' blob: data: https://${supabaseHost}`,
+  `media-src 'self' blob: https://${supabaseHost}`,
   "font-src 'self' data:",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+  `connect-src 'self' https://${supabaseHost} wss://${supabaseHost}`,
   "worker-src 'self'",
   "manifest-src 'self'",
   "frame-ancestors 'none'",
