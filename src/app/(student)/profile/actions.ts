@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { BIO_MAX, MAX_INTERESTS, MIN_INTERESTS } from "@/lib/profile/constants";
+import { isAppStorageUrl } from "@/lib/url-safety";
 
 export type UpdateProfileResult = { error: string } | { ok: true };
 
@@ -38,6 +39,9 @@ export async function updateProfile(input: {
     return { error: `Pick ${MIN_INTERESTS}–${MAX_INTERESTS} interests.` };
   if (input.bio.length > BIO_MAX)
     return { error: `Bio must be ${BIO_MAX} characters or fewer.` };
+  // avatarUrl is client-supplied — only accept an avatar we host (P2-04).
+  if (input.avatarUrl && !isAppStorageUrl(input.avatarUrl))
+    return { error: "Invalid avatar image." };
 
   const { error } = await supabase
     .from("profiles")

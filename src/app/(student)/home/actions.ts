@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { isAppStorageUrl } from "@/lib/url-safety";
 
 /** Create a post (text and/or image), optionally anonymous and/or in a community. */
 export async function createPost(input: {
@@ -22,6 +23,9 @@ export async function createPost(input: {
     return { ok: false, error: "Write something or add an image." };
   if (body.length > 2000)
     return { ok: false, error: "Posts are limited to 2000 characters." };
+  // Only accept images we host (P2-04): the client supplies this URL.
+  if (input.imageUrl && !isAppStorageUrl(input.imageUrl))
+    return { ok: false, error: "Invalid image." };
 
   const allowed = await checkRateLimit("post", 30, 60 * 60);
   if (!allowed) return { ok: false, error: "You're posting too fast." };

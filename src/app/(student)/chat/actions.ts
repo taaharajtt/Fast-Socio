@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { isAppStorageUrl } from "@/lib/url-safety";
 
 /**
  * Accept or decline an incoming message request. RLS restricts updates to the
@@ -93,6 +94,9 @@ export async function sendMessage(
   const text = body.trim();
   if (!attachment && (text.length < 1 || text.length > 4000))
     return { ok: false, error: "Message must be 1–4000 characters." };
+  // The attachment URL is client-supplied — only accept media we host (P2-04).
+  if (attachment && !isAppStorageUrl(attachment.url))
+    return { ok: false, error: "Invalid attachment." };
 
   const allowed = await checkRateLimit(
     "chatSend",
