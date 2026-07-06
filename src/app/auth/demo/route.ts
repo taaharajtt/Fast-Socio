@@ -1,19 +1,26 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isDemoLoginEnabled } from "@/lib/auth/gates";
 
 /**
  * Reusable one-click demo login (no email, no expiry hassle). Signs the visitor
  * into the shared demo STUDENT account by minting an admin magic-link token
  * server-side and immediately verifying it to set the session cookies.
  *
- * DEMO CONVENIENCE — this is a public auto-login for a single, non-admin demo
- * account. Remove this route before a real launch.
+ * DEMO CONVENIENCE — a public auto-login for a single, non-admin demo account.
+ * Hard-gated off in production (P1-03) unless ALLOW_DEMO_LOGIN=true is set, so a
+ * real deployment cannot hand out authenticated sessions to anonymous visitors.
  */
 const DEMO_EMAIL = "demo-user@nu.edu.pk";
 
 export async function GET(request: Request) {
   const { origin } = new URL(request.url);
+
+  // Never expose an unauthenticated session-minting endpoint in production.
+  if (!isDemoLoginEnabled()) {
+    return NextResponse.redirect(`${origin}/login`);
+  }
 
   const admin = createAdminClient();
   const { data, error } = await admin.auth.admin.generateLink({
