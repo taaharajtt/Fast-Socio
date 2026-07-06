@@ -12,7 +12,8 @@
 
   /* Brand */
   --aura: #7c5cff; /* Aura Purple (primary) */
-  --cyan: #00d4ff; /* Electric Cyan (secondary) */
+  --cyan: #00d4ff; /* Electric Cyan (tertiary) */
+  --accent: #c850c0; /* Magenta accent — active states, glows (Figma prototype) */
 
   /* Surfaces */
   --bg: #0a0b10; /* Background primary */
@@ -24,19 +25,21 @@
   --glass-surface: rgba(255, 255, 255, 0.08);
   --glass-surface-strong: rgba(255, 255, 255, 0.12);
   --glass-border: rgba(255, 255, 255, 0.12);
-  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.28); /* softer, airier (prototype) */
 
   /* Status */
   --success: #00ff88;
   --warning: #ffc857;
   --error: #ff5e78;
 
-  /* Auth-only gradient (UI Spec §2.2 exception) */
-  --auth-gradient: linear-gradient(160deg, #14163a 0%, #2a1b4d 45%, #00344a 100%);
+  /* Auth-only gradient (prototype auth bg) */
+  --auth-gradient: linear-gradient(160deg, #1a0533 0%, #0d1245 55%, #250640 100%);
 }
 
 .light {
   color-scheme: light;
+
+  --accent: #c850c0;
 
   --bg: #f4f5fb;
   --bg-elevated: #ffffff;
@@ -56,6 +59,7 @@
   /* Colors → Tailwind utilities (bg-aura, text-cyan, border-glass, …) */
   --color-aura: var(--aura);
   --color-cyan: var(--cyan);
+  --color-accent: var(--accent);
   --color-bg: var(--bg);
   --color-bg-elevated: var(--bg-elevated);
   --color-fg: var(--fg);
@@ -99,30 +103,38 @@ body {
 */
 @utility glass {
   background: var(--glass-surface);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
-  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
   border: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
 }
 
 @utility glass-strong {
   background: var(--glass-surface-strong);
-  -webkit-backdrop-filter: blur(28px) saturate(160%);
-  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px);
+  backdrop-filter: blur(28px);
   border: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
 }
 
-/* Gradient brand fill for primary CTAs and the logo mark. */
+/*
+  Signature brand gradient (Figma prototype): magenta → purple. Used for primary
+  CTAs, the logo mark, active pills, and avatar rings.
+*/
 @utility gradient-brand {
-  background-image: linear-gradient(135deg, var(--aura) 0%, var(--cyan) 100%);
+  background-image: linear-gradient(135deg, var(--accent) 0%, var(--aura) 100%);
 }
 
 @utility gradient-brand-text {
-  background-image: linear-gradient(135deg, var(--aura) 0%, var(--cyan) 100%);
+  background-image: linear-gradient(135deg, var(--accent) 0%, var(--aura) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+
+/* Secondary gradient: purple → cyan (prototype GRAD_CYAN). */
+@utility gradient-cyan {
+  background-image: linear-gradient(135deg, var(--aura) 0%, var(--cyan) 100%);
 }
 
 /* Full-bleed auth background (auth screens only — UI Spec §2.2). */

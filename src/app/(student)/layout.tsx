@@ -35,7 +35,7 @@ export default async function StudentLayout({
         className="pointer-events-none fixed inset-0 -z-10 opacity-60"
         style={{
           background:
-            "radial-gradient(40rem 30rem at 15% -10%, rgba(124,92,255,0.22), transparent), radial-gradient(35rem 25rem at 95% 5%, rgba(0,212,255,0.16), transparent)",
+            "radial-gradient(40rem 30rem at 15% -10%, rgba(124,92,255,0.22), transparent), radial-gradient(35rem 25rem at 95% 5%, rgba(200,80,192,0.18), transparent)",
         }}
       />
       <div className="flex-1 pb-28">{children}</div>
