@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { safeNextPath } from "@/lib/url-safety";
 
 /**
  * Magic-link callback. Supabase redirects here with a `code` (PKCE) after the
@@ -10,7 +11,8 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/home";
+  // Validate to a same-site path — never let `next` redirect off-domain (P2-01).
+  const next = safeNextPath(searchParams.get("next"));
   const error = searchParams.get("error_description");
 
   if (error) {

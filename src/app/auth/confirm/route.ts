@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { safeNextPath } from "@/lib/url-safety";
 
 /**
  * Token-hash confirmation (the standard @supabase/ssr flow). Complements the
@@ -13,7 +14,8 @@ export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;
-  const next = searchParams.get("next") ?? "/home";
+  // Validate to a same-site path — never let `next` redirect off-domain (P2-01).
+  const next = safeNextPath(searchParams.get("next"));
 
   if (tokenHash && type) {
     const supabase = await createClient();
