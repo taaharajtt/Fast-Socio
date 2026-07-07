@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { toggleLike, reportPost } from "@/app/(student)/home/actions";
 import { ShareSheet } from "@/components/feed/share-sheet";
 import { timeAgo, absoluteTime } from "@/lib/time";
-import { optimizedImage, optimizedAvatar } from "@/lib/image";
+import { AppImage } from "@/components/ui/app-image";
 import type { FeedPost } from "@/lib/feed/types";
 
 const REPORT_REASONS = [
@@ -47,17 +47,14 @@ export function PostCard({ post }: { post: FeedPost }) {
         {(() => {
           const inner = (
             <>
-              <div className="glass flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full">
+              <div className="glass relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full">
                 {anon ? (
                   <VenetianMask className="h-5 w-5 text-fg-muted" aria-hidden />
                 ) : post.author_avatar ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={optimizedAvatar(post.author_avatar) ?? post.author_avatar}
+                  <AppImage
+                    src={post.author_avatar}
                     alt={post.author_name ?? ""}
-                    className="h-full w-full object-cover"
-                    loading="lazy"
-                    decoding="async"
+                    sizes="40px"
                   />
                 ) : null}
               </div>
@@ -98,14 +95,13 @@ export function PostCard({ post }: { post: FeedPost }) {
 
       {post.body && <p className="mt-3 whitespace-pre-wrap text-[15px]">{post.body}</p>}
       {post.image_url && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={optimizedImage(post.image_url) ?? post.image_url}
-          alt="Post image"
-          className="mt-3 max-h-96 w-full rounded-2xl object-cover"
-          loading="lazy"
-          decoding="async"
-        />
+        <div className="relative mt-3 aspect-square w-full overflow-hidden rounded-2xl">
+          <AppImage
+            src={post.image_url}
+            alt="Post image"
+            sizes="(max-width: 448px) 100vw, 448px"
+          />
+        </div>
       )}
 
       <div className="mt-4 flex items-center gap-5 border-t border-glass-border pt-3 text-sm text-fg-muted">
