@@ -58,3 +58,6 @@ next-env.d.ts
 
 .vercel
 .env*
+
+# Internal audit report — kept locally, never deployed (contained a credential string that failed the Vercel deploy security scan).
+SECURITY.md
