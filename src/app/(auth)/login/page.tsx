@@ -21,7 +21,7 @@ export default function LoginPage() {
     e.preventDefault();
     setError(null);
     if (!isValidFastEmail(email)) {
-      setError("Use your @nu.edu.pk university email.");
+      setError("Use your @isb.nu.edu.pk university email.");
       return;
     }
     setLoading(true);
@@ -79,7 +79,7 @@ export default function LoginPage() {
               inputMode="email"
               autoComplete="email"
               aria-label="University email"
-              placeholder="you@nu.edu.pk"
+              placeholder="you@isb.nu.edu.pk"
               value={email}
               invalid={emailInvalid}
               onChange={(e) => setEmail(e.target.value)}
@@ -87,7 +87,7 @@ export default function LoginPage() {
             />
             {emailInvalid && (
               <p className="px-1 text-[13px] font-medium text-error">
-                Only @nu.edu.pk email addresses are allowed.
+                Only @isb.nu.edu.pk email addresses are allowed.
               </p>
             )}
 
@@ -105,7 +105,7 @@ export default function LoginPage() {
               <span className="h-1 w-1 shrink-0 rounded-full bg-white/40" />
               <p className="text-[11px] text-white/70">
                 Only{" "}
-                <span className="font-semibold text-white/90">@nu.edu.pk</span>{" "}
+                <span className="font-semibold text-white/90">@isb.nu.edu.pk</span>{" "}
                 addresses are accepted
               </p>
             </div>

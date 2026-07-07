@@ -82,14 +82,14 @@ export default function Home() {
         <GlassInput
           type="email"
           inputMode="email"
-          placeholder="k21-1234@nu.edu.pk"
+          placeholder="k21-1234@isb.nu.edu.pk"
           value={email}
           invalid={invalid}
           onChange={(e) => setEmail(e.target.value)}
         />
         {invalid && (
           <p className="text-sm text-error">
-            Use your @nu.edu.pk university email.
+            Use your @isb.nu.edu.pk university email.
           </p>
         )}
         <GlassButton variant="primary" size="lg" className="w-full">

@@ -1,12 +1,13 @@
 /**
  * FAST NUCES email validation (UI Spec §5.1; gates Phase 1 auth).
  *
- * OQ-9 (open question): the exact set of valid domains is not yet finalized.
- * FAST NUCES issues student mail under `nu.edu.pk` (e.g. k21-1234@nu.edu.pk).
- * Keep the allow-list here so it is the single place to update once OQ-9 is
- * answered (e.g. if per-campus subdomains like khi.nu.edu.pk are used).
+ * Restricted to the FAST NUCES Islamabad campus: student mail is issued under
+ * `isb.nu.edu.pk` (e.g. k21-1234@isb.nu.edu.pk). Keep the allow-list here so it
+ * is the single place to update if other campuses are onboarded later. This must
+ * stay in sync with the DB trigger (0031_restrict_email_domain_isb.sql), which is
+ * the authoritative gate.
  */
-export const ALLOWED_EMAIL_DOMAINS = ["nu.edu.pk"] as const;
+export const ALLOWED_EMAIL_DOMAINS = ["isb.nu.edu.pk"] as const;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -14,7 +15,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * Dev-only allow-list of specific full email addresses that may sign in even
  * though they are off-domain (comma-separated in NEXT_PUBLIC_DEV_ALLOWED_EMAILS).
  * Used for dogfooding before the app is opened to real FAST students. Leave the
- * env var unset in production so only nu.edu.pk addresses pass.
+ * env var unset in production so only isb.nu.edu.pk addresses pass.
  */
 const DEV_ALLOWED_EMAILS = (process.env.NEXT_PUBLIC_DEV_ALLOWED_EMAILS ?? "")
   .split(",")
