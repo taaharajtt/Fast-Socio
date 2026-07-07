@@ -4,6 +4,29 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { isAppStorageUrl } from "@/lib/url-safety";
+import type { FeedPost } from "@/lib/feed/types";
+
+export const FEED_PAGE_SIZE = 20;
+
+/**
+ * Fetch a page of the main campus feed older than `cursor` (a created_at ISO
+ * string). Keyset pagination on created_at — stable under inserts and cheap
+ * (indexed) — so the feed can load older posts when it runs out (P4-05).
+ */
+export async function fetchFeedPage(
+  cursor: string | null
+): Promise<FeedPost[]> {
+  const supabase = await createClient();
+  let query = supabase
+    .from("feed_posts")
+    .select("*")
+    .is("community_id", null)
+    .order("created_at", { ascending: false })
+    .limit(FEED_PAGE_SIZE);
+  if (cursor) query = query.lt("created_at", cursor);
+  const { data } = await query;
+  return (data as FeedPost[]) ?? [];
+}
 
 /** Create a post (text and/or image), optionally anonymous and/or in a community. */
 export async function createPost(input: {

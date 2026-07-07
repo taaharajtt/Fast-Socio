@@ -1,8 +1,9 @@
 import { PostComposer } from "@/components/feed/post-composer";
-import { PostCard } from "@/components/feed/post-card";
+import { FeedList } from "@/components/feed/feed-list";
 import { EventsStrip } from "@/components/feed/events-strip";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { createClient } from "@/lib/supabase/server";
+import { FEED_PAGE_SIZE } from "@/app/(student)/home/actions";
 import type { FeedPost } from "@/lib/feed/types";
 
 export default async function HomePage() {
@@ -12,7 +13,7 @@ export default async function HomePage() {
     .select("*")
     .is("community_id", null)
     .order("created_at", { ascending: false })
-    .limit(50);
+    .limit(FEED_PAGE_SIZE);
   const posts = (data as FeedPost[]) ?? [];
 
   return (
@@ -26,14 +27,8 @@ export default async function HomePage() {
 
       <EventsStrip />
 
-      <div className="mt-4 space-y-4">
-        {posts.length === 0 ? (
-          <p className="py-8 text-center text-sm text-fg-muted">
-            No posts yet. Be the first to share something.
-          </p>
-        ) : (
-          posts.map((p) => <PostCard key={p.id} post={p} />)
-        )}
+      <div className="mt-4">
+        <FeedList initial={posts} />
       </div>
     </main>
   );
