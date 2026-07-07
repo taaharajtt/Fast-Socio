@@ -7,6 +7,8 @@ import {
   type SharedPostPreview,
 } from "@/components/chat/chat-thread";
 import { createClient } from "@/lib/supabase/server";
+import { MESSAGE_PAGE_SIZE } from "@/app/(student)/chat/actions";
+import { optimizedAvatar } from "@/lib/image";
 
 export default async function ConversationPage({
   params,
@@ -39,14 +41,18 @@ export default async function ConversationPage({
       .from("messages")
       // select * (not an explicit list) so this query keeps working before the
       // shared_post_id column exists; the preview shows shares once migrated.
+      // Bound the initial load to the most recent page (P4-01) — descending here,
+      // reversed to chronological below; older messages load on demand.
       .select("*")
       .eq("conversation_id", id)
       .eq("hidden", false) // moderated-away messages are not shown (P3-03)
-      .order("created_at", { ascending: true }),
+      .order("created_at", { ascending: false })
+      .limit(MESSAGE_PAGE_SIZE),
   ]);
 
-  // Resolve previews for any shared posts (feed_posts is the readable view).
-  const messages = (msgs as ChatMessage[]) ?? [];
+  // Reverse the most-recent-first page back into chronological order for display.
+  const messages = ((msgs as ChatMessage[]) ?? []).slice().reverse();
+  const hasMore = (msgs?.length ?? 0) === MESSAGE_PAGE_SIZE;
   const sharedIds = [
     ...new Set(
       messages.map((m) => m.shared_post_id).filter(Boolean) as string[]
@@ -78,7 +84,7 @@ export default async function ConversationPage({
             {other?.avatar_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={other.avatar_url}
+                src={optimizedAvatar(other.avatar_url) ?? other.avatar_url}
                 alt={other.full_name ?? "Match"}
                 className="h-full w-full object-cover"
                 loading="lazy"
@@ -117,6 +123,7 @@ export default async function ConversationPage({
         meId={me}
         initialMessages={messages}
         sharedPosts={sharedPosts}
+        hasMore={hasMore}
       />
     </div>
   );

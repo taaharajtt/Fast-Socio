@@ -6,6 +6,29 @@ import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { isAppStorageUrl } from "@/lib/url-safety";
 
+export const MESSAGE_PAGE_SIZE = 50;
+
+/**
+ * Fetch a page of messages older than `cursor` in a conversation (P4-01). RLS
+ * scopes rows to conversation participants; returned oldest-first for prepending
+ * above the current thread. Hidden (moderated) messages are excluded.
+ */
+export async function fetchOlderMessages(
+  conversationId: string,
+  cursor: string
+) {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("messages")
+    .select("*")
+    .eq("conversation_id", conversationId)
+    .eq("hidden", false)
+    .lt("created_at", cursor)
+    .order("created_at", { ascending: false })
+    .limit(MESSAGE_PAGE_SIZE);
+  return ((data ?? []) as unknown[]).slice().reverse();
+}
+
 /**
  * Accept or decline an incoming message request. RLS restricts updates to the
  * recipient, so we additionally scope by recipient_id = auth.uid(). An accepted

@@ -6,10 +6,12 @@ import { Send, ImagePlus, Mic, Square, Flag, FileText } from "lucide-react";
 import { GlassButton, GlassSheet } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import { optimizedImage } from "@/lib/image";
 import {
   sendMessage,
   markConversationRead,
   reportMessage,
+  fetchOlderMessages,
 } from "@/app/(student)/chat/actions";
 
 export type ChatMessage = {
@@ -37,11 +39,13 @@ export function ChatThread({
   meId,
   initialMessages,
   sharedPosts = {},
+  hasMore = false,
 }: {
   conversationId: string;
   meId: string;
   initialMessages: ChatMessage[];
   sharedPosts?: Record<string, SharedPostPreview>;
+  hasMore?: boolean;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [draft, setDraft] = useState("");
@@ -49,6 +53,23 @@ export function ChatThread({
   const [otherTyping, setOtherTyping] = useState(false);
   const [recording, setRecording] = useState(false);
   const [reportId, setReportId] = useState<string | null>(null);
+  const [canLoadOlder, setCanLoadOlder] = useState(hasMore);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+
+  async function loadOlder() {
+    if (loadingOlder || messages.length === 0) return;
+    setLoadingOlder(true);
+    const older = (await fetchOlderMessages(
+      conversationId,
+      messages[0].created_at
+    )) as ChatMessage[];
+    setMessages((prev) => {
+      const seen = new Set(prev.map((m) => m.id));
+      return [...older.filter((m) => !seen.has(m.id)), ...prev];
+    });
+    if (older.length < 50) setCanLoadOlder(false);
+    setLoadingOlder(false);
+  }
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -208,6 +229,18 @@ export function ChatThread({
   return (
     <div className="flex flex-1 flex-col">
       <div className="flex-1 space-y-2 overflow-y-auto py-4">
+        {canLoadOlder && (
+          <div className="flex justify-center pb-2">
+            <button
+              type="button"
+              onClick={loadOlder}
+              disabled={loadingOlder}
+              className="glass rounded-[var(--radius-pill)] px-4 py-1.5 text-xs text-fg-muted disabled:opacity-50"
+            >
+              {loadingOlder ? "Loading…" : "Load earlier messages"}
+            </button>
+          </div>
+        )}
         {messages.length === 0 && (
           <p className="mt-8 text-center text-sm text-fg-muted">Say hello 👋</p>
         )}
@@ -261,7 +294,7 @@ export function ChatThread({
                   ) : m.attachment_type === "image" && m.attachment_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={m.attachment_url}
+                      src={optimizedImage(m.attachment_url) ?? m.attachment_url}
                       alt="Shared image"
                       className="max-h-64 rounded-xl object-cover"
                       loading="lazy"
