@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useId, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -8,18 +9,73 @@ type GlassSheetProps = {
   onClose: () => void;
   children: React.ReactNode;
   className?: string;
+  /** Accessible name for the dialog (falls back to a generic label). */
+  label?: string;
 };
 
 /**
  * Slide-up glass sheet (UI Spec §5.7): dismissible bottom sheet with a frosted
- * scrim. Used for the message-request composer and other lightweight overlays.
+ * scrim. Accessible dialog (P6-01): role="dialog" + aria-modal, Escape to close,
+ * focus moved in on open, focus trapped within, and focus restored to the
+ * previously-focused element on close.
  */
 export function GlassSheet({
   open,
   onClose,
   children,
   className,
+  label = "Dialog",
 }: GlassSheetProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const restoreRef = useRef<HTMLElement | null>(null);
+  const titleId = useId();
+
+  // Escape-to-close + focus trap while open.
+  useEffect(() => {
+    if (!open) return;
+    restoreRef.current = document.activeElement as HTMLElement | null;
+
+    // Move focus into the sheet (first focusable, else the panel itself).
+    const panel = panelRef.current;
+    const focusables = panel?.querySelectorAll<HTMLElement>(
+      'a[href],button:not([disabled]),textarea,input,select,[tabindex]:not([tabindex="-1"])'
+    );
+    (focusables && focusables.length ? focusables[0] : panel)?.focus();
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !panel) return;
+      const items = panel.querySelectorAll<HTMLElement>(
+        'a[href],button:not([disabled]),textarea,input,select,[tabindex]:not([tabindex="-1"])'
+      );
+      if (items.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      // Restore focus to whatever opened the sheet.
+      restoreRef.current?.focus?.();
+    };
+  }, [open, onClose]);
+
   return (
     <AnimatePresence>
       {open && (
@@ -33,9 +89,15 @@ export function GlassSheet({
             onClick={onClose}
           />
           <motion.div
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label={label}
+            aria-labelledby={titleId}
+            tabIndex={-1}
             className={cn(
               "glass-strong fixed inset-x-0 bottom-0 z-50 mx-auto max-w-md rounded-t-[32px] " +
-                "p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]",
+                "p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] focus:outline-none",
               className
             )}
             initial={{ y: "100%" }}
@@ -49,7 +111,10 @@ export function GlassSheet({
               if (info.offset.y > 120) onClose();
             }}
           >
-            <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-fg/20" />
+            <div
+              className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-fg/20"
+              aria-hidden
+            />
             {children}
           </motion.div>
         </>
