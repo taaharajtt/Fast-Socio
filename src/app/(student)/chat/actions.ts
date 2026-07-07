@@ -4,9 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
-import { isChatMediaPathFor } from "@/lib/chat-media";
-
-export const MESSAGE_PAGE_SIZE = 50;
+import { isChatMediaPathFor, MESSAGE_PAGE_SIZE } from "@/lib/chat-media";
 
 /**
  * Fetch a page of messages older than `cursor` in a conversation (P4-01). RLS

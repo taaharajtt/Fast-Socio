@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PostCard } from "@/components/feed/post-card";
-import { fetchFeedPage, FEED_PAGE_SIZE } from "@/app/(student)/home/actions";
-import type { FeedPost } from "@/lib/feed/types";
+import { fetchFeedPage } from "@/app/(student)/home/actions";
+import { FEED_PAGE_SIZE, type FeedPost } from "@/lib/feed/types";
 
 /**
  * Infinite-scrolling campus feed (P4-05). Renders the server-provided first page

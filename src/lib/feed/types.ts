@@ -1,3 +1,7 @@
+/** Page size for the campus feed (kept out of the "use server" action module,
+ *  which may only export async functions). */
+export const FEED_PAGE_SIZE = 20;
+
 /** A row from the feed_posts view. Author fields are null for anonymous posts
  *  when the viewer is neither the author nor an admin. */
 export type FeedPost = {

@@ -3,8 +3,7 @@ import { FeedList } from "@/components/feed/feed-list";
 import { EventsStrip } from "@/components/feed/events-strip";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { createClient } from "@/lib/supabase/server";
-import { FEED_PAGE_SIZE } from "@/app/(student)/home/actions";
-import type { FeedPost } from "@/lib/feed/types";
+import { FEED_PAGE_SIZE, type FeedPost } from "@/lib/feed/types";
 
 export default async function HomePage() {
   const supabase = await createClient();

@@ -7,9 +7,12 @@ import {
   type SharedPostPreview,
 } from "@/components/chat/chat-thread";
 import { createClient } from "@/lib/supabase/server";
-import { MESSAGE_PAGE_SIZE } from "@/app/(student)/chat/actions";
 import { optimizedAvatar } from "@/lib/image";
-import { chatMediaPath, CHAT_MEDIA_TTL_SECONDS } from "@/lib/chat-media";
+import {
+  chatMediaPath,
+  CHAT_MEDIA_TTL_SECONDS,
+  MESSAGE_PAGE_SIZE,
+} from "@/lib/chat-media";
 
 export default async function ConversationPage({
   params,

@@ -4,9 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { isAppStorageUrl } from "@/lib/url-safety";
-import type { FeedPost } from "@/lib/feed/types";
-
-export const FEED_PAGE_SIZE = 20;
+import { FEED_PAGE_SIZE, type FeedPost } from "@/lib/feed/types";
 
 /**
  * Fetch a page of the main campus feed older than `cursor` (a created_at ISO

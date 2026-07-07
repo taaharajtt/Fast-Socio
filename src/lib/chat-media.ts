@@ -35,3 +35,7 @@ export function isChatMediaPathFor(
 
 /** Signed-URL lifetime for DM attachments (P5-01): 1 hour. */
 export const CHAT_MEDIA_TTL_SECONDS = 60 * 60;
+
+/** Page size for the DM message list (kept out of the "use server" chat action
+ *  module, which may only export async functions). */
+export const MESSAGE_PAGE_SIZE = 50;
