@@ -29,9 +29,12 @@ export async function checkRateLimit(
 
 /** Common limits, centralized so phases share one policy table. */
 export const RATE_LIMITS = {
-  like: { max: 100, windowSeconds: 60 * 60 }, // 100 likes/hour
+  like: { max: 100, windowSeconds: 60 * 60 }, // 100 swipe-likes/hour
   pass: { max: 300, windowSeconds: 60 * 60 },
   messageRequest: { max: 20, windowSeconds: 60 * 60 },
   chatSend: { max: 120, windowSeconds: 60 }, // 120 msgs/min
   report: { max: 20, windowSeconds: 24 * 60 * 60 },
+  // Post-like toggles: cap the notification/push a target can be made to receive
+  // (P5-04). Generous for real use, throttles like/unlike spam loops.
+  postLike: { max: 60, windowSeconds: 60 }, // 60 like-toggles/min
 } as const;

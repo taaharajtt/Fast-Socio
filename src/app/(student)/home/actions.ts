@@ -75,6 +75,15 @@ export async function toggleLike(postId: string, currentlyLiked: boolean) {
   } = await supabase.auth.getUser();
   if (!user) return;
 
+  // Throttle like/unlike loops so a target can't be flooded with like
+  // notifications + Web Push (P5-04). Silently no-op when over the limit.
+  const allowed = await checkRateLimit(
+    "postLike",
+    RATE_LIMITS.postLike.max,
+    RATE_LIMITS.postLike.windowSeconds
+  );
+  if (!allowed) return;
+
   if (currentlyLiked) {
     await supabase
       .from("post_likes")
