@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { toggleLike, reportPost } from "@/app/(student)/home/actions";
 import { ShareSheet } from "@/components/feed/share-sheet";
 import { timeAgo } from "@/lib/time";
+import { optimizedImage, optimizedAvatar } from "@/lib/image";
 import type { FeedPost } from "@/lib/feed/types";
 
 const REPORT_REASONS = [
@@ -45,7 +46,7 @@ export function PostCard({ post }: { post: FeedPost }) {
                 ) : post.author_avatar ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={post.author_avatar}
+                    src={optimizedAvatar(post.author_avatar) ?? post.author_avatar}
                     alt={post.author_name ?? ""}
                     className="h-full w-full object-cover"
                     loading="lazy"
@@ -88,7 +89,7 @@ export function PostCard({ post }: { post: FeedPost }) {
       {post.image_url && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={post.image_url}
+          src={optimizedImage(post.image_url) ?? post.image_url}
           alt="Post image"
           className="mt-3 max-h-96 w-full rounded-2xl object-cover"
           loading="lazy"

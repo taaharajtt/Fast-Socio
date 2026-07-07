@@ -4,6 +4,7 @@ import { ChevronLeft, Zap, Heart, Check } from "lucide-react";
 import { OpenChatButton } from "@/components/chat/open-chat-button";
 import { ProfileTabs, type GridPost, type ProfileCommunity } from "@/components/profile/profile-tabs";
 import { createClient } from "@/lib/supabase/server";
+import { optimizedAvatar } from "@/lib/image";
 
 export default async function PublicProfilePage({
   params,
@@ -89,7 +90,7 @@ export default async function PublicProfilePage({
             {profile.avatar_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={profile.avatar_url}
+                src={optimizedAvatar(profile.avatar_url) ?? profile.avatar_url}
                 alt={profile.full_name ?? "Avatar"}
                 className="h-full w-full object-cover"
               />

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { SegmentedPills } from "@/components/ui";
+import { optimizedImage } from "@/lib/image";
 
 export type GridPost = {
   id: string;
@@ -58,7 +59,7 @@ export function ProfileTabs({
                 {p.image_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={p.image_url}
+                    src={optimizedImage(p.image_url, 512) ?? p.image_url}
                     alt=""
                     className="h-full w-full object-cover"
                     loading="lazy"

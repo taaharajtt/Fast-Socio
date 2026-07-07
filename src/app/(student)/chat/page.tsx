@@ -4,6 +4,7 @@ import { GlassCard, GlassChip } from "@/components/ui";
 import { RequestRow, type IncomingRequest } from "@/components/chat/request-row";
 import { OpenChatButton } from "@/components/chat/open-chat-button";
 import { createClient } from "@/lib/supabase/server";
+import { optimizedAvatar } from "@/lib/image";
 
 type ProfileLite = {
   id: string;
@@ -182,7 +183,7 @@ export default async function ChatPage({
                           {p?.avatar_url ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
-                              src={p.avatar_url}
+                              src={optimizedAvatar(p.avatar_url) ?? p.avatar_url}
                               alt={p.full_name ?? "Match"}
                               className="h-full w-full object-cover"
                               loading="lazy"
@@ -232,7 +233,7 @@ export default async function ChatPage({
                           {p?.avatar_url ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
-                              src={p.avatar_url}
+                              src={optimizedAvatar(p.avatar_url) ?? p.avatar_url}
                               alt={p.full_name ?? "Match"}
                               className="h-full w-full object-cover"
                               loading="lazy"
