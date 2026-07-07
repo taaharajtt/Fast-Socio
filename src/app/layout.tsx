@@ -39,8 +39,8 @@ export const viewport: Viewport = {
   themeColor: "#0A0B10",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  // Mobile-web-first: lock zoom so the app feels native; allow safe-area insets.
+  // Do NOT cap maximumScale / disable user scaling — users must be able to
+  // pinch-zoom (WCAG 2.1 AA §1.4.4 Resize Text). P6-03.
   viewportFit: "cover",
 };
 
