@@ -12,7 +12,7 @@ export function GlassInput({ className, invalid, ...props }: GlassInputProps) {
       aria-invalid={invalid}
       className={cn(
         "glass h-12 w-full rounded-[var(--radius-md)] px-4 text-[15px] text-fg " +
-          "placeholder:text-fg-muted/70 outline-none " +
+          "placeholder:text-fg-muted outline-none " +
           "transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] " +
           "focus:border-aura/60 focus:ring-2 focus:ring-aura/40",
         invalid && "border-error/70 ring-2 ring-error/40 focus:border-error focus:ring-error/50",

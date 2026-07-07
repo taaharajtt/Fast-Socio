@@ -1,3 +1,11 @@
+/** Full local date-time for a timestamp, for a hover title (P6-07). */
+export function absoluteTime(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
 /** Compact relative time, e.g. "now", "5m", "3h", "2d", "4w". */
 export function timeAgo(iso: string): string {
   const then = new Date(iso).getTime();

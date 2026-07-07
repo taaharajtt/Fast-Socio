@@ -34,7 +34,7 @@ export function BanUserButton({
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="Reason (optional, logged)"
-          className="glass h-10 w-full rounded-[var(--radius-sm)] px-3 text-sm text-fg outline-none placeholder:text-fg-muted/70"
+          className="glass h-10 w-full rounded-[var(--radius-sm)] px-3 text-sm text-fg outline-none placeholder:text-fg-muted"
         />
       )}
       <button

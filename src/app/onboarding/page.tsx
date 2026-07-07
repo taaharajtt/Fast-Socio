@@ -251,7 +251,7 @@ export default function OnboardingPage() {
               onChange={(e) => setBio(e.target.value.slice(0, BIO_MAX))}
               placeholder="Looking for a hackathon teammate ☕"
               rows={5}
-              className="w-full resize-none rounded-[20px] bg-transparent p-4 text-[15px] text-fg outline-none placeholder:text-fg-muted/70"
+              className="w-full resize-none rounded-[20px] bg-transparent p-4 text-[15px] text-fg outline-none placeholder:text-fg-muted"
             />
           </GlassCard>
           <p className="text-right text-xs text-fg-muted">

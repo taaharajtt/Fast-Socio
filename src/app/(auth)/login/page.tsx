@@ -51,7 +51,7 @@ export default function LoginPage() {
           <h1 className="text-2xl font-extrabold tracking-tight text-white">
             FAST SOCIO
           </h1>
-          <p className="mt-0.5 text-sm text-white/40">Your campus, alive.</p>
+          <p className="mt-0.5 text-sm text-white/70">Your campus, alive.</p>
         </div>
       </div>
 
@@ -64,7 +64,7 @@ export default function LoginPage() {
               <br />
               Campus Tribe
             </h2>
-            <p className="mt-3 text-sm leading-relaxed text-white/45">
+            <p className="mt-3 text-sm leading-relaxed text-white/75">
               Sign in with your FAST University email
               <br />
               to get started.
@@ -102,15 +102,19 @@ export default function LoginPage() {
 
             {/* Domain hint */}
             <div className="flex items-center gap-2 px-1">
-              <span className="h-1 w-1 shrink-0 rounded-full bg-white/20" />
-              <p className="text-[11px] text-white/30">
+              <span className="h-1 w-1 shrink-0 rounded-full bg-white/40" />
+              <p className="text-[11px] text-white/70">
                 Only{" "}
-                <span className="font-semibold text-white/45">@nu.edu.pk</span>{" "}
+                <span className="font-semibold text-white/90">@nu.edu.pk</span>{" "}
                 addresses are accepted
               </p>
             </div>
 
-            {error && <p className="px-1 text-[13px] text-error">{error}</p>}
+            {error && (
+              <p role="alert" className="px-1 text-[13px] text-error">
+                {error}
+              </p>
+            )}
           </form>
         </>
       ) : (
@@ -142,7 +146,7 @@ export default function LoginPage() {
         </GlassCard>
       )}
 
-      <p className="mt-8 px-4 text-center text-[11px] text-white/20">
+      <p className="mt-8 px-4 text-center text-[11px] text-white/55">
         Terms of Service · Privacy Policy
       </p>
     </main>

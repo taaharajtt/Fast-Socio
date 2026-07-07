@@ -115,7 +115,7 @@ export default function NewEventPage() {
               onChange={(e) => setDescription(e.target.value.slice(0, 1000))}
               placeholder="What's happening?"
               rows={4}
-              className="glass w-full resize-none rounded-[var(--radius-md)] p-4 text-[15px] text-fg outline-none placeholder:text-fg-muted/70 focus:ring-2 focus:ring-aura/40"
+              className="glass w-full resize-none rounded-[var(--radius-md)] p-4 text-[15px] text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
             />
           </div>
 

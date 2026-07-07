@@ -58,7 +58,7 @@ export default function NewCommunityPage() {
               onChange={(e) => setDescription(e.target.value.slice(0, 500))}
               placeholder="What is this community about?"
               rows={4}
-              className="glass w-full resize-none rounded-[var(--radius-md)] p-4 text-[15px] text-fg outline-none placeholder:text-fg-muted/70 focus:ring-2 focus:ring-aura/40"
+              className="glass w-full resize-none rounded-[var(--radius-md)] p-4 text-[15px] text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
             />
           </div>
           <p className="text-xs text-fg-muted">

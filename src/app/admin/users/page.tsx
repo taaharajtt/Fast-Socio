@@ -31,7 +31,7 @@ export default async function AdminUsersPage({
           name="q"
           defaultValue={q ?? ""}
           placeholder="Search by name…"
-          className="glass h-10 flex-1 rounded-[var(--radius-pill)] px-4 text-sm text-fg outline-none placeholder:text-fg-muted/70"
+          className="glass h-10 flex-1 rounded-[var(--radius-pill)] px-4 text-sm text-fg outline-none placeholder:text-fg-muted"
         />
         <button
           type="submit"
