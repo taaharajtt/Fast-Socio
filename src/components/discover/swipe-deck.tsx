@@ -10,6 +10,7 @@ import {
 import { Heart, X, Mail, RotateCcw, Flag, Info } from "lucide-react";
 import { GlassButton, GlassChip, GlassSheet, GlassInput } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { optimizedImage } from "@/lib/image";
 import type { DiscoverProfile } from "@/lib/profile/types";
 import { ReportSheet } from "@/components/discover/report-sheet";
 import {
@@ -281,7 +282,7 @@ function ProfileCardBody({
       {profile.avatar_url ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={profile.avatar_url}
+          src={optimizedImage(profile.avatar_url) ?? profile.avatar_url}
           alt={profile.full_name ?? "Profile"}
           className="h-full w-full object-cover"
           draggable={false}

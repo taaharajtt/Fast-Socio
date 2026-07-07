@@ -8,4 +8,7 @@ export type DiscoverProfile = {
   avatar_url: string | null;
   aura_score: number;
   interests: string[];
+  /** True when this candidate is a previously-liked profile being recycled
+   *  because fresh candidates ran low (Discover never runs empty, P4-05). */
+  is_recycled?: boolean;
 };
