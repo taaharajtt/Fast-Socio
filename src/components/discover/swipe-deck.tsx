@@ -389,7 +389,11 @@ function MessageRequestSheet({
               {sent ? "Sent ✓" : sending ? "Sending…" : "Send request"}
             </GlassButton>
           </div>
-          {error && <p className="text-sm text-error">{error}</p>}
+          {error && (
+            <p role="alert" className="text-sm text-error">
+              {error}
+            </p>
+          )}
         </div>
       )}
     </GlassSheet>

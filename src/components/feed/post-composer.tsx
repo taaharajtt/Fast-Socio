@@ -90,7 +90,7 @@ export function PostComposer({
         onChange={(e) => setBody(e.target.value.slice(0, 2000))}
         placeholder={placeholder}
         rows={3}
-        className="w-full resize-none bg-transparent text-[15px] text-fg outline-none placeholder:text-fg-muted/70"
+        className="w-full resize-none bg-transparent text-[15px] text-fg outline-none placeholder:text-fg-muted"
       />
 
       {imageUrl && (
@@ -152,8 +152,16 @@ export function PostComposer({
           {pending ? "Posting…" : uploading ? "Uploading…" : "Post"}
         </GlassButton>
       </div>
-      {error && <p className="mt-2 text-sm text-error">{error}</p>}
-      {notice && <p className="mt-2 text-sm text-aura">{notice}</p>}
+      {error && (
+        <p role="alert" className="mt-2 text-sm text-error">
+          {error}
+        </p>
+      )}
+      {notice && (
+        <p role="status" className="mt-2 text-sm text-aura">
+          {notice}
+        </p>
+      )}
     </GlassCard>
   );
 }

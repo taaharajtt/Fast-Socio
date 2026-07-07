@@ -71,7 +71,7 @@ export function AddComment({ postId }: { postId: string }) {
           onChange={(e) => setBody(e.target.value)}
           placeholder="Add a comment…"
           disabled={pending}
-          className="glass h-11 flex-1 rounded-[var(--radius-pill)] px-4 text-[15px] text-fg outline-none placeholder:text-fg-muted/70 focus:ring-2 focus:ring-aura/40"
+          className="glass h-11 flex-1 rounded-[var(--radius-pill)] px-4 text-[15px] text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
         />
         <GlassButton
           type="submit"
@@ -83,7 +83,11 @@ export function AddComment({ postId }: { postId: string }) {
           <Send className="h-5 w-5" aria-hidden />
         </GlassButton>
       </form>
-      {error && <p className="mt-1 text-sm text-error">{error}</p>}
+      {error && (
+        <p role="alert" className="mt-1 text-sm text-error">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
