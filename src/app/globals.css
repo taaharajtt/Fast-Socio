@@ -149,3 +149,16 @@ body {
     background: var(--bg-elevated);
   }
 }
+
+/* Respect the OS "reduce motion" preference for CSS-driven animations and
+   transitions (P6-04). framer-motion is handled via MotionConfig separately. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
