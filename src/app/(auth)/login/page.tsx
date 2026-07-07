@@ -1,48 +1,76 @@
 "use client";
 
 import { useState } from "react";
-import { GlassButton, GlassCard, GlassInput } from "@/components/ui";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { GlassButton, GlassInput } from "@/components/ui";
 import { createClient } from "@/lib/supabase/client";
 import { isValidFastEmail } from "@/lib/auth/email";
 
-type Step = "email" | "sent";
-
+/**
+ * Login — returning users sign in with email + password (new users go to
+ * /signup). Passwordless magic-link login was replaced by password auth; the
+ * @isb.nu.edu.pk restriction is still enforced by the DB signup trigger.
+ */
 export default function LoginPage() {
   const supabase = createClient();
+  const router = useRouter();
 
-  const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set when Supabase reports the account exists but the email isn't verified.
+  const [unconfirmed, setUnconfirmed] = useState(false);
+  const [resent, setResent] = useState(false);
 
   const emailInvalid = email.length > 0 && !isValidFastEmail(email);
 
-  async function sendLink(e: React.FormEvent) {
+  async function signIn(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setUnconfirmed(false);
     if (!isValidFastEmail(email)) {
       setError("Use your @isb.nu.edu.pk university email.");
       return;
     }
     setLoading(true);
-    const { error } = await supabase.auth.signInWithOtp({
+    const { error } = await supabase.auth.signInWithPassword({
       email: email.trim().toLowerCase(),
-      options: {
-        shouldCreateUser: true,
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
+      password,
     });
     setLoading(false);
+    if (error) {
+      // Supabase returns a distinct code when the account exists but the email
+      // hasn't been verified — surface a resend affordance instead of a dead end.
+      if (/email not confirmed/i.test(error.message)) {
+        setUnconfirmed(true);
+        setError("Verify your email before signing in.");
+      } else {
+        setError("Incorrect email or password.");
+      }
+      return;
+    }
+    // Middleware sends unfinished profiles to onboarding; everyone else home.
+    router.replace("/home");
+    router.refresh();
+  }
+
+  async function resendVerification() {
+    setError(null);
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email: email.trim().toLowerCase(),
+    });
     if (error) {
       setError(error.message);
       return;
     }
-    setStep("sent");
+    setResent(true);
   }
 
   return (
     <main className="w-full max-w-sm">
-      {/* Logo mark */}
       <div className="mb-8 flex flex-col items-center gap-3">
         <div className="flex h-20 w-20 items-center justify-center rounded-[28px] text-4xl gradient-brand shadow-[0_20px_50px_rgba(200,80,192,0.5)]">
           ⚡
@@ -55,98 +83,93 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {step === "email" ? (
-        <>
-          {/* Headline */}
-          <div className="mb-10 text-center">
-            <h2 className="text-[34px] font-extrabold leading-[1.15] tracking-tight text-white">
-              Find Your
-              <br />
-              Campus Tribe
-            </h2>
-            <p className="mt-3 text-sm leading-relaxed text-white/75">
-              Sign in with your FAST University email
-              <br />
-              to get started.
-            </p>
-          </div>
+      <div className="mb-8 text-center">
+        <h2 className="text-[30px] font-extrabold leading-[1.15] tracking-tight text-white">
+          Welcome back
+        </h2>
+        <p className="mt-2 text-sm leading-relaxed text-white/75">
+          Sign in with your FAST University email and password.
+        </p>
+      </div>
 
-          {/* Form */}
-          <form onSubmit={sendLink} className="flex flex-col gap-3">
-            <GlassInput
-              id="email"
-              type="email"
-              inputMode="email"
-              autoComplete="email"
-              aria-label="University email"
-              placeholder="you@isb.nu.edu.pk"
-              value={email}
-              invalid={emailInvalid}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={loading}
-            />
-            {emailInvalid && (
-              <p className="px-1 text-[13px] font-medium text-error">
-                Only @isb.nu.edu.pk email addresses are allowed.
-              </p>
-            )}
+      <form onSubmit={signIn} className="flex flex-col gap-3">
+        <GlassInput
+          id="email"
+          type="email"
+          inputMode="email"
+          autoComplete="email"
+          aria-label="University email"
+          placeholder="you@isb.nu.edu.pk"
+          value={email}
+          invalid={emailInvalid}
+          onChange={(e) => setEmail(e.target.value)}
+          disabled={loading}
+        />
+        {emailInvalid && (
+          <p className="px-1 text-[13px] font-medium text-error">
+            Only @isb.nu.edu.pk email addresses are allowed.
+          </p>
+        )}
 
-            <GlassButton
-              type="submit"
-              size="lg"
-              className="mt-1 w-full rounded-[var(--radius-pill)]"
-              disabled={loading || !isValidFastEmail(email)}
-            >
-              {loading ? "Sending link…" : "Continue"}
-            </GlassButton>
+        <GlassInput
+          id="password"
+          type="password"
+          autoComplete="current-password"
+          aria-label="Password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          disabled={loading}
+        />
 
-            {/* Domain hint */}
-            <div className="flex items-center gap-2 px-1">
-              <span className="h-1 w-1 shrink-0 rounded-full bg-white/40" />
-              <p className="text-[11px] text-white/70">
-                Only{" "}
-                <span className="font-semibold text-white/90">@isb.nu.edu.pk</span>{" "}
-                addresses are accepted
-              </p>
-            </div>
-
-            {error && (
-              <p role="alert" className="px-1 text-[13px] text-error">
-                {error}
-              </p>
-            )}
-          </form>
-        </>
-      ) : (
-        <GlassCard className="space-y-4 p-6 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-aura/20 text-2xl">
-            ✉
-          </div>
-          <div className="space-y-1">
-            <h2 className="text-lg font-bold text-white">Check your email</h2>
-            <p className="text-sm text-white/70">
-              We sent a sign-in link to{" "}
-              <span className="font-medium text-white">{email}</span>. Open it on
-              this device to continue.
-            </p>
-          </div>
-          <GlassButton
-            type="button"
-            variant="ghost"
-            size="md"
-            className="w-full text-white/80"
-            onClick={() => {
-              setStep("email");
-              setError(null);
-            }}
+        <div className="flex justify-end px-1">
+          <Link
+            href="/forgot-password"
+            className="text-[13px] font-medium text-white/70 hover:text-white"
           >
-            Use a different email
-          </GlassButton>
-          {error && <p className="text-sm text-error">{error}</p>}
-        </GlassCard>
-      )}
+            Forgot password?
+          </Link>
+        </div>
 
-      <p className="mt-8 px-4 text-center text-[11px] text-white/55">
+        <GlassButton
+          type="submit"
+          size="lg"
+          className="mt-1 w-full rounded-[var(--radius-pill)]"
+          disabled={loading || !isValidFastEmail(email) || password.length === 0}
+        >
+          {loading ? "Signing in…" : "Log in"}
+        </GlassButton>
+
+        {error && (
+          <p role="alert" className="px-1 text-[13px] text-error">
+            {error}
+          </p>
+        )}
+
+        {unconfirmed &&
+          (resent ? (
+            <p className="px-1 text-[13px] text-aura">
+              Verification email sent — check your inbox.
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={resendVerification}
+              className="px-1 text-left text-[13px] font-medium text-aura hover:underline"
+            >
+              Resend verification email
+            </button>
+          ))}
+      </form>
+
+      <p className="mt-8 text-center text-sm text-white/70">
+        New here?{" "}
+        <Link href="/signup" className="font-semibold text-white hover:underline">
+          Sign up
+        </Link>
+      </p>
+
+      <p className="mt-6 px-4 text-center text-[11px] text-white/55">
         Terms of Service · Privacy Policy
       </p>
     </main>
