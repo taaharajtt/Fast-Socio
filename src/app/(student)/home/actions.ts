@@ -67,34 +67,41 @@ export async function createPost(input: {
   return { ok: true };
 }
 
-/** Toggle a like on a post. */
-export async function toggleLike(postId: string, currentlyLiked: boolean) {
+/**
+ * Toggle a like on a post. Returns { ok } so the caller can roll back an
+ * optimistic UI update when the like doesn't persist (rate-limited, blocked, or
+ * a DB error) — P6-02.
+ */
+export async function toggleLike(
+  postId: string,
+  currentlyLiked: boolean
+): Promise<{ ok: boolean }> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return;
+  if (!user) return { ok: false };
 
   // Throttle like/unlike loops so a target can't be flooded with like
-  // notifications + Web Push (P5-04). Silently no-op when over the limit.
+  // notifications + Web Push (P5-04).
   const allowed = await checkRateLimit(
     "postLike",
     RATE_LIMITS.postLike.max,
     RATE_LIMITS.postLike.windowSeconds
   );
-  if (!allowed) return;
+  if (!allowed) return { ok: false };
 
-  if (currentlyLiked) {
-    await supabase
-      .from("post_likes")
-      .delete()
-      .eq("post_id", postId)
-      .eq("user_id", user.id);
-  } else {
-    await supabase
-      .from("post_likes")
-      .insert({ post_id: postId, user_id: user.id });
-  }
+  const { error } = currentlyLiked
+    ? await supabase
+        .from("post_likes")
+        .delete()
+        .eq("post_id", postId)
+        .eq("user_id", user.id)
+    : await supabase
+        .from("post_likes")
+        .insert({ post_id: postId, user_id: user.id });
+
+  return { ok: !error };
 }
 
 /** Add a comment to a post. */

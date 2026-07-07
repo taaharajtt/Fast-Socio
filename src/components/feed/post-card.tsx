@@ -7,7 +7,7 @@ import { GlassCard, GlassSheet } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { toggleLike, reportPost } from "@/app/(student)/home/actions";
 import { ShareSheet } from "@/components/feed/share-sheet";
-import { timeAgo } from "@/lib/time";
+import { timeAgo, absoluteTime } from "@/lib/time";
 import { optimizedImage, optimizedAvatar } from "@/lib/image";
 import type { FeedPost } from "@/lib/feed/types";
 
@@ -27,11 +27,18 @@ export function PostCard({ post }: { post: FeedPost }) {
   const [saved, setSaved] = useState(false);
   const anon = post.is_anonymous && !post.author_name;
 
-  function onLike() {
-    const next = !liked;
+  async function onLike() {
+    const wasLiked = liked;
+    const next = !wasLiked;
+    // Optimistic update…
     setLiked(next);
     setLikes((n) => n + (next ? 1 : -1));
-    toggleLike(post.id, liked); // fire-and-forget; RLS enforces ownership
+    // …rolled back if the like didn't actually persist (P6-02).
+    const res = await toggleLike(post.id, wasLiked);
+    if (!res.ok) {
+      setLiked(wasLiked);
+      setLikes((n) => n + (next ? -1 : 1));
+    }
   }
 
   return (
@@ -58,9 +65,13 @@ export function PostCard({ post }: { post: FeedPost }) {
                 <span className="block truncate text-sm font-semibold">
                   {anon ? "Anonymous" : (post.author_name ?? "Student")}
                 </span>
-                <span className="block text-[11px] text-fg-muted">
+                <time
+                  dateTime={post.created_at}
+                  title={absoluteTime(post.created_at)}
+                  className="block text-[11px] text-fg-muted"
+                >
                   {timeAgo(post.created_at)} ago
-                </span>
+                </time>
               </span>
             </>
           );
