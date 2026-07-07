@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
-import { isAppStorageUrl } from "@/lib/url-safety";
+import { isChatMediaPathFor } from "@/lib/chat-media";
 
 export const MESSAGE_PAGE_SIZE = 50;
 
@@ -117,8 +117,10 @@ export async function sendMessage(
   const text = body.trim();
   if (!attachment && (text.length < 1 || text.length > 4000))
     return { ok: false, error: "Message must be 1–4000 characters." };
-  // The attachment URL is client-supplied — only accept media we host (P2-04).
-  if (attachment && !isAppStorageUrl(attachment.url))
+  // attachment.url is a client-supplied chat-media PATH (P5-01). Only accept a
+  // well-formed path inside THIS conversation, so a caller can't attach another
+  // conversation's object.
+  if (attachment && !isChatMediaPathFor(attachment.url, conversationId))
     return { ok: false, error: "Invalid attachment." };
 
   const allowed = await checkRateLimit(
@@ -185,6 +187,15 @@ export async function sharePostToFriend(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in." };
+
+  // Share-to-DM inserts a chat message, so it must share the chat send limit
+  // (P5-05) — otherwise it's an unthrottled message-spam path.
+  const allowed = await checkRateLimit(
+    "chatSend",
+    RATE_LIMITS.chatSend.max,
+    RATE_LIMITS.chatSend.windowSeconds
+  );
+  if (!allowed) return { ok: false, error: "You're sharing too fast." };
 
   const { data: conversationId, error: convErr } = await supabase.rpc(
     "get_or_create_conversation",

@@ -9,6 +9,7 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { MESSAGE_PAGE_SIZE } from "@/app/(student)/chat/actions";
 import { optimizedAvatar } from "@/lib/image";
+import { chatMediaPath, CHAT_MEDIA_TTL_SECONDS } from "@/lib/chat-media";
 
 export default async function ConversationPage({
   params,
@@ -53,6 +54,28 @@ export default async function ConversationPage({
   // Reverse the most-recent-first page back into chronological order for display.
   const messages = ((msgs as ChatMessage[]) ?? []).slice().reverse();
   const hasMore = (msgs?.length ?? 0) === MESSAGE_PAGE_SIZE;
+
+  // chat-media is private (P5-01): resolve a short-lived signed URL for each
+  // attachment. Images are signed with a 1080px transform; voice notes as-is.
+  const signedAttachments: Record<string, string> = {};
+  await Promise.all(
+    messages
+      .filter((m) => m.attachment_url)
+      .map(async (m) => {
+        const path = chatMediaPath(m.attachment_url);
+        if (!path) return;
+        const { data: signed } = await supabase.storage
+          .from("chat-media")
+          .createSignedUrl(
+            path,
+            CHAT_MEDIA_TTL_SECONDS,
+            m.attachment_type === "image"
+              ? { transform: { width: 1080, height: 1080, resize: "contain" } }
+              : undefined
+          );
+        if (signed?.signedUrl) signedAttachments[m.id] = signed.signedUrl;
+      })
+  );
   const sharedIds = [
     ...new Set(
       messages.map((m) => m.shared_post_id).filter(Boolean) as string[]
@@ -124,6 +147,7 @@ export default async function ConversationPage({
         initialMessages={messages}
         sharedPosts={sharedPosts}
         hasMore={hasMore}
+        initialSignedAttachments={signedAttachments}
       />
     </div>
   );

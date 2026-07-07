@@ -6,7 +6,7 @@ import { Send, ImagePlus, Mic, Square, Flag, FileText } from "lucide-react";
 import { GlassButton, GlassSheet } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { optimizedImage } from "@/lib/image";
+import { chatMediaPath, CHAT_MEDIA_TTL_SECONDS } from "@/lib/chat-media";
 import {
   sendMessage,
   markConversationRead,
@@ -40,14 +40,20 @@ export function ChatThread({
   initialMessages,
   sharedPosts = {},
   hasMore = false,
+  initialSignedAttachments = {},
 }: {
   conversationId: string;
   meId: string;
   initialMessages: ChatMessage[];
   sharedPosts?: Record<string, SharedPostPreview>;
   hasMore?: boolean;
+  /** messageId -> signed URL for private chat-media attachments (P5-01). */
+  initialSignedAttachments?: Record<string, string>;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [signedAttachments, setSignedAttachments] = useState<
+    Record<string, string>
+  >(initialSignedAttachments);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [otherTyping, setOtherTyping] = useState(false);
@@ -55,6 +61,29 @@ export function ChatThread({
   const [reportId, setReportId] = useState<string | null>(null);
   const [canLoadOlder, setCanLoadOlder] = useState(hasMore);
   const [loadingOlder, setLoadingOlder] = useState(false);
+
+  // Resolve a signed URL for a private chat-media attachment (P5-01). Images get
+  // a 1080px transform; voice notes are signed as-is.
+  const signAttachment = useCallback(
+    async (m: ChatMessage) => {
+      if (!m.attachment_url) return;
+      const path = chatMediaPath(m.attachment_url);
+      if (!path) return;
+      const supabase = createClient();
+      const { data } = await supabase.storage
+        .from("chat-media")
+        .createSignedUrl(
+          path,
+          CHAT_MEDIA_TTL_SECONDS,
+          m.attachment_type === "image"
+            ? { transform: { width: 1080, height: 1080, resize: "contain" } }
+            : undefined
+        );
+      if (data?.signedUrl)
+        setSignedAttachments((prev) => ({ ...prev, [m.id]: data.signedUrl }));
+    },
+    []
+  );
 
   async function loadOlder() {
     if (loadingOlder || messages.length === 0) return;
@@ -67,6 +96,7 @@ export function ChatThread({
       const seen = new Set(prev.map((m) => m.id));
       return [...older.filter((m) => !seen.has(m.id)), ...prev];
     });
+    older.forEach((m) => m.attachment_url && signAttachment(m));
     if (older.length < 50) setCanLoadOlder(false);
     setLoadingOlder(false);
   }
@@ -106,6 +136,7 @@ export function ChatThread({
             setMessages((prev) =>
               prev.some((x) => x.id === m.id) ? prev : [...prev, m]
             );
+            if (m.attachment_url) signAttachment(m);
             if (m.sender_id !== meId) markConversationRead(conversationId);
           }
         )
@@ -138,7 +169,7 @@ export function ChatThread({
     return () => {
       if (channelRef.current) supabase.removeChannel(channelRef.current);
     };
-  }, [conversationId, meId]);
+  }, [conversationId, meId, signAttachment]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -152,6 +183,8 @@ export function ChatThread({
     });
   }, [meId]);
 
+  // Returns the storage PATH (not a URL): chat-media is private, so messages
+  // store the path and the app resolves a signed URL at read time (P5-01).
   async function uploadMedia(
     file: Blob,
     ext: string,
@@ -163,8 +196,7 @@ export function ChatThread({
       .from("chat-media")
       .upload(path, file, { contentType });
     if (error) return null;
-    return supabase.storage.from("chat-media").getPublicUrl(path).data
-      .publicUrl;
+    return path;
   }
 
   async function onSendText(e: React.FormEvent) {
@@ -292,16 +324,26 @@ export function ChatThread({
                       </div>
                     </Link>
                   ) : m.attachment_type === "image" && m.attachment_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={optimizedImage(m.attachment_url) ?? m.attachment_url}
-                      alt="Shared image"
-                      className="max-h-64 rounded-xl object-cover"
-                      loading="lazy"
-                      decoding="async"
-                    />
+                    signedAttachments[m.id] ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={signedAttachments[m.id]}
+                        alt="Shared image"
+                        className="max-h-64 rounded-xl object-cover"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    ) : (
+                      <div className="flex h-24 w-40 items-center justify-center text-xs text-fg-muted">
+                        Loading image…
+                      </div>
+                    )
                   ) : m.attachment_type === "voice" && m.attachment_url ? (
-                    <audio controls src={m.attachment_url} className="h-10" />
+                    signedAttachments[m.id] ? (
+                      <audio controls src={signedAttachments[m.id]} className="h-10" />
+                    ) : (
+                      <span className="text-xs text-fg-muted">Loading audio…</span>
+                    )
                   ) : (
                     m.body
                   )}
