@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import Link from "next/link";
 import { Heart, MessageCircle, Flag, VenetianMask, Share2, Bookmark } from "lucide-react";
 import { GlassCard, GlassSheet } from "@/components/ui";
@@ -19,7 +19,7 @@ const REPORT_REASONS = [
   "Other",
 ];
 
-export function PostCard({ post }: { post: FeedPost }) {
+function PostCardImpl({ post }: { post: FeedPost }) {
   const [liked, setLiked] = useState(post.liked_by_me);
   const [likes, setLikes] = useState(post.like_count);
   const [reporting, setReporting] = useState(false);
@@ -180,3 +180,10 @@ export function PostCard({ post }: { post: FeedPost }) {
     </GlassCard>
   );
 }
+
+/**
+ * Memoized so appending a feed page (P4-05) doesn't re-render already-mounted
+ * cards: FeedList preserves each post object's identity across pages, so shallow
+ * prop equality skips every existing PostCard on load-more.
+ */
+export const PostCard = memo(PostCardImpl);

@@ -53,7 +53,16 @@ export function FeedList({ initial }: { initial: FeedPost[] }) {
   return (
     <div className="space-y-4">
       {posts.map((p) => (
-        <PostCard key={p.id} post={p} />
+        // content-visibility:auto skips layout/paint for off-screen cards
+        // (CSS windowing → 60fps at scale); contain-intrinsic-size reserves an
+        // estimated height so the scrollbar stays stable, and `auto` remembers
+        // each card's real size after it renders once.
+        <div
+          key={p.id}
+          className="[content-visibility:auto] [contain-intrinsic-size:auto_600px]"
+        >
+          <PostCard post={p} />
+        </div>
       ))}
       {!done && (
         <div ref={sentinel} className="py-6 text-center text-sm text-fg-muted">
