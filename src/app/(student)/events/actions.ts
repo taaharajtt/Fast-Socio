@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 /** Submit a new event for admin approval (status starts pending). */
 export async function createEvent(input: {
@@ -114,6 +114,13 @@ export async function reportEvent(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in." };
+
+  const allowed = await checkRateLimit(
+    "report",
+    RATE_LIMITS.report.max,
+    RATE_LIMITS.report.windowSeconds
+  );
+  if (!allowed) return { ok: false, error: "Too many reports for now." };
 
   const { error } = await supabase.from("reports").insert({
     reporter_id: user.id,
