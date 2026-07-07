@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Settings, Pencil, Zap, Heart, Check } from "lucide-react";
 import { ProfileTabs, type GridPost, type ProfileCommunity } from "@/components/profile/profile-tabs";
 import { createClient } from "@/lib/supabase/server";
+import { AppImage } from "@/components/ui/app-image";
 
 export default async function ProfilePage() {
   const supabase = await createClient();
@@ -55,13 +56,12 @@ export default async function ProfilePage() {
         </Link>
         <div className="absolute -bottom-10 left-5">
           <div className="relative">
-            <div className="h-20 w-20 overflow-hidden rounded-full border-[3px] border-bg">
+            <div className="relative h-20 w-20 overflow-hidden rounded-full border-[3px] border-bg">
               {profile?.avatar_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
+                <AppImage
                   src={profile.avatar_url}
                   alt={profile.full_name ?? "Avatar"}
-                  className="h-full w-full object-cover"
+                  sizes="80px"
                 />
               ) : (
                 <span className="glass block h-full w-full" />

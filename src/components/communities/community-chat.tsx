@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Send } from "lucide-react";
 import { GlassButton } from "@/components/ui";
+import { AppImage } from "@/components/ui/app-image";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { sendCommunityMessage } from "@/app/(student)/communities/actions";
@@ -128,16 +129,9 @@ export function CommunityChat({
               className={cn("flex gap-2", mine ? "justify-end" : "justify-start")}
             >
               {!mine && (
-                <div className="glass mt-auto h-7 w-7 shrink-0 overflow-hidden rounded-full">
+                <div className="glass relative mt-auto h-7 w-7 shrink-0 overflow-hidden rounded-full">
                   {s?.avatar ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={s.avatar}
-                      alt=""
-                      className="h-full w-full object-cover"
-                      loading="lazy"
-                      decoding="async"
-                    />
+                    <AppImage src={s.avatar} alt="" sizes="28px" />
                   ) : null}
                 </div>
               )}

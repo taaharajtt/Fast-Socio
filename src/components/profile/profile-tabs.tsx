@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { SegmentedPills } from "@/components/ui";
-import { optimizedImage } from "@/lib/image";
+import { AppImage } from "@/components/ui/app-image";
 
 export type GridPost = {
   id: string;
@@ -54,16 +54,13 @@ export function ProfileTabs({
               <Link
                 key={p.id}
                 href={`/post/${p.id}`}
-                className="aspect-square overflow-hidden rounded-[var(--radius-md)]"
+                className="relative aspect-square overflow-hidden rounded-[var(--radius-md)]"
               >
                 {p.image_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={optimizedImage(p.image_url, 512) ?? p.image_url}
+                  <AppImage
+                    src={p.image_url}
                     alt=""
-                    className="h-full w-full object-cover"
-                    loading="lazy"
-                    decoding="async"
+                    sizes="(max-width: 448px) 33vw, 150px"
                   />
                 ) : (
                   <span className="gradient-brand flex h-full w-full items-center p-2 text-[11px] leading-snug text-white/90">

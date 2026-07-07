@@ -11,6 +11,7 @@ import {
 import { GlassCard } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/server";
+import { AppImage } from "@/components/ui/app-image";
 import {
   notificationView,
   notificationActionPhrase,
@@ -212,16 +213,9 @@ export default async function NotificationsPage() {
                         )}
                       >
                         <div className="relative shrink-0">
-                          <div className="glass h-10 w-10 overflow-hidden rounded-full">
+                          <div className="glass relative h-10 w-10 overflow-hidden rounded-full">
                             {actor?.avatar ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={actor.avatar}
-                                alt=""
-                                className="h-full w-full object-cover"
-                                loading="lazy"
-                                decoding="async"
-                              />
+                              <AppImage src={actor.avatar} alt="" sizes="40px" />
                             ) : (
                               <span className="gradient-brand flex h-full w-full items-center justify-center">
                                 <Zap className="h-4 w-4 text-white" aria-hidden />

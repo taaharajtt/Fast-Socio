@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { AppImage } from "@/components/ui/app-image";
 
 export type Comment = {
   id: string;
@@ -92,15 +93,12 @@ export function CommentThread({
         const a = authors[c.author_id];
         return (
           <div key={c.id} className="flex gap-3">
-            <div className="glass h-9 w-9 shrink-0 overflow-hidden rounded-full">
+            <div className="glass relative h-9 w-9 shrink-0 overflow-hidden rounded-full">
               {a?.avatar_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
+                <AppImage
                   src={a.avatar_url}
                   alt={a.full_name ?? ""}
-                  className="h-full w-full object-cover"
-                  loading="lazy"
-                  decoding="async"
+                  sizes="36px"
                 />
               ) : null}
             </div>

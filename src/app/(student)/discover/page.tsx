@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SwipeDeck } from "@/components/discover/swipe-deck";
+import { AppImage } from "@/components/ui/app-image";
 import { createClient } from "@/lib/supabase/server";
 import type { DiscoverProfile } from "@/lib/profile/types";
 
@@ -26,15 +27,10 @@ export default async function DiscoverPage() {
         <Link
           href="/profile"
           aria-label="Your profile"
-          className="h-9 w-9 overflow-hidden rounded-full border-2 border-accent/50"
+          className="relative h-9 w-9 overflow-hidden rounded-full border-2 border-accent/50"
         >
           {me?.avatar_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={me.avatar_url}
-              alt=""
-              className="h-full w-full object-cover"
-            />
+            <AppImage src={me.avatar_url} alt="" sizes="36px" />
           ) : (
             <span className="glass block h-full w-full" />
           )}

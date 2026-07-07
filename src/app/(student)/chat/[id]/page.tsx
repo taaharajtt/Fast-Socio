@@ -7,7 +7,7 @@ import {
   type SharedPostPreview,
 } from "@/components/chat/chat-thread";
 import { createClient } from "@/lib/supabase/server";
-import { optimizedAvatar } from "@/lib/image";
+import { AppImage } from "@/components/ui/app-image";
 import {
   chatMediaPath,
   CHAT_MEDIA_TTL_SECONDS,
@@ -106,15 +106,12 @@ export default async function ConversationPage({
           <ChevronLeft className="h-5 w-5" aria-hidden />
         </Link>
         <div className="relative shrink-0">
-          <div className="glass h-9 w-9 overflow-hidden rounded-full">
+          <div className="glass relative h-9 w-9 overflow-hidden rounded-full">
             {other?.avatar_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={optimizedAvatar(other.avatar_url) ?? other.avatar_url}
+              <AppImage
+                src={other.avatar_url}
                 alt={other.full_name ?? "Match"}
-                className="h-full w-full object-cover"
-                loading="lazy"
-                decoding="async"
+                sizes="36px"
               />
             ) : null}
           </div>

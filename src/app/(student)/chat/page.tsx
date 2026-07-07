@@ -4,7 +4,7 @@ import { GlassCard, GlassChip } from "@/components/ui";
 import { RequestRow, type IncomingRequest } from "@/components/chat/request-row";
 import { OpenChatButton } from "@/components/chat/open-chat-button";
 import { createClient } from "@/lib/supabase/server";
-import { optimizedAvatar } from "@/lib/image";
+import { AppImage } from "@/components/ui/app-image";
 
 type ProfileLite = {
   id: string;
@@ -179,15 +179,12 @@ export default async function ChatPage({
                   return (
                     <Link key={c.id} href={`/chat/${c.id}`} className="block">
                       <GlassCard className="flex items-center gap-3 p-4">
-                        <div className="glass h-12 w-12 shrink-0 overflow-hidden rounded-full">
+                        <div className="glass relative h-12 w-12 shrink-0 overflow-hidden rounded-full">
                           {p?.avatar_url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={optimizedAvatar(p.avatar_url) ?? p.avatar_url}
+                            <AppImage
+                              src={p.avatar_url}
                               alt={p.full_name ?? "Match"}
-                              className="h-full w-full object-cover"
-                              loading="lazy"
-                              decoding="async"
+                              sizes="48px"
                             />
                           ) : null}
                         </div>
@@ -229,15 +226,12 @@ export default async function ChatPage({
                         href={`/profile/${otherId}`}
                         className="flex min-w-0 flex-1 items-center gap-3"
                       >
-                        <div className="glass h-12 w-12 shrink-0 overflow-hidden rounded-full">
+                        <div className="glass relative h-12 w-12 shrink-0 overflow-hidden rounded-full">
                           {p?.avatar_url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={optimizedAvatar(p.avatar_url) ?? p.avatar_url}
+                            <AppImage
+                              src={p.avatar_url}
                               alt={p.full_name ?? "Match"}
-                              className="h-full w-full object-cover"
-                              loading="lazy"
-                              decoding="async"
+                              sizes="48px"
                             />
                           ) : null}
                         </div>

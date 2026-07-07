@@ -12,6 +12,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AppImage } from "@/components/ui/app-image";
 
 export type BellItem = {
   id: string;
@@ -118,16 +119,9 @@ export function NotificationBellMenu({
                       <span className="absolute inset-y-3 left-0 w-0.5 rounded-full gradient-brand" />
                     )}
                     <div className="relative shrink-0">
-                      <div className="glass h-9 w-9 overflow-hidden rounded-full">
+                      <div className="glass relative h-9 w-9 overflow-hidden rounded-full">
                         {n.avatar ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={n.avatar}
-                            alt=""
-                            className="h-full w-full object-cover"
-                            loading="lazy"
-                            decoding="async"
-                          />
+                          <AppImage src={n.avatar} alt="" sizes="36px" />
                         ) : (
                           <span className="flex h-full w-full items-center justify-center gradient-brand">
                             <Zap className="h-4 w-4 text-white" aria-hidden />

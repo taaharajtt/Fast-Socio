@@ -4,7 +4,7 @@ import { ChevronLeft, Zap, Heart, Check } from "lucide-react";
 import { OpenChatButton } from "@/components/chat/open-chat-button";
 import { ProfileTabs, type GridPost, type ProfileCommunity } from "@/components/profile/profile-tabs";
 import { createClient } from "@/lib/supabase/server";
-import { optimizedAvatar } from "@/lib/image";
+import { AppImage } from "@/components/ui/app-image";
 
 export default async function PublicProfilePage({
   params,
@@ -86,13 +86,12 @@ export default async function PublicProfilePage({
           <ChevronLeft className="h-5 w-5" aria-hidden />
         </Link>
         <div className="absolute -bottom-10 left-5">
-          <div className="h-20 w-20 overflow-hidden rounded-full border-[3px] border-bg">
+          <div className="relative h-20 w-20 overflow-hidden rounded-full border-[3px] border-bg">
             {profile.avatar_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={optimizedAvatar(profile.avatar_url) ?? profile.avatar_url}
+              <AppImage
+                src={profile.avatar_url}
                 alt={profile.full_name ?? "Avatar"}
-                className="h-full w-full object-cover"
+                sizes="80px"
               />
             ) : (
               <span className="glass flex h-full w-full items-center justify-center text-xl font-bold">

@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import { GlassButton, GlassCard } from "@/components/ui";
+import { AppImage } from "@/components/ui/app-image";
 import {
   acceptMessageRequest,
   declineMessageRequest,
@@ -21,15 +22,12 @@ export function RequestRow({ request }: { request: IncomingRequest }) {
   return (
     <GlassCard className="p-4">
       <div className="flex items-center gap-3">
-        <div className="glass h-12 w-12 shrink-0 overflow-hidden rounded-full">
+        <div className="glass relative h-12 w-12 shrink-0 overflow-hidden rounded-full">
           {request.senderAvatar ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <AppImage
               src={request.senderAvatar}
               alt={request.senderName}
-              className="h-full w-full object-cover"
-              loading="lazy"
-              decoding="async"
+              sizes="48px"
             />
           ) : null}
         </div>

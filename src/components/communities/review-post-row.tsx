@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Check, X, VenetianMask } from "lucide-react";
 import { GlassCard } from "@/components/ui";
+import { AppImage } from "@/components/ui/app-image";
 import { moderateCommunityPost } from "@/app/(student)/communities/actions";
 
 export type PendingPost = {
@@ -41,18 +42,11 @@ export function ReviewPostRow({ post }: { post: PendingPost }) {
   return (
     <GlassCard className="p-4">
       <div className="flex items-center gap-2">
-        <div className="glass flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full">
+        <div className="glass relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full">
           {post.is_anonymous ? (
             <VenetianMask className="h-4 w-4 text-fg-muted" aria-hidden />
           ) : post.author_avatar ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={post.author_avatar}
-              alt=""
-              className="h-full w-full object-cover"
-              loading="lazy"
-              decoding="async"
-            />
+            <AppImage src={post.author_avatar} alt="" sizes="32px" />
           ) : null}
         </div>
         <p className="text-sm font-semibold">
@@ -64,14 +58,13 @@ export function ReviewPostRow({ post }: { post: PendingPost }) {
         <p className="mt-3 whitespace-pre-wrap text-[15px]">{post.body}</p>
       )}
       {post.image_url && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={post.image_url}
-          alt="Pending post"
-          className="mt-3 max-h-72 w-full rounded-2xl object-cover"
-          loading="lazy"
-          decoding="async"
-        />
+        <div className="relative mt-3 aspect-square w-full overflow-hidden rounded-2xl">
+          <AppImage
+            src={post.image_url}
+            alt="Pending post"
+            sizes="(max-width: 448px) 100vw, 448px"
+          />
+        </div>
       )}
 
       <div className="mt-4 flex gap-2">

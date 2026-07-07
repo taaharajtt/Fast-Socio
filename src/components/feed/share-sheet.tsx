@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { GlassSheet } from "@/components/ui";
+import { AppImage } from "@/components/ui/app-image";
 import {
   listMatchedFriends,
   sharePostToFriend,
@@ -86,16 +87,9 @@ function ShareSheetContent({
               disabled={busyId !== null}
               className="glass flex w-full items-center gap-3 rounded-[var(--radius-sm)] p-3 text-left disabled:opacity-50"
             >
-              <div className="glass h-10 w-10 shrink-0 overflow-hidden rounded-full">
+              <div className="glass relative h-10 w-10 shrink-0 overflow-hidden rounded-full">
                 {f.avatar_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={f.avatar_url}
-                    alt=""
-                    className="h-full w-full object-cover"
-                    loading="lazy"
-                    decoding="async"
-                  />
+                  <AppImage src={f.avatar_url} alt="" sizes="40px" />
                 ) : null}
               </div>
               <span className="flex-1 truncate text-sm font-medium">

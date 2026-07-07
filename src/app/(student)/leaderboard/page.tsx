@@ -1,4 +1,5 @@
 import { GlassCard } from "@/components/ui";
+import { AppImage } from "@/components/ui/app-image";
 import { createClient } from "@/lib/supabase/server";
 import { LEADERBOARD_TITLES } from "@/lib/leaderboard/titles";
 
@@ -108,17 +109,14 @@ function StudentBoard({ rows }: { rows: Row[] }) {
             >
               <span className="text-2xl">{t?.emoji}</span>
               <div
-                className="glass h-14 w-14 shrink-0 overflow-hidden rounded-full"
+                className="glass relative h-14 w-14 shrink-0 overflow-hidden rounded-full"
                 style={{ boxShadow: t ? `0 0 0 2px ${t.tint}88` : undefined }}
               >
                 {r.avatar_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <AppImage
                     src={r.avatar_url}
                     alt={r.full_name ?? ""}
-                    className="h-full w-full object-cover"
-                    loading="lazy"
-                    decoding="async"
+                    sizes="56px"
                   />
                 ) : null}
               </div>
@@ -147,15 +145,12 @@ function StudentBoard({ rows }: { rows: Row[] }) {
               <span className="w-6 text-center text-sm font-semibold text-fg-muted">
                 {r.rank}
               </span>
-              <div className="glass h-10 w-10 shrink-0 overflow-hidden rounded-full">
+              <div className="glass relative h-10 w-10 shrink-0 overflow-hidden rounded-full">
                 {r.avatar_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <AppImage
                     src={r.avatar_url}
                     alt={r.full_name ?? ""}
-                    className="h-full w-full object-cover"
-                    loading="lazy"
-                    decoding="async"
+                    sizes="40px"
                   />
                 ) : null}
               </div>
