@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useState } from "react";
+import { memo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Heart,
@@ -33,6 +33,10 @@ function PostCardImpl({ post }: { post: FeedPost }) {
   const [reporting, setReporting] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Heart-burst overlay: bumping the key remounts the <Heart> and replays the
+  // animation, so rapid double-taps each get their own burst.
+  const [burstKey, setBurstKey] = useState(0);
+  const lastTap = useRef(0);
   const anon = post.is_anonymous && !post.author_name;
 
   async function onLike() {
@@ -46,6 +50,31 @@ function PostCardImpl({ post }: { post: FeedPost }) {
     if (!res.ok) {
       setLiked(wasLiked);
       setLikes((n) => n + (next ? -1 : 1));
+    }
+  }
+
+  /** Double-tap the post to like it (Instagram-style, UAT-003). Only ever likes
+   *  — never unlikes — and always plays the heart burst, even if already liked. */
+  async function likeOnly() {
+    setBurstKey((k) => k + 1);
+    if (liked) return; // already liked: animate only, don't toggle off
+    setLiked(true);
+    setLikes((n) => n + 1);
+    const res = await toggleLike(post.id, false);
+    if (!res.ok) {
+      setLiked(false);
+      setLikes((n) => n - 1);
+    }
+  }
+
+  /** Detect a double-tap/double-click on the post content region. */
+  function onContentTap() {
+    const now = Date.now();
+    if (now - lastTap.current < 300) {
+      lastTap.current = 0;
+      likeOnly();
+    } else {
+      lastTap.current = now;
     }
   }
 
@@ -105,18 +134,35 @@ function PostCardImpl({ post }: { post: FeedPost }) {
         </button>
       </div>
 
-      {post.body && (
-        <p className="mt-2.5 whitespace-pre-wrap text-[15px] leading-[22px] text-fg">
-          {post.body}
-        </p>
-      )}
-      {post.image_url && (
-        <div className="relative mt-2.5 aspect-square w-full overflow-hidden rounded-xl">
-          <AppImage
-            src={post.image_url}
-            alt="Post image"
-            sizes="(max-width: 448px) 100vw, 448px"
-          />
+      {(post.body || post.image_url) && (
+        <div
+          className="relative touch-manipulation select-none"
+          onClick={onContentTap}
+        >
+          {post.body && (
+            <p className="mt-2.5 whitespace-pre-wrap text-[15px] leading-[22px] text-fg">
+              {post.body}
+            </p>
+          )}
+          {post.image_url && (
+            <div className="relative mt-2.5 aspect-square w-full overflow-hidden rounded-xl">
+              <AppImage
+                src={post.image_url}
+                alt="Post image"
+                sizes="(max-width: 448px) 100vw, 448px"
+                draggable={false}
+              />
+            </div>
+          )}
+          {burstKey > 0 && (
+            <span
+              key={burstKey}
+              aria-hidden
+              className="pointer-events-none absolute inset-0 flex items-center justify-center"
+            >
+              <Heart className="animate-like-burst h-24 w-24 fill-white text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)]" />
+            </span>
+          )}
         </div>
       )}
 
