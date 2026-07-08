@@ -7,8 +7,10 @@ import { cn } from "@/lib/utils";
 
 /**
  * Bottom navigation dock — Figma "Glasmorphism PWA" treatment: a near-solid dark
- * bar (not a translucent pill) with a heavy blur and top shadow, full width with
- * a phone-width cap. Each tab shows an icon + label; the active tab uses the
+ * bar (not a translucent pill) with a soft top shadow, full width with a
+ * phone-width cap. The bar is ~92% opaque so it needs no backdrop blur (which,
+ * on a persistent surface, would re-run every scroll frame for no visible gain).
+ * Each tab shows an icon + label; the active tab uses the
  * magenta accent (#C850C0) with a soft glow and a tinted icon well.
  * Route set is unchanged — this is a visual re-skin only.
  */
@@ -33,7 +35,7 @@ export function FloatingDock({
       // bleeding through on top. Immersive /chat/<id> (also z-40) hides the dock.
       className="fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
     >
-      <div className="mx-auto flex max-w-md items-center justify-around rounded-[26px] border border-white/10 bg-[rgba(10,11,20,0.88)] px-1 py-2.5 shadow-[0_-2px_40px_rgba(0,0,0,0.5)] backdrop-blur-[32px]">
+      <div className="mx-auto flex max-w-md items-center justify-around rounded-[26px] border border-white/10 bg-[rgba(10,11,20,0.92)] px-1 py-2.5 shadow-[0_-2px_40px_rgba(0,0,0,0.5)]">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`);
           const badge = badges[href] ?? 0;

@@ -97,22 +97,40 @@ body {
 }
 
 /*
-  Glass primitive utility. Every glass element carries: blur, soft transparency,
-  a subtle border, and a soft shadow (UI Spec §2.6).
-  Perf budget: max ~6 simultaneously blurred surfaces on screen.
+  Glass primitives. Two tiers, split by performance intent:
+  - .glass        : translucency + border + shadow, NO blur. The default,
+                    used for repeated / in-scroll surfaces (feed, lists, chips,
+                    buttons). Cheap to composite and scroll.
+  - .glass-strong : adds a light backdrop blur. Focal, transient surfaces only
+                    (modals, menus) — never in a scroll list.
+  (UI Spec §2.6, tuned for the "light glassmorphism" prototype + mobile perf.)
 */
 @utility glass {
   background: var(--glass-surface);
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
+  /*
+    No backdrop-filter here (deliberate). .glass is the design system's
+    REPEATED / in-scroll surface — feed cards, chips, list rows, glass
+    buttons — often many on screen at once. backdrop-filter's cost is
+    largely fixed per element (backdrop snapshot + its own compositing
+    layer + disabled scroll fast-paths), so blurring every list item
+    tanked scroll perf on mobile. Translucency + border + shadow carry the
+    glass read without the per-frame GPU blur. Blur is reserved for
+    .glass-strong (few, focal, transient surfaces only).
+  */
   border: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
 }
 
 @utility glass-strong {
   background: var(--glass-surface-strong);
-  -webkit-backdrop-filter: blur(28px);
-  backdrop-filter: blur(28px);
+  /*
+    The one true "glassmorphism" moment — a light blur, kept ONLY for
+    focal, transient surfaces that are never in a scroll list: modals
+    (GlassSheet) and the notification menu. ≤1 on screen at a time, so the
+    cost is negligible while preserving the signature frosted look.
+  */
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
   border: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
 }

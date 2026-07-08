@@ -225,7 +225,7 @@ function TopCard({
           aria-label="Report"
           onPointerDownCapture={(e) => e.stopPropagation()}
           onClick={onReport}
-          className="glass absolute left-4 top-4 flex h-9 w-9 items-center justify-center rounded-full text-white/80 hover:text-white"
+          className="absolute left-4 top-4 flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-black/35 text-white/90 hover:bg-black/55 hover:text-white"
         >
           <Flag className="h-4 w-4" aria-hidden />
         </button>
@@ -234,7 +234,7 @@ function TopCard({
           aria-label="View full profile"
           onPointerDownCapture={(e) => e.stopPropagation()}
           onClick={onExpand}
-          className="glass absolute bottom-4 right-4 flex h-9 w-9 items-center justify-center rounded-full text-white/80 hover:text-white"
+          className="absolute bottom-4 right-4 flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-black/35 text-white/90 hover:bg-black/55 hover:text-white"
         >
           <Info className="h-4 w-4" aria-hidden />
         </button>
@@ -293,9 +293,13 @@ function ProfileCardBody({
         </div>
       )}
 
-      {/* Aura chip overlaid top-right (UI Spec §5.6) */}
+      {/* Aura chip overlaid top-right (UI Spec §5.6). Dark backing (not the
+          translucent .glass) so it stays legible over any photo without a
+          per-frame backdrop blur. */}
       <div className="absolute right-4 top-4">
-        <GlassChip tone="aura">★ {profile.aura_score}</GlassChip>
+        <GlassChip tone="aura" className="border-white/15 !bg-black/40">
+          ★ {profile.aura_score}
+        </GlassChip>
       </div>
 
       {/* Gradient scrim + identity (bottom third) */}
