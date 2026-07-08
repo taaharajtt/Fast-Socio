@@ -31,7 +31,7 @@ export default async function HomePage() {
   return (
     <main className="mx-auto w-full max-w-md pb-4">
       {/* Header (UISpec V3 Screen 2) — 56px, title + bell + avatar */}
-      <header className="flex h-14 items-center justify-between px-4">
+      <header className="flex h-20 items-center justify-between px-4">
         {/* Brand logo (UAT-001). PNG lives at public/brand/logo.png; the h1 text
             stays as the accessible name and renders if the asset is missing. */}
         <h1 className="text-xl font-black tracking-tight">
@@ -41,7 +41,7 @@ export default async function HomePage() {
             width={512}
             height={256}
             priority
-            className="h-7 w-auto"
+            className="h-[70px] w-auto"
           />
           <span className="sr-only">FAST SOCIO</span>
         </h1>
