@@ -67,11 +67,23 @@ function PostCardImpl({ post }: { post: FeedPost }) {
     }
   }
 
-  /** Detect a double-tap/double-click on the post content region. */
-  function onContentTap() {
+  /**
+   * Double-tap anywhere on the card (except interactive controls) to like it.
+   * Taps that land on a link or button — the avatar/name, the like/comment/share
+   * controls, the options menu — are left alone so they behave normally (e.g.
+   * the avatar still opens the profile). A detected double-tap has its default
+   * suppressed so it can never trigger navigation.
+   */
+  function onCardTap(e: React.MouseEvent) {
+    const el = e.target as HTMLElement;
+    if (el.closest("a, button, [role='button'], input, textarea, label")) {
+      lastTap.current = 0;
+      return;
+    }
     const now = Date.now();
     if (now - lastTap.current < 300) {
       lastTap.current = 0;
+      e.preventDefault();
       likeOnly();
     } else {
       lastTap.current = now;
@@ -79,7 +91,10 @@ function PostCardImpl({ post }: { post: FeedPost }) {
   }
 
   return (
-    <article className="border-b border-glass-border px-4 py-3.5">
+    <article
+      onClick={onCardTap}
+      className="relative touch-manipulation select-none border-b border-glass-border px-4 py-3.5"
+    >
       <div className="flex items-center gap-2.5">
         {(() => {
           const inner = (
@@ -134,36 +149,31 @@ function PostCardImpl({ post }: { post: FeedPost }) {
         </button>
       </div>
 
-      {(post.body || post.image_url) && (
-        <div
-          className="relative touch-manipulation select-none"
-          onClick={onContentTap}
-        >
-          {post.body && (
-            <p className="mt-2.5 whitespace-pre-wrap text-[15px] leading-[22px] text-fg">
-              {post.body}
-            </p>
-          )}
-          {post.image_url && (
-            <div className="relative mt-2.5 aspect-square w-full overflow-hidden rounded-xl">
-              <AppImage
-                src={post.image_url}
-                alt="Post image"
-                sizes="(max-width: 448px) 100vw, 448px"
-                draggable={false}
-              />
-            </div>
-          )}
-          {burstKey > 0 && (
-            <span
-              key={burstKey}
-              aria-hidden
-              className="pointer-events-none absolute inset-0 flex items-center justify-center"
-            >
-              <Heart className="animate-like-burst h-24 w-24 fill-white text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)]" />
-            </span>
-          )}
+      {post.body && (
+        <p className="mt-2.5 whitespace-pre-wrap text-[15px] leading-[22px] text-fg">
+          {post.body}
+        </p>
+      )}
+      {post.image_url && (
+        <div className="relative mt-2.5 aspect-square w-full overflow-hidden rounded-xl">
+          <AppImage
+            src={post.image_url}
+            alt="Post image"
+            sizes="(max-width: 448px) 100vw, 448px"
+            draggable={false}
+          />
         </div>
+      )}
+
+      {/* Double-tap heart burst, centered over the card (UAT-003). */}
+      {burstKey > 0 && (
+        <span
+          key={burstKey}
+          aria-hidden
+          className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center"
+        >
+          <Heart className="animate-like-burst h-24 w-24 fill-white text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)]" />
+        </span>
       )}
 
       <div className="mt-3 flex items-center gap-5 text-sm text-fg-muted">
