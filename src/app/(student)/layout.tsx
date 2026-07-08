@@ -54,7 +54,7 @@ export default async function StudentLayout({
             "radial-gradient(40rem 30rem at 15% -10%, rgba(124,92,255,0.22), transparent), radial-gradient(35rem 25rem at 95% 5%, rgba(200,80,192,0.18), transparent)",
         }}
       />
-      <div className="flex-1 pb-28">{children}</div>
+      <div className="flex-1 pb-20">{children}</div>
       <FloatingDock badges={{ "/chat": chatBadge }} />
     </div>
   );

@@ -31,17 +31,16 @@ export function SegmentedPills({
 }: SegmentedPillsProps) {
   const activeFill =
     accent === "aura"
-      ? "gradient-brand text-white shadow-[0_4px_16px_rgba(200,80,192,0.4)]"
-      : "bg-cyan text-[#001318] shadow-[0_4px_16px_rgba(0,212,255,0.35)]";
+      ? "gradient-brand text-white shadow-[0_4px_16px_rgba(124,58,237,0.4)]"
+      : "bg-verified text-white shadow-[0_4px_16px_rgba(59,130,246,0.35)]";
 
   return (
     <div
       role="tablist"
       className={cn(
         "flex gap-2",
-        scrollable
-          ? "overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          : "glass rounded-[var(--radius-pill)] p-1",
+        scrollable &&
+          "overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
         className
       )}
     >
@@ -54,13 +53,11 @@ export function SegmentedPills({
             aria-selected={active}
             onClick={() => onChange(opt.value)}
             className={cn(
-              "h-9 shrink-0 rounded-[var(--radius-pill)] px-4 text-sm font-medium " +
+              "h-9 shrink-0 rounded-[var(--radius-pill)] px-4 text-sm font-semibold " +
                 "transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]",
               active
                 ? activeFill
-                : scrollable
-                  ? "glass text-fg-muted hover:text-fg"
-                  : "text-fg-muted hover:text-fg"
+                : "glass font-medium text-fg-muted hover:text-fg"
             )}
           >
             {opt.label}

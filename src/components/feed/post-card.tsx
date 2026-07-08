@@ -2,8 +2,16 @@
 
 import { memo, useState } from "react";
 import Link from "next/link";
-import { Heart, MessageCircle, Flag, VenetianMask, Share2, Bookmark } from "lucide-react";
-import { GlassCard, GlassSheet } from "@/components/ui";
+import {
+  Heart,
+  MessageCircle,
+  Flag,
+  VenetianMask,
+  Share2,
+  Bookmark,
+  MoreHorizontal,
+} from "lucide-react";
+import { GlassSheet } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { toggleLike, reportPost } from "@/app/(student)/home/actions";
 import { ShareSheet } from "@/components/feed/share-sheet";
@@ -42,60 +50,68 @@ function PostCardImpl({ post }: { post: FeedPost }) {
   }
 
   return (
-    <GlassCard className="p-4">
-      <div className="flex items-center gap-3">
+    <article className="border-b border-glass-border px-4 py-3.5">
+      <div className="flex items-center gap-2.5">
         {(() => {
           const inner = (
             <>
-              <div className="glass relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full">
+              <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-card">
                 {anon ? (
                   <VenetianMask className="h-5 w-5 text-fg-muted" aria-hidden />
                 ) : post.author_avatar ? (
                   <AppImage
                     src={post.author_avatar}
                     alt={post.author_name ?? ""}
-                    sizes="40px"
+                    sizes="44px"
                   />
                 ) : null}
               </div>
               <span className="min-w-0">
-                <span className="block truncate text-sm font-semibold">
+                <span className="block truncate text-base font-semibold text-fg">
                   {anon ? "Anonymous" : (post.author_name ?? "Student")}
                 </span>
-                <time
-                  dateTime={post.created_at}
-                  title={absoluteTime(post.created_at)}
-                  className="block text-[11px] text-fg-muted"
-                >
-                  {timeAgo(post.created_at)} ago
-                </time>
+                <span className="block text-[13px] text-fg-muted">
+                  {!anon && post.author_department
+                    ? `${post.author_department} · `
+                    : ""}
+                  <time
+                    dateTime={post.created_at}
+                    title={absoluteTime(post.created_at)}
+                  >
+                    {timeAgo(post.created_at)} ago
+                  </time>
+                </span>
               </span>
             </>
           );
           return !anon && post.author_id ? (
             <Link
               href={`/profile/${post.author_id}`}
-              className="flex min-w-0 flex-1 items-center gap-3"
+              className="flex min-w-0 flex-1 items-center gap-2.5"
             >
               {inner}
             </Link>
           ) : (
-            <div className="flex min-w-0 flex-1 items-center gap-3">{inner}</div>
+            <div className="flex min-w-0 flex-1 items-center gap-2.5">{inner}</div>
           );
         })()}
         <button
           type="button"
-          aria-label="Report post"
+          aria-label="Post options"
           onClick={() => setReporting(true)}
-          className="text-fg-muted hover:text-fg"
+          className="shrink-0 text-fg-muted hover:text-fg"
         >
-          <Flag className="h-4 w-4" aria-hidden />
+          <MoreHorizontal className="h-6 w-6" aria-hidden />
         </button>
       </div>
 
-      {post.body && <p className="mt-3 whitespace-pre-wrap text-[15px]">{post.body}</p>}
+      {post.body && (
+        <p className="mt-2.5 whitespace-pre-wrap text-[15px] leading-[22px] text-fg">
+          {post.body}
+        </p>
+      )}
       {post.image_url && (
-        <div className="relative mt-3 aspect-square w-full overflow-hidden rounded-2xl">
+        <div className="relative mt-2.5 aspect-square w-full overflow-hidden rounded-xl">
           <AppImage
             src={post.image_url}
             alt="Post image"
@@ -104,7 +120,7 @@ function PostCardImpl({ post }: { post: FeedPost }) {
         </div>
       )}
 
-      <div className="mt-4 flex items-center gap-5 border-t border-glass-border pt-3 text-sm text-fg-muted">
+      <div className="mt-3 flex items-center gap-5 text-sm text-fg-muted">
         <button
           type="button"
           onClick={onLike}
@@ -177,7 +193,7 @@ function PostCardImpl({ post }: { post: FeedPost }) {
           ))}
         </div>
       </GlassSheet>
-    </GlassCard>
+    </article>
   );
 }
 

@@ -18,6 +18,7 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Set when Supabase reports the account exists but the email isn't verified.
@@ -71,28 +72,30 @@ export default function LoginPage() {
 
   return (
     <main className="w-full max-w-sm">
-      <div className="mb-8 flex flex-col items-center gap-3">
-        <div className="flex h-20 w-20 items-center justify-center rounded-[28px] text-4xl gradient-brand shadow-[0_20px_50px_rgba(200,80,192,0.5)]">
+      {/* Header — app icon + name + tagline (UISpec V3 Screen 1) */}
+      <div className="flex flex-col items-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-[18px] gradient-brand text-[28px] shadow-[0_12px_32px_rgba(124,58,237,0.5)]">
           ⚡
         </div>
-        <div className="text-center">
-          <h1 className="text-2xl font-extrabold tracking-tight text-white">
-            FAST SOCIO
-          </h1>
-          <p className="mt-0.5 text-sm text-white/70">Your campus, alive.</p>
-        </div>
+        <h1 className="mt-3 text-lg font-bold tracking-tight text-white">
+          FAST SOCIO
+        </h1>
+        <p className="mt-1 text-[13px] text-fg-muted">Your campus, alive.</p>
       </div>
 
-      <div className="mb-8 text-center">
-        <h2 className="text-[30px] font-extrabold leading-[1.15] tracking-tight text-white">
-          Welcome back
+      {/* Hero */}
+      <div className="mt-8 text-center">
+        <h2 className="text-[36px] font-black leading-[1.15] tracking-tight text-white">
+          Find Your
+          <br />
+          Campus Tribe
         </h2>
-        <p className="mt-2 text-sm leading-relaxed text-white/75">
-          Sign in with your FAST University email and password.
+        <p className="mx-auto mt-2 max-w-[19rem] text-[15px] leading-relaxed text-fg-muted">
+          Sign in with your FAST University email to get started.
         </p>
       </div>
 
-      <form onSubmit={signIn} className="flex flex-col gap-3">
+      <form onSubmit={signIn} className="mt-8 flex flex-col gap-3">
         <GlassInput
           id="email"
           type="email"
@@ -111,33 +114,45 @@ export default function LoginPage() {
           </p>
         )}
 
-        <GlassInput
-          id="password"
-          type="password"
-          autoComplete="current-password"
-          aria-label="Password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          disabled={loading}
-        />
+        {/* Password with inline Show/Hide toggle */}
+        <div className="relative">
+          <GlassInput
+            id="password"
+            type={showPw ? "text" : "password"}
+            autoComplete="current-password"
+            aria-label="Password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={loading}
+            className="pr-16"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPw((s) => !s)}
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-[#a78bfa]"
+            aria-label={showPw ? "Hide password" : "Show password"}
+          >
+            {showPw ? "Hide" : "Show"}
+          </button>
+        </div>
 
         <div className="flex justify-end px-1">
           <Link
             href="/forgot-password"
-            className="text-[13px] font-medium text-white/70 hover:text-white"
+            className="text-[13px] text-fg-muted hover:text-white"
           >
-            Forgot password?
+            Forgot Password?
           </Link>
         </div>
 
         <GlassButton
           type="submit"
           size="lg"
-          className="mt-1 w-full rounded-[var(--radius-pill)]"
+          className="mt-1 h-[52px] w-full rounded-[var(--radius-pill)] text-base font-bold"
           disabled={loading || !isValidFastEmail(email) || password.length === 0}
         >
-          {loading ? "Signing in…" : "Log in"}
+          {loading ? "Signing in…" : "Log In"}
         </GlassButton>
 
         {error && (
@@ -148,28 +163,34 @@ export default function LoginPage() {
 
         {unconfirmed &&
           (resent ? (
-            <p className="px-1 text-[13px] text-aura">
+            <p className="px-1 text-[13px] text-accent">
               Verification email sent — check your inbox.
             </p>
           ) : (
             <button
               type="button"
               onClick={resendVerification}
-              className="px-1 text-left text-[13px] font-medium text-aura hover:underline"
+              className="px-1 text-left text-[13px] font-medium text-accent hover:underline"
             >
               Resend verification email
             </button>
           ))}
       </form>
 
-      <p className="mt-8 text-center text-sm text-white/70">
-        New here?{" "}
-        <Link href="/signup" className="font-semibold text-white hover:underline">
-          Sign up
+      <p className="mt-3 text-center text-[11px] text-fg-disabled">
+        • Only{" "}
+        <span className="font-medium text-fg-muted">@isb.nu.edu.pk</span>{" "}
+        addresses are accepted
+      </p>
+
+      <p className="mt-5 text-center text-[13px] text-fg-muted">
+        New to FAST SOCIO?{" "}
+        <Link href="/signup" className="font-bold text-[#a78bfa] hover:underline">
+          Create account
         </Link>
       </p>
 
-      <p className="mt-6 px-4 text-center text-[11px] text-white/55">
+      <p className="mt-6 text-center text-[11px] text-fg-disabled">
         Terms of Service · Privacy Policy
       </p>
     </main>

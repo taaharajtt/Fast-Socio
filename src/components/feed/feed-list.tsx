@@ -51,7 +51,7 @@ export function FeedList({ initial }: { initial: FeedPost[] }) {
   }
 
   return (
-    <div className="space-y-4">
+    <div>
       {posts.map((p) => (
         // content-visibility:auto skips layout/paint for off-screen cards
         // (CSS windowing → 60fps at scale); contain-intrinsic-size reserves an

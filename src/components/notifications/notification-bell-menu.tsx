@@ -82,7 +82,7 @@ export function NotificationBellMenu({
       >
         <Bell className="h-5 w-5" aria-hidden />
         {!open && unread > 0 && (
-          <span className="absolute right-1 top-1 h-2 w-2 rounded-full gradient-brand" />
+          <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-warning ring-2 ring-bg" />
         )}
       </button>
 

@@ -16,4 +16,7 @@ export type FeedPost = {
   author_name: string | null;
   author_avatar: string | null;
   liked_by_me: boolean;
+  /** Author's department (e.g. "CS") — present once the feed_posts view exposes
+   *  it (migration feed_posts_add_author_department). Optional/back-compatible. */
+  author_department?: string | null;
 };

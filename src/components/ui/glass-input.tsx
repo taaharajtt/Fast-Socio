@@ -11,10 +11,10 @@ export function GlassInput({ className, invalid, ...props }: GlassInputProps) {
     <input
       aria-invalid={invalid}
       className={cn(
-        "glass h-12 w-full rounded-[var(--radius-md)] px-4 text-[15px] text-fg " +
-          "placeholder:text-fg-muted outline-none " +
-          "transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] " +
-          "focus:border-aura/60 focus:ring-2 focus:ring-aura/40",
+        "glass h-[52px] w-full rounded-xl px-4 text-[15px] text-fg " +
+          "placeholder:text-fg-disabled outline-none " +
+          "transition-colors duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] " +
+          "focus:border-accent/50 focus:ring-2 focus:ring-accent/30",
         invalid && "border-error/70 ring-2 ring-error/40 focus:border-error focus:ring-error/50",
         className
       )}

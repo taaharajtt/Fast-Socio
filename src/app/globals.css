@@ -10,60 +10,105 @@
 .dark {
   color-scheme: dark;
 
-  /* Brand */
-  --aura: #7c5cff; /* Aura Purple (primary) */
-  --cyan: #00d4ff; /* Electric Cyan (tertiary) */
-  --accent: #c850c0; /* Magenta accent — active states, glows (Figma prototype) */
+  /* Brand — Purple Primary (UISpec V3 §1.1) */
+  --accent: #7c3aed; /* Purple Primary — active tabs, CTAs, badges */
+  --accent-light: #8b5cf6; /* Purple Light — hover / secondary accents */
+  --accent-grad-end: #a855f7; /* gradient end (buttons, own messages) */
+  --aura: #7c3aed; /* legacy brand token → primary purple */
+  --cyan: #3b82f6; /* legacy tertiary → repointed to verified blue */
 
-  /* Surfaces */
-  --bg: #0a0b10; /* Background primary */
-  --bg-elevated: #11131a; /* Background secondary / elevated */
-  --fg: #f5f6fa; /* Primary text */
-  --fg-muted: rgba(245, 246, 250, 0.62); /* Secondary text */
+  /* Gold / Aura score */
+  --gold: #f59e0b; /* Aura scores, leaderboard numbers */
+  --gold-text: #fbbf24; /* large Aura numbers */
+  --gold-border: #d97706; /* top-3 card borders */
 
-  /* Glass */
-  --glass-surface: rgba(255, 255, 255, 0.08);
-  --glass-surface-strong: rgba(255, 255, 255, 0.12);
-  --glass-border: rgba(255, 255, 255, 0.12);
-  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.28); /* softer, airier (prototype) */
+  /* Verified / info */
+  --verified: #3b82f6;
+
+  /* Surfaces (V3 — solid, no glass) */
+  --bg: #0d0d12; /* App background (near-black, blue tint) */
+  --bg-elevated: #1e1e2c; /* Modals, dropdowns, elevated */
+  --card: #1a1a24; /* Post cards, list items */
+  --input-bg: #141420; /* Text inputs, search bars */
+  --fg: #ffffff; /* Primary text */
+  --fg-muted: #9ca3af; /* Secondary text (timestamps, subtitles) */
+  --fg-disabled: #4b5563; /* Disabled / placeholder */
+
+  /* "Glass" tokens repurposed as solid card surfaces (V3 drops blur) */
+  --glass-surface: #1a1a24;
+  --glass-surface-strong: #1e1e2c;
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --glass-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
 
   /* Status */
-  --success: #00ff88;
-  --warning: #ffc857;
-  --error: #ff5e78;
+  --success: #22c55e; /* online / positive change */
+  --warning: #f97316; /* trending orange */
+  --error: #ef4444; /* negative change / destructive */
 
-  /* Auth-only gradient (prototype auth bg) */
-  --auth-gradient: linear-gradient(160deg, #1a0533 0%, #0d1245 55%, #250640 100%);
+  /* Auth radial glow (V3 Screen 1 — purple halo from top-center) */
+  --auth-gradient: radial-gradient(
+    55rem 38rem at 50% -8%,
+    #2d1b69 0%,
+    #17123a 42%,
+    #0d0d12 72%
+  );
 }
 
 .light {
   color-scheme: light;
 
-  --accent: #c850c0;
+  --accent: #7c3aed;
+  --accent-light: #8b5cf6;
+  --accent-grad-end: #a855f7;
+  --aura: #7c3aed;
+  --cyan: #3b82f6;
+  --gold: #d97706;
+  --gold-text: #b45309;
+  --gold-border: #d97706;
+  --verified: #3b82f6;
 
   --bg: #f4f5fb;
   --bg-elevated: #ffffff;
+  --card: #ffffff;
+  --input-bg: #f1f2f9;
   --fg: #0a0b10;
-  --fg-muted: rgba(10, 11, 16, 0.6);
+  --fg-muted: #6b7280;
+  --fg-disabled: #9ca3af;
 
-  /* Glass parity on a light base (UI Spec §2.2: full glass parity required) */
-  --glass-surface: rgba(255, 255, 255, 0.55);
-  --glass-surface-strong: rgba(255, 255, 255, 0.72);
+  --glass-surface: #ffffff;
+  --glass-surface-strong: #ffffff;
   --glass-border: rgba(10, 11, 16, 0.08);
-  --glass-shadow: 0 8px 32px rgba(31, 38, 80, 0.12);
+  --glass-shadow: 0 2px 12px rgba(31, 38, 80, 0.1);
 
-  --auth-gradient: linear-gradient(160deg, #dfe4ff 0%, #efe4ff 45%, #d8f4ff 100%);
+  --success: #16a34a;
+  --warning: #ea580c;
+  --error: #dc2626;
+
+  --auth-gradient: radial-gradient(
+    55rem 38rem at 50% -8%,
+    #e6ddff 0%,
+    #f1ecff 45%,
+    #f4f5fb 75%
+  );
 }
 
 @theme inline {
-  /* Colors → Tailwind utilities (bg-aura, text-cyan, border-glass, …) */
+  /* Colors → Tailwind utilities (bg-card, text-gold, border-glass, …) */
   --color-aura: var(--aura);
   --color-cyan: var(--cyan);
   --color-accent: var(--accent);
+  --color-accent-light: var(--accent-light);
+  --color-gold: var(--gold);
+  --color-gold-text: var(--gold-text);
+  --color-gold-border: var(--gold-border);
+  --color-verified: var(--verified);
   --color-bg: var(--bg);
   --color-bg-elevated: var(--bg-elevated);
+  --color-card: var(--card);
+  --color-input: var(--input-bg);
   --color-fg: var(--fg);
   --color-fg-muted: var(--fg-muted);
+  --color-fg-disabled: var(--fg-disabled);
   --color-glass: var(--glass-surface);
   --color-glass-strong: var(--glass-surface-strong);
   --color-glass-border: var(--glass-border);
@@ -71,11 +116,13 @@
   --color-warning: var(--warning);
   --color-error: var(--error);
 
-  /* Radius scale (UI Spec §2.5) */
-  --radius-sm: 16px;
-  --radius-md: 24px;
-  --radius-lg: 32px;
-  --radius-card: 36px;
+  /* Radius scale (UISpec V3 §1.3) */
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px; /* cards, list items */
+  --radius-lg: 20px; /* large cards, modals */
+  --radius-xl: 28px; /* bottom-sheet handles, discovery cards */
+  --radius-card: 14px;
   --radius-pill: 9999px;
 
   --font-sans: var(--font-inter);
@@ -97,50 +144,33 @@ body {
 }
 
 /*
-  Glass primitives. Two tiers, split by performance intent:
-  - .glass        : translucency + border + shadow, NO blur. The default,
-                    used for repeated / in-scroll surfaces (feed, lists, chips,
-                    buttons). Cheap to composite and scroll.
-  - .glass-strong : adds a light backdrop blur. Focal, transient surfaces only
-                    (modals, menus) — never in a scroll list.
-  (UI Spec §2.6, tuned for the "light glassmorphism" prototype + mobile perf.)
+  Surface primitives (UISpec V3 — solid, no blur/glassmorphism).
+  - .glass        : the standard card / list-item surface (#1A1A24).
+  - .glass-strong : elevated surface for modals, dropdowns, own-message (#1E1E2C).
+  Names kept for compatibility with existing GlassCard/GlassSheet/etc. call sites.
 */
 @utility glass {
   background: var(--glass-surface);
-  /*
-    No backdrop-filter here (deliberate). .glass is the design system's
-    REPEATED / in-scroll surface — feed cards, chips, list rows, glass
-    buttons — often many on screen at once. backdrop-filter's cost is
-    largely fixed per element (backdrop snapshot + its own compositing
-    layer + disabled scroll fast-paths), so blurring every list item
-    tanked scroll perf on mobile. Translucency + border + shadow carry the
-    glass read without the per-frame GPU blur. Blur is reserved for
-    .glass-strong (few, focal, transient surfaces only).
-  */
   border: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
 }
 
 @utility glass-strong {
   background: var(--glass-surface-strong);
-  /*
-    The one true "glassmorphism" moment — a light blur, kept ONLY for
-    focal, transient surfaces that are never in a scroll list: modals
-    (GlassSheet) and the notification menu. ≤1 on screen at a time, so the
-    cost is negligible while preserving the signature frosted look.
-  */
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
   border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
 }
 
 /*
-  Signature brand gradient (Figma prototype): magenta → purple. Used for primary
-  CTAs, the logo mark, active pills, and avatar rings.
+  Signature brand gradient (UISpec V3 §2.5): purple → light purple. Used for
+  primary CTAs, the logo mark, active pills, avatar rings, and own chat bubbles.
 */
 @utility gradient-brand {
-  background-image: linear-gradient(135deg, var(--accent) 0%, var(--aura) 100%);
+  background-image: linear-gradient(
+    90deg,
+    var(--accent) 0%,
+    var(--accent-grad-end) 100%
+  );
 }
 
 @utility gradient-brand-text {
@@ -158,14 +188,6 @@ body {
 /* Full-bleed auth background (auth screens only — UI Spec §2.2). */
 @utility auth-gradient {
   background-image: var(--auth-gradient);
-}
-
-/* Graceful fallback where backdrop-filter is unsupported. */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .glass,
-  .glass-strong {
-    background: var(--bg-elevated);
-  }
 }
 
 /* Respect the OS "reduce motion" preference for CSS-driven animations and

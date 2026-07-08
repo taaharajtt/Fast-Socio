@@ -1,10 +1,10 @@
 import { cn } from "@/lib/utils";
 
 const radiusMap = {
-  sm: "rounded-[16px]",
-  md: "rounded-[24px]",
-  lg: "rounded-[32px]",
-  card: "rounded-[36px]",
+  sm: "rounded-[10px]",
+  md: "rounded-[14px]",
+  lg: "rounded-[20px]",
+  card: "rounded-[14px]",
 } as const;
 
 type GlassCardProps = React.ComponentProps<"div"> & {
@@ -20,7 +20,7 @@ type GlassCardProps = React.ComponentProps<"div"> & {
  */
 export function GlassCard({
   className,
-  radius = "lg",
+  radius = "md",
   strong = false,
   ...props
 }: GlassCardProps) {
