@@ -48,13 +48,14 @@ const TYPE_ICON: Record<string, LucideIcon> = {
 
 const BUCKET_ORDER = ["Today", "This Week", "Earlier"] as const;
 
-/** Filter chip order — only chips with matching items are shown. */
+/**
+ * Filter chip order — only chips with matching items are shown. Messages and
+ * requests are intentionally absent: they belong to Chat, not Activity.
+ */
 const CATEGORY_ORDER: ActivityCategory[] = [
   "reacts",
   "replies",
   "matches",
-  "requests",
-  "messages",
   "announcements",
 ];
 

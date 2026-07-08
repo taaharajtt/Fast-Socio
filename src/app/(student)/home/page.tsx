@@ -38,8 +38,8 @@ export default async function HomePage() {
           <Image
             src="/brand/logo.png"
             alt="FAST SOCIO"
-            width={140}
-            height={28}
+            width={512}
+            height={256}
             priority
             className="h-7 w-auto"
           />

@@ -112,10 +112,14 @@ export default async function ActivityPage() {
   } = await supabase.auth.getUser();
   const me = user!.id;
 
+  // Messages and message requests live in Chat, not Activity — they only fire
+  // as mobile push. Everything else (reacts, replies, matches, announcements)
+  // shows here.
   const { data: rows } = await supabase
     .from("notifications")
     .select("id, actor_id, type, data, read_at, created_at")
     .eq("user_id", me)
+    .not("type", "in", "(message,message_request)")
     .order("created_at", { ascending: false })
     .limit(80);
   const notifs = (rows as Notif[]) ?? [];
@@ -171,8 +175,8 @@ export default async function ActivityPage() {
       {items.length === 0 ? (
         <GlassCard className="p-6 text-center">
           <p className="text-sm text-fg-muted">
-            No activity yet. Reacts, replies, matches, and messages will show up
-            here.
+            No activity yet. Reacts, replies, matches, and announcements will
+            show up here.
           </p>
         </GlassCard>
       ) : (

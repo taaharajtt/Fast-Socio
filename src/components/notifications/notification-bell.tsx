@@ -27,16 +27,21 @@ export async function NotificationBell() {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // The bell is the Activity entry point, so it mirrors the panel: messages and
+  // message requests are excluded here (they live in Chat, with their own dock
+  // badge) and only surface as mobile push.
   const [{ count }, { data: rows }] = await Promise.all([
     supabase
       .from("notifications")
       .select("id", { count: "exact", head: true })
       .eq("user_id", user!.id)
-      .is("read_at", null),
+      .is("read_at", null)
+      .not("type", "in", "(message,message_request)"),
     supabase
       .from("notifications")
       .select("id, actor_id, type, data, read_at, created_at")
       .eq("user_id", user!.id)
+      .not("type", "in", "(message,message_request)")
       .order("created_at", { ascending: false })
       .limit(6),
   ]);
