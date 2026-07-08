@@ -27,7 +27,11 @@ export function FloatingDock({
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-50 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+      // z-40: persistent bottom nav chrome. Sits above page content but BELOW the
+      // modal layer (z-50: GlassSheet scrim/panel, MatchOverlay, menus) so sheets
+      // like the discover "opener message" composer cover the dock instead of it
+      // bleeding through on top. Immersive /chat/<id> (also z-40) hides the dock.
+      className="fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
     >
       <div className="mx-auto flex max-w-md items-center justify-around rounded-[26px] border border-white/10 bg-[rgba(10,11,20,0.88)] px-1 py-2.5 shadow-[0_-2px_40px_rgba(0,0,0,0.5)] backdrop-blur-[32px]">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
