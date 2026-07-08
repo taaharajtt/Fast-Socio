@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { PostComposer } from "@/components/feed/post-composer";
 import { FeedList } from "@/components/feed/feed-list";
@@ -31,7 +32,19 @@ export default async function HomePage() {
     <main className="mx-auto w-full max-w-md pb-4">
       {/* Header (UISpec V3 Screen 2) — 56px, title + bell + avatar */}
       <header className="flex h-14 items-center justify-between px-4">
-        <h1 className="text-xl font-black tracking-tight">FAST SOCIO</h1>
+        {/* Brand logo (UAT-001). PNG lives at public/brand/logo.png; the h1 text
+            stays as the accessible name and renders if the asset is missing. */}
+        <h1 className="text-xl font-black tracking-tight">
+          <Image
+            src="/brand/logo.png"
+            alt="FAST SOCIO"
+            width={140}
+            height={28}
+            priority
+            className="h-7 w-auto"
+          />
+          <span className="sr-only">FAST SOCIO</span>
+        </h1>
         <div className="flex items-center gap-3">
           <NotificationBell />
           <Link
