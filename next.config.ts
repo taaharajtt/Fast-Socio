@@ -64,6 +64,11 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
+  async redirects() {
+    // The Notifications panel was rebranded to Activity (UAT-002). Keep old
+    // bookmarks and previously-dispatched push deep links working.
+    return [{ source: "/notifications", destination: "/activity", permanent: true }];
+  },
 };
 
 export default withPWA(nextConfig);

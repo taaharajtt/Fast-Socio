@@ -12,9 +12,9 @@ export const SYSTEM_NOTIFICATION_TYPES = new Set([
 export function notificationActionPhrase(type: string): string {
   switch (type) {
     case "post_like":
-      return "liked your post";
+      return "reacted to your post";
     case "comment":
-      return "commented on your post";
+      return "replied to your post";
     case "message":
       return "sent you a message";
     case "message_request":
@@ -25,6 +25,52 @@ export function notificationActionPhrase(type: string): string {
       return "rejected your community post";
     default:
       return "interacted with you";
+  }
+}
+
+/**
+ * Activity categories used by the Activity panel's filter chips. Each notification
+ * type maps to exactly one category; "announcements" bundles all system approvals.
+ */
+export type ActivityCategory =
+  | "reacts"
+  | "replies"
+  | "matches"
+  | "requests"
+  | "messages"
+  | "announcements"
+  | "other";
+
+export const ACTIVITY_CATEGORY_LABEL: Record<ActivityCategory, string> = {
+  reacts: "Reacts",
+  replies: "Replies",
+  matches: "Matches",
+  requests: "Requests",
+  messages: "Messages",
+  announcements: "Announcements",
+  other: "Other",
+};
+
+/** Which Activity filter a notification type belongs to. */
+export function notificationCategory(type: string): ActivityCategory {
+  switch (type) {
+    case "post_like":
+      return "reacts";
+    case "comment":
+      return "replies";
+    case "match":
+      return "matches";
+    case "message_request":
+      return "requests";
+    case "message":
+      return "messages";
+    case "community_approved":
+    case "event_approved":
+    case "community_post_approved":
+    case "community_post_rejected":
+      return "announcements";
+    default:
+      return "other";
   }
 }
 
@@ -47,12 +93,12 @@ export function notificationView(
       };
     case "post_like":
       return {
-        text: `${who} liked your post`,
+        text: `${who} reacted to your ${data.community_id ? "community post" : "post"}`,
         href: data.post_id ? `/post/${data.post_id}` : "/home",
       };
     case "comment":
       return {
-        text: `${who} commented on your post`,
+        text: `${who} replied to your ${data.community_id ? "community post" : "post"}`,
         href: data.post_id ? `/post/${data.post_id}` : "/home",
       };
     case "community_approved":

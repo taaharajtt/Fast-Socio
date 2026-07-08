@@ -1,40 +1,22 @@
 import Link from "next/link";
-import {
-  ChevronLeft,
-  Heart,
-  MessageSquare,
-  Star,
-  Zap,
-  Bell,
-  type LucideIcon,
-} from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { GlassCard } from "@/components/ui";
-import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/server";
-import { AppImage } from "@/components/ui/app-image";
 import {
   notificationView,
   notificationActionPhrase,
+  notificationCategory,
   SYSTEM_NOTIFICATION_TYPES,
 } from "@/lib/notifications/view";
-
-/** Small badge icon overlaid on the actor avatar, keyed by notification type. */
-const TYPE_ICON: Record<string, LucideIcon> = {
-  post_like: Heart,
-  comment: MessageSquare,
-  match: Star,
-  message: MessageSquare,
-  message_request: MessageSquare,
-  community_post_approved: Zap,
-  community_post_rejected: Zap,
-  community_approved: Zap,
-  event_approved: Star,
-};
+import {
+  ActivityList,
+  type ActivityItem,
+} from "@/components/notifications/activity-list";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Bucket an item by recency into Today / This Week / Earlier. */
-function bucketOf(latestAt: string): "Today" | "This Week" | "Earlier" {
+function bucketOf(latestAt: string): ActivityItem["bucket"] {
   const age = Date.now() - new Date(latestAt).getTime();
   if (age < DAY_MS) return "Today";
   if (age < 7 * DAY_MS) return "This Week";
@@ -123,7 +105,7 @@ function summarize(item: FeedItem, actorName: string | null): string {
   return `${who} ${first} and ${actions.length - 1} other activities`;
 }
 
-export default async function NotificationsPage() {
+export default async function ActivityPage() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -154,17 +136,24 @@ export default async function NotificationsPage() {
 
   const feed = buildFeed(notifs);
 
-  // Mark everything read now that they've opened the feed.
+  // Mark everything read now that they've opened the panel.
   if (notifs.some((n) => !n.read_at)) await supabase.rpc("mark_notifications_read");
 
-  const sections: { label: string; items: typeof feed }[] = (
-    ["Today", "This Week", "Earlier"] as const
-  )
-    .map((label) => ({
-      label,
-      items: feed.filter((i) => bucketOf(i.latestAt) === label),
-    }))
-    .filter((s) => s.items.length > 0);
+  // Flatten into serializable rows for the client filter/list.
+  const items: ActivityItem[] = feed.map((item) => {
+    const actor = item.actorId ? actors.get(item.actorId) : undefined;
+    const latest = item.actions[0];
+    return {
+      key: item.key,
+      category: notificationCategory(latest.type),
+      type: latest.type,
+      avatar: actor?.avatar ?? null,
+      text: summarize(item, actor?.name ?? null),
+      href: notificationView(latest.type, actor?.name ?? null, latest.data).href,
+      unread: item.anyUnread,
+      bucket: bucketOf(item.latestAt),
+    };
+  });
 
   return (
     <main className="mx-auto w-full max-w-md px-5 py-6">
@@ -176,67 +165,18 @@ export default async function NotificationsPage() {
         >
           <ChevronLeft className="h-5 w-5" aria-hidden />
         </Link>
-        <h1 className="text-xl font-extrabold tracking-tight">Notifications</h1>
+        <h1 className="text-xl font-extrabold tracking-tight">Activity</h1>
       </div>
 
-      {feed.length === 0 ? (
+      {items.length === 0 ? (
         <GlassCard className="p-6 text-center">
           <p className="text-sm text-fg-muted">
-            No notifications yet. Matches, likes, and messages will show up here.
+            No activity yet. Reacts, replies, matches, and messages will show up
+            here.
           </p>
         </GlassCard>
       ) : (
-        <div className="space-y-6">
-          {sections.map((section) => (
-            <section key={section.label}>
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-fg-muted">
-                {section.label}
-              </p>
-              <div className="space-y-2">
-                {section.items.map((item) => {
-                  const actor = item.actorId
-                    ? actors.get(item.actorId)
-                    : undefined;
-                  const latest = item.actions[0];
-                  const href = notificationView(
-                    latest.type,
-                    actor?.name ?? null,
-                    latest.data
-                  ).href;
-                  const Icon = TYPE_ICON[latest.type] ?? Bell;
-                  return (
-                    <Link key={item.key} href={href} className="block">
-                      <GlassCard
-                        className={cn(
-                          "flex items-center gap-3 p-3",
-                          item.anyUnread && "border-l-2 border-l-accent"
-                        )}
-                      >
-                        <div className="relative shrink-0">
-                          <div className="glass relative h-10 w-10 overflow-hidden rounded-full">
-                            {actor?.avatar ? (
-                              <AppImage src={actor.avatar} alt="" sizes="40px" />
-                            ) : (
-                              <span className="gradient-brand flex h-full w-full items-center justify-center">
-                                <Zap className="h-4 w-4 text-white" aria-hidden />
-                              </span>
-                            )}
-                          </div>
-                          <span className="gradient-brand absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full">
-                            <Icon className="h-2 w-2 text-white" aria-hidden />
-                          </span>
-                        </div>
-                        <p className="flex-1 text-sm">
-                          {summarize(item, actor?.name ?? null)}
-                        </p>
-                      </GlassCard>
-                    </Link>
-                  );
-                })}
-              </div>
-            </section>
-          ))}
-        </div>
+        <ActivityList items={items} />
       )}
     </main>
   );

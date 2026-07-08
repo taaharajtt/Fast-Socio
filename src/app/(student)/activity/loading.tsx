@@ -1,6 +1,6 @@
 import { Skeleton, SkeletonRow } from "@/components/ui/skeleton";
 
-export default function NotificationsLoading() {
+export default function ActivityLoading() {
   return (
     <main className="mx-auto w-full max-w-md px-5 py-6">
       <div className="mb-4 flex items-center gap-3">

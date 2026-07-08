@@ -8,6 +8,7 @@ import {
   MessageSquare,
   Star,
   Zap,
+  Megaphone,
   UserPlus,
   type LucideIcon,
 } from "lucide-react";
@@ -30,16 +31,16 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   comment: MessageSquare,
   match: Star,
   message: MessageSquare,
-  message_request: MessageSquare,
-  community_post_approved: Zap,
-  community_post_rejected: Zap,
-  community_approved: Zap,
-  event_approved: Star,
+  message_request: UserPlus,
+  community_post_approved: Megaphone,
+  community_post_rejected: Megaphone,
+  community_approved: Megaphone,
+  event_approved: Megaphone,
 };
 
 /**
  * Bell with an Instagram-style dropdown panel (Figma prototype). Shows the most
- * recent notifications inline; the full feed lives at /notifications. Closes on
+ * recent notifications inline; the full feed lives at /activity. Closes on
  * outside-click or Escape.
  */
 export function NotificationBellMenu({
@@ -72,7 +73,7 @@ export function NotificationBellMenu({
     <div className="relative" ref={ref}>
       <button
         type="button"
-        aria-label={`Notifications${unread ? `, ${unread} unread` : ""}`}
+        aria-label={`Activity${unread ? `, ${unread} unread` : ""}`}
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
         className={cn(
@@ -89,7 +90,7 @@ export function NotificationBellMenu({
       {open && (
         <div className="glass-strong absolute right-0 top-12 z-50 w-80 overflow-hidden rounded-[var(--radius-md)] shadow-[0_20px_60px_rgba(0,0,0,0.6)]">
           <div className="flex items-center justify-between border-b border-glass-border px-4 py-3">
-            <h3 className="text-base font-bold">Notifications</h3>
+            <h3 className="text-base font-bold">Activity</h3>
             {unread > 0 && (
               <span className="gradient-brand rounded-full px-2 py-0.5 text-[11px] font-semibold text-white">
                 {unread} new
@@ -147,11 +148,11 @@ export function NotificationBellMenu({
           </div>
 
           <Link
-            href="/notifications"
+            href="/activity"
             onClick={() => setOpen(false)}
             className="block border-t border-glass-border py-3 text-center text-sm font-semibold text-accent"
           >
-            See all notifications
+            See all activity
           </Link>
         </div>
       )}

@@ -50,7 +50,7 @@ export default async function SettingsPage() {
       </section>
 
       <section className="mt-5 space-y-2">
-        <h2 className="text-sm font-medium text-fg-muted">Notifications</h2>
+        <h2 className="text-sm font-medium text-fg-muted">Activity &amp; alerts</h2>
         <GlassCard className="p-5">
           <EnablePush />
         </GlassCard>

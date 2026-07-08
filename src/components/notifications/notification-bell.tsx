@@ -19,7 +19,7 @@ type NotifRow = {
  * Bell with an unread-count dot and an inline dropdown of recent notifications
  * (Figma prototype). Data is fetched server-side; the dropdown itself is a
  * client island so it can open/close without a round trip. The full feed remains
- * at /notifications.
+ * at /activity.
  */
 export async function NotificationBell() {
   const supabase = await createClient();
