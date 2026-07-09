@@ -13,9 +13,15 @@ import { createClient } from "@/lib/supabase/client";
 export function CoverUpload({
   value,
   onChange,
+  label = "Cover photo (16:9)",
+  prefix = "community",
 }: {
   value: string | null;
   onChange: (url: string | null) => void;
+  /** Field label above the picker. */
+  label?: string;
+  /** Filename prefix under the owner's folder (e.g. "community", "cover"). */
+  prefix?: string;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -36,7 +42,7 @@ export function CoverUpload({
       return;
     }
     const ext = file.name.split(".").pop() ?? "jpg";
-    const path = `${user.id}/community-${crypto.randomUUID()}.${ext}`;
+    const path = `${user.id}/${prefix}-${crypto.randomUUID()}.${ext}`;
     const { error: upErr } = await supabase.storage
       .from("post-media")
       .upload(path, file, { contentType: file.type });
@@ -51,7 +57,7 @@ export function CoverUpload({
 
   return (
     <div className="space-y-2">
-      <span className="text-sm font-medium">Cover photo (16:9)</span>
+      <span className="text-sm font-medium">{label}</span>
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPick} />
       {value ? (
         <div className="relative aspect-video w-full overflow-hidden rounded-[var(--radius-md)]">

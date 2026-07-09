@@ -25,7 +25,7 @@ export default async function ProfilePage() {
     await Promise.all([
       supabase
         .from("profiles")
-        .select("full_name, department, semester, bio, avatar_url, aura_score, verified")
+        .select("full_name, department, semester, bio, avatar_url, cover_url, aura_score, verified")
         .eq("id", me)
         .single(),
       supabase
@@ -58,10 +58,19 @@ export default async function ProfilePage() {
 
   return (
     <div className="mx-auto w-full max-w-md">
-      {/* Cover banner (200px — gradient, no cover image in schema) + overlapping
-          80px avatar and a purple verified badge (UISpec V3 Screen 14). */}
+      {/* Cover banner (200px) — the user's cover photo scaled to fill, or the
+          brand gradient when none is set + overlapping 80px avatar and a purple
+          verified badge (UISpec V3 Screen 14). */}
       <div className="relative h-[200px]">
-        <div className="h-full w-full gradient-brand opacity-80" />
+        {profile?.cover_url ? (
+          <AppImage
+            src={profile.cover_url}
+            alt=""
+            sizes="(max-width: 448px) 100vw, 448px"
+          />
+        ) : (
+          <div className="h-full w-full gradient-brand opacity-80" />
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/20 to-transparent" />
         <Link
           href="/settings"

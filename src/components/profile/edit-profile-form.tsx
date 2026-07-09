@@ -7,6 +7,7 @@ import { GlassButton, GlassCard, GlassInput } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { updateProfile } from "@/app/(student)/profile/actions";
+import { CoverUpload } from "@/components/communities/cover-upload";
 import {
   BIO_MAX,
   DEPARTMENTS,
@@ -25,6 +26,7 @@ export type EditableProfile = {
   interests: string[];
   bio: string | null;
   avatar_url: string | null;
+  cover_url: string | null;
 };
 
 export function EditProfileForm({ profile }: { profile: EditableProfile }) {
@@ -36,6 +38,7 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
     () => ({
       fullName: profile.full_name ?? "",
       avatarUrl: profile.avatar_url,
+      coverUrl: profile.cover_url,
       department: profile.department ?? "",
       semester: profile.semester,
       gender: profile.gender,
@@ -47,6 +50,7 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
 
   const [fullName, setFullName] = useState(initial.fullName);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(initial.avatarUrl);
+  const [coverUrl, setCoverUrl] = useState<string | null>(initial.coverUrl);
   const [uploading, setUploading] = useState(false);
   const [department, setDepartment] = useState(initial.department);
   const [semester, setSemester] = useState<number | null>(initial.semester);
@@ -59,6 +63,7 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
   const dirty =
     fullName !== initial.fullName ||
     avatarUrl !== initial.avatarUrl ||
+    coverUrl !== initial.coverUrl ||
     department !== initial.department ||
     semester !== initial.semester ||
     gender !== initial.gender ||
@@ -129,6 +134,7 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
         interests,
         bio,
         avatarUrl,
+        coverUrl,
       });
       if ("error" in res) {
         setError(res.error);
@@ -150,6 +156,14 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
 
   return (
     <div className="space-y-6 pb-8">
+      {/* Cover photo — 16:9 banner shown behind the avatar on the profile. */}
+      <CoverUpload
+        value={coverUrl}
+        onChange={setCoverUrl}
+        label="Cover photo"
+        prefix="cover"
+      />
+
       {/* Avatar */}
       <div className="flex flex-col items-center gap-3">
         <button

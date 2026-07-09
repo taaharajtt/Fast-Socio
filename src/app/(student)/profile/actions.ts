@@ -20,6 +20,7 @@ export async function updateProfile(input: {
   interests: string[];
   bio: string;
   avatarUrl: string | null;
+  coverUrl: string | null;
 }): Promise<UpdateProfileResult> {
   const supabase = await createClient();
   const {
@@ -39,9 +40,11 @@ export async function updateProfile(input: {
     return { error: `Pick ${MIN_INTERESTS}–${MAX_INTERESTS} interests.` };
   if (input.bio.length > BIO_MAX)
     return { error: `Bio must be ${BIO_MAX} characters or fewer.` };
-  // avatarUrl is client-supplied — only accept an avatar we host (P2-04).
+  // avatarUrl/coverUrl are client-supplied — only accept media we host (P2-04).
   if (input.avatarUrl && !isAppStorageUrl(input.avatarUrl))
     return { error: "Invalid avatar image." };
+  if (input.coverUrl && !isAppStorageUrl(input.coverUrl))
+    return { error: "Invalid cover image." };
 
   const { error } = await supabase
     .from("profiles")
@@ -53,6 +56,7 @@ export async function updateProfile(input: {
       interests: input.interests,
       bio: input.bio.trim() || null,
       avatar_url: input.avatarUrl,
+      cover_url: input.coverUrl,
     })
     .eq("id", user.id);
 
