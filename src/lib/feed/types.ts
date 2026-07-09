@@ -19,4 +19,7 @@ export type FeedPost = {
   /** Author's department (e.g. "CS") — present once the feed_posts view exposes
    *  it (migration feed_posts_add_author_department). Optional/back-compatible. */
   author_department?: string | null;
+  /** Whether the author is a verified account (UISpec V3 §2.7). Masked to false
+   *  for anonymous posts by the view. Optional/back-compatible. */
+  author_verified?: boolean | null;
 };

@@ -11,7 +11,7 @@ import {
   Bookmark,
   MoreHorizontal,
 } from "lucide-react";
-import { GlassSheet } from "@/components/ui";
+import { GlassSheet, VerifiedBadge } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { toggleLike, reportPost } from "@/app/(student)/home/actions";
 import { ShareSheet } from "@/components/feed/share-sheet";
@@ -111,8 +111,11 @@ function PostCardImpl({ post }: { post: FeedPost }) {
                 ) : null}
               </div>
               <span className="min-w-0">
-                <span className="block truncate text-base font-semibold text-fg">
-                  {anon ? "Anonymous" : (post.author_name ?? "Student")}
+                <span className="flex items-center gap-1 text-base font-semibold text-fg">
+                  <span className="truncate">
+                    {anon ? "Anonymous" : (post.author_name ?? "Student")}
+                  </span>
+                  {!anon && post.author_verified && <VerifiedBadge />}
                 </span>
                 <span className="block text-[13px] text-fg-muted">
                   {!anon && post.author_department
