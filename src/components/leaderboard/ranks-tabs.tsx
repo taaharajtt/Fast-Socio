@@ -1,11 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowUp, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AppImage } from "@/components/ui/app-image";
+import { SkeletonRow } from "@/components/ui/skeleton";
 import { LEADERBOARD_TITLES } from "@/lib/leaderboard/titles";
 import { deptMeta } from "@/lib/leaderboard/departments";
+
+/**
+ * Shows a shimmer for a short beat after a tab change so switching feels smooth
+ * and intentional even though the data is already client-side (UAT-013).
+ */
+function useTabTransition(dep: unknown, ms = 380) {
+  const [loading, setLoading] = useState(false);
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    setLoading(true);
+    const t = setTimeout(() => setLoading(false), ms);
+    return () => clearTimeout(t);
+  }, [dep, ms]);
+  return loading;
+}
 
 export type StudentRow = {
   user_id: string;
@@ -59,6 +79,7 @@ export function RanksTabs({
   meId: string;
 }) {
   const [tab, setTab] = useState<"students" | "depts">("students");
+  const switching = useTabTransition(tab);
 
   return (
     <>
@@ -72,7 +93,13 @@ export function RanksTabs({
         </Pill>
       </div>
 
-      {tab === "students" ? (
+      {switching ? (
+        <div className="space-y-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <SkeletonRow key={i} />
+          ))}
+        </div>
+      ) : tab === "students" ? (
         <StudentBoard rows={students} meId={meId} />
       ) : (
         <DepartmentBoard rows={depts} />

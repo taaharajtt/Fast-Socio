@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, Users } from "lucide-react";
+import { ChevronLeft, Pencil } from "lucide-react";
 import { GlassCard, GlassChip } from "@/components/ui";
+import { AppImage } from "@/components/ui/app-image";
+import { communityIcon } from "@/lib/communities/icon";
 import { JoinButton } from "@/components/communities/join-button";
 import { PostComposer } from "@/components/feed/post-composer";
 import { PostCard } from "@/components/feed/post-card";
@@ -29,7 +31,7 @@ export default async function CommunityPage({
 
   const { data: community } = await supabase
     .from("communities")
-    .select("id, name, description, member_count, status, owner_id")
+    .select("id, name, description, avatar_url, cover_url, member_count, status, owner_id")
     .eq("id", id)
     .single();
   if (!community) notFound();
@@ -104,30 +106,52 @@ export default async function CommunityPage({
     t === "posts" ? `/communities/${id}` : `/communities/${id}?tab=${t}`;
 
   return (
-    <main className="mx-auto flex w-full max-w-md flex-1 flex-col px-5 py-6">
-      <div className="mb-4 flex items-center gap-3">
+    <main className="mx-auto flex w-full max-w-md flex-1 flex-col">
+      {/* Banner hero (UISpec V3 Screen 12): 200px cover, back arrow, and the
+          community identity + Join button overlaid on a bottom gradient. */}
+      <div className="relative h-[200px] w-full overflow-hidden">
+        {community.cover_url || community.avatar_url ? (
+          <AppImage
+            src={community.cover_url ?? community.avatar_url}
+            alt=""
+            sizes="(max-width: 448px) 100vw, 448px"
+          />
+        ) : (
+          <div
+            className="h-full w-full"
+            style={{ background: "linear-gradient(135deg, #4c1d95, #7c3aed)" }}
+          />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
         <Link
           href="/communities"
           aria-label="Back"
-          className="glass flex h-9 w-9 items-center justify-center rounded-full text-fg-muted"
+          className="absolute left-4 top-[max(1rem,env(safe-area-inset-top))] z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white"
         >
           <ChevronLeft className="h-5 w-5" aria-hidden />
         </Link>
-        <h1 className="truncate text-lg font-bold">{community.name}</h1>
-      </div>
-
-      <GlassCard className="p-5">
-        <div className="flex items-start gap-3">
-          <div className="glass flex h-14 w-14 shrink-0 items-center justify-center rounded-full">
-            <Users className="h-6 w-6 text-fg-muted" aria-hidden />
-          </div>
+        {isOwner && (
+          <Link
+            href={`/communities/${community.id}/edit`}
+            aria-label="Edit community"
+            className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white"
+          >
+            <Pencil className="h-4 w-4" aria-hidden />
+          </Link>
+        )}
+        <div className="absolute inset-x-4 bottom-3 flex items-end gap-3">
+          <span className="text-3xl leading-none" aria-hidden>
+            {communityIcon(community.name)}
+          </span>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <h2 className="truncate text-xl font-bold">{community.name}</h2>
+              <h1 className="truncate text-[17px] font-bold text-white">
+                {community.name}
+              </h1>
               {pending && <GlassChip tone="warning">pending</GlassChip>}
             </div>
-            <p className="text-sm text-fg-muted">
-              {community.member_count} member
+            <p className="text-[13px] text-white/70">
+              {community.member_count.toLocaleString()} member
               {community.member_count === 1 ? "" : "s"}
             </p>
           </div>
@@ -139,10 +163,12 @@ export default async function CommunityPage({
             />
           )}
         </div>
-        {community.description && (
-          <p className="mt-3 text-[15px]">{community.description}</p>
-        )}
-      </GlassCard>
+      </div>
+
+      <div className="flex flex-1 flex-col px-4 py-4">
+      {community.description && (
+        <p className="text-[15px] text-fg-muted">{community.description}</p>
+      )}
 
       {pending ? (
         <p className="mt-6 text-center text-sm text-fg-muted">
@@ -150,9 +176,9 @@ export default async function CommunityPage({
         </p>
       ) : (
         <>
-          {/* Zone tabs: Posts (approval feed) · Chat (open room) · Review (mods) */}
-          <div className="glass mt-4 flex gap-1 rounded-[var(--radius-pill)] p-1">
-            <TabLink href={tabHref("posts")} active={active === "posts"} label="Posts" />
+          {/* Zone tabs: Main (approval feed) · Chat (open room) · Review (mods) */}
+          <div className="mt-4 flex gap-2">
+            <TabLink href={tabHref("posts")} active={active === "posts"} label="Main" />
             <TabLink href={tabHref("chat")} active={active === "chat"} label="Chat" />
             {isMod && (
               <TabLink
@@ -227,6 +253,7 @@ export default async function CommunityPage({
           )}
         </>
       )}
+      </div>
     </main>
   );
 }
@@ -245,10 +272,10 @@ function TabLink({
   return (
     <Link
       href={href}
-      className={`flex flex-1 items-center justify-center gap-1.5 rounded-[var(--radius-pill)] py-2 text-center text-sm font-medium transition-all ${
+      className={`inline-flex items-center justify-center gap-1.5 rounded-full px-5 py-2 text-center text-sm font-semibold transition-all active:scale-95 ${
         active
-          ? "gradient-brand text-white shadow-[0_4px_16px_rgba(200,80,192,0.4)]"
-          : "text-fg-muted hover:text-fg"
+          ? "gradient-brand text-white shadow-[0_4px_16px_rgba(124,58,237,0.4)]"
+          : "bg-card text-fg-muted hover:text-fg"
       }`}
     >
       {label}

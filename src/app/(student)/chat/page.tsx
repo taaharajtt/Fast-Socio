@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { Users, Search, Edit3 } from "lucide-react";
-import { GlassCard, GlassChip } from "@/components/ui";
+import { Search, Edit3, ChevronLeft } from "lucide-react";
 import { RequestRow, type IncomingRequest } from "@/components/chat/request-row";
 import { OpenChatButton } from "@/components/chat/open-chat-button";
+import { ChatCommunityTabs } from "@/components/chat/chat-community-tabs";
 import { createClient } from "@/lib/supabase/server";
 import { AppImage } from "@/components/ui/app-image";
+import { timeAgo } from "@/lib/time";
 
 type ProfileLite = {
   id: string;
@@ -13,16 +14,13 @@ type ProfileLite = {
   department: string | null;
 };
 
-type ChatTab = "messages" | "requests" | "communities";
-
 export default async function ChatPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ view?: string }>;
 }) {
-  const { tab } = await searchParams;
-  const active: ChatTab =
-    tab === "requests" || tab === "communities" ? tab : "messages";
+  const { view } = await searchParams;
+  const showRequests = view === "requests";
 
   const supabase = await createClient();
   const {
@@ -30,12 +28,11 @@ export default async function ChatPage({
   } = await supabase.auth.getUser();
   const me = user!.id;
 
-  // Existing conversations + incoming pending requests + matches + my communities.
   const [
     { data: convRows },
     { data: reqRows },
     { data: matchRows },
-    { data: commRows },
+    { data: outgoingReqRows },
   ] = await Promise.all([
     supabase
       .from("conversations")
@@ -53,26 +50,37 @@ export default async function ChatPage({
       .select("id, user_low, user_high, created_at")
       .or(`user_low.eq.${me},user_high.eq.${me}`)
       .order("created_at", { ascending: false }),
+    // Requests WE sent (UAT-018): once we've initiated a conversation with a
+    // match, they should drop out of the "new matches" list.
     supabase
-      .from("community_members")
-      .select("role, community:communities(id, name, description, member_count, status)")
-      .eq("user_id", me),
+      .from("message_requests")
+      .select("recipient_id")
+      .eq("sender_id", me),
   ]);
 
   const conversations = convRows ?? [];
   const requests = reqRows ?? [];
   const matches = matchRows ?? [];
-  const myCommunities = (commRows ?? [])
-    .map((r) => r.community as unknown as {
-      id: string;
-      name: string;
-      description: string | null;
-      member_count: number;
-      status: string;
-    } | null)
-    .filter((c): c is NonNullable<typeof c> => Boolean(c) && c!.status === "approved");
 
-  // Resolve all referenced profiles in one query.
+  // Latest message per conversation → row preview text.
+  const convIds = conversations.map((c) => c.id);
+  const lastMsg = new Map<string, string>();
+  if (convIds.length > 0) {
+    const { data: msgs } = await supabase
+      .from("messages")
+      .select("conversation_id, body, sender_id, created_at")
+      .in("conversation_id", convIds)
+      .eq("hidden", false)
+      .order("created_at", { ascending: false })
+      .limit(300);
+    for (const m of msgs ?? []) {
+      if (lastMsg.has(m.conversation_id)) continue;
+      const prefix = m.sender_id === me ? "You: " : "";
+      lastMsg.set(m.conversation_id, `${prefix}${m.body ?? "Sent an attachment"}`);
+    }
+  }
+
+  // Resolve referenced profiles in one query.
   const otherIds = new Set<string>();
   conversations.forEach((c) =>
     otherIds.add(c.user_low === me ? c.user_high : c.user_low)
@@ -102,229 +110,157 @@ export default async function ChatPage({
     };
   });
 
-  const tabs: { value: ChatTab; label: string; badge?: number }[] = [
-    { value: "messages", label: "Messages" },
-    { value: "requests", label: "Requests", badge: incoming.length },
-    { value: "communities", label: "Communities" },
-  ];
+  // Matches that don't yet have a conversation AND that we haven't already
+  // reached out to — surfaced so a chat can start. A match we've messaged
+  // (open conversation or a pending outgoing request) is removed here (UAT-018).
+  const convOtherIds = new Set(
+    conversations.map((c) => (c.user_low === me ? c.user_high : c.user_low))
+  );
+  const initiatedIds = new Set(
+    (outgoingReqRows ?? []).map((r) => r.recipient_id as string)
+  );
+  const newMatches = matches
+    .map((m) => (m.user_low === me ? m.user_high : m.user_low))
+    .filter((id) => !convOtherIds.has(id) && !initiatedIds.has(id));
 
+  // ── Requests sub-view ────────────────────────────────────────────────────
+  if (showRequests) {
+    return (
+      <main className="mx-auto w-full max-w-md px-4 py-6">
+        <header className="mb-4 flex items-center gap-3">
+          <Link
+            href="/chat"
+            aria-label="Back"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-fg"
+          >
+            <ChevronLeft className="h-6 w-6" aria-hidden />
+          </Link>
+          <h1 className="text-[22px] font-bold tracking-tight">Requests</h1>
+        </header>
+        {incoming.length === 0 ? (
+          <p className="py-16 text-center text-sm text-fg-muted">
+            No pending requests.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {incoming.map((r) => (
+              <RequestRow key={r.id} request={r} />
+            ))}
+          </div>
+        )}
+      </main>
+    );
+  }
+
+  // ── Messages view ────────────────────────────────────────────────────────
   return (
-    <main className="mx-auto w-full max-w-md px-5 py-6">
+    <main className="mx-auto w-full max-w-md px-4 py-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-extrabold tracking-tight">Chat</h1>
-        <div className="flex items-center gap-2">
+        <h1 className="text-[22px] font-bold tracking-tight">Messages</h1>
+        <div className="flex items-center gap-2.5">
+          <Link
+            href="/chat?view=requests"
+            className="flex items-center gap-1 rounded-full bg-card px-3 py-1.5 text-[13px] text-fg-muted"
+          >
+            Requests
+            {incoming.length > 0 && (
+              <span className="font-semibold text-accent">{incoming.length}</span>
+            )}
+          </Link>
           <Link
             href="/discover"
             aria-label="Search people"
-            className="glass flex h-9 w-9 items-center justify-center rounded-full text-fg-muted hover:text-fg"
+            className="flex h-9 w-9 items-center justify-center text-fg"
           >
-            <Search className="h-4 w-4" aria-hidden />
+            <Search className="h-5 w-5" aria-hidden />
           </Link>
           <Link
             href="/discover"
             aria-label="New message"
-            className="gradient-brand flex h-9 w-9 items-center justify-center rounded-full text-white"
+            className="flex h-9 w-9 items-center justify-center text-fg"
           >
-            <Edit3 className="h-4 w-4" aria-hidden />
+            <Edit3 className="h-5 w-5" aria-hidden />
           </Link>
         </div>
       </div>
 
-      {/* Inner tabs (CR-004): Messages · Requests · Communities */}
-      <div className="glass mt-4 flex gap-1 rounded-[var(--radius-pill)] p-1">
-        {tabs.map((t) => {
-          const isActive = t.value === active;
-          return (
-            <Link
-              key={t.value}
-              href={t.value === "messages" ? "/chat" : `/chat?tab=${t.value}`}
-              className={`flex flex-1 items-center justify-center gap-1.5 rounded-[var(--radius-pill)] py-2 text-center text-sm font-medium transition-all ${
-                isActive
-                  ? "gradient-brand text-white shadow-[0_4px_16px_rgba(200,80,192,0.4)]"
-                  : "text-fg-muted hover:text-fg"
-              }`}
-            >
-              {t.label}
-              {t.badge ? (
-                <span
-                  className={`rounded-full px-1.5 text-xs ${
-                    isActive ? "bg-white/25" : "gradient-brand text-white"
-                  }`}
+      <ChatCommunityTabs active="messages" />
+
+      <div className="mt-5 space-y-1">
+        {conversations.length === 0 && newMatches.length === 0 ? (
+          <p className="py-16 text-center text-sm text-fg-muted">
+            No conversations yet. Match in Discover to start chatting.
+          </p>
+        ) : (
+          <>
+            {conversations.map((c) => {
+              const otherId = c.user_low === me ? c.user_high : c.user_low;
+              const p = profiles.get(otherId);
+              const preview = lastMsg.get(c.id);
+              return (
+                <Link
+                  key={c.id}
+                  href={`/chat/${c.id}`}
+                  className="flex items-center gap-3 rounded-[12px] px-3 py-3 transition-colors hover:bg-card"
                 >
-                  {t.badge}
-                </span>
-              ) : null}
-            </Link>
-          );
-        })}
-      </div>
+                  <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full bg-card">
+                    {p?.avatar_url && (
+                      <AppImage
+                        src={p.avatar_url}
+                        alt={p.full_name ?? "Match"}
+                        sizes="44px"
+                      />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[15px] font-semibold text-fg">
+                      {p?.full_name ?? "Student"}
+                    </p>
+                    <p className="truncate text-sm text-fg-muted">
+                      {preview ?? "Say hi 👋"}
+                    </p>
+                  </div>
+                  {c.last_message_at && (
+                    <span className="shrink-0 self-start text-xs text-fg-muted">
+                      {timeAgo(c.last_message_at)}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
 
-      {active === "messages" && (
-        <div className="mt-6 space-y-6">
-          <section>
-            <h2 className="mb-2 text-sm font-medium text-fg-muted">
-              Conversations
-            </h2>
-            {conversations.length === 0 ? (
-              <GlassCard className="p-5">
-                <p className="text-sm text-fg-muted">
-                  No conversations yet. Message a match to start one.
-                </p>
-              </GlassCard>
-            ) : (
-              <div className="space-y-2">
-                {conversations.map((c) => {
-                  const otherId = c.user_low === me ? c.user_high : c.user_low;
-                  const p = profiles.get(otherId);
-                  return (
-                    <Link key={c.id} href={`/chat/${c.id}`} className="block">
-                      <GlassCard className="flex items-center gap-3 p-4">
-                        <div className="glass relative h-12 w-12 shrink-0 overflow-hidden rounded-full">
-                          {p?.avatar_url ? (
-                            <AppImage
-                              src={p.avatar_url}
-                              alt={p.full_name ?? "Match"}
-                              sizes="48px"
-                            />
-                          ) : null}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate font-semibold">
-                            {p?.full_name ?? "Student"}
-                          </p>
-                          <p className="truncate text-xs text-fg-muted">
-                            {p?.department ?? ""}
-                          </p>
-                        </div>
-                      </GlassCard>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-
-          <section>
-            <h2 className="mb-2 text-sm font-medium text-fg-muted">Matches</h2>
-            {matches.length === 0 ? (
-              <GlassCard className="p-5">
-                <p className="text-sm text-fg-muted">
-                  No matches yet — keep swiping in Discover.
-                </p>
-              </GlassCard>
-            ) : (
-              <div className="space-y-2">
-                {matches.map((m) => {
-                  const otherId = m.user_low === me ? m.user_high : m.user_low;
-                  const p = profiles.get(otherId);
-                  return (
-                    <GlassCard
-                      key={m.id}
-                      className="flex items-center gap-3 p-4"
-                    >
-                      <Link
-                        href={`/profile/${otherId}`}
-                        className="flex min-w-0 flex-1 items-center gap-3"
-                      >
-                        <div className="glass relative h-12 w-12 shrink-0 overflow-hidden rounded-full">
-                          {p?.avatar_url ? (
-                            <AppImage
-                              src={p.avatar_url}
-                              alt={p.full_name ?? "Match"}
-                              sizes="48px"
-                            />
-                          ) : null}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate font-semibold">
-                            {p?.full_name ?? "Student"}
-                          </p>
-                          <p className="truncate text-xs text-fg-muted">
-                            {p?.department ?? ""}
-                          </p>
-                        </div>
-                      </Link>
-                      <OpenChatButton otherId={otherId} />
-                    </GlassCard>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        </div>
-      )}
-
-      {active === "requests" && (
-        <section className="mt-6">
-          {incoming.length === 0 ? (
-            <GlassCard className="p-5">
-              <p className="text-sm text-fg-muted">No pending requests.</p>
-            </GlassCard>
-          ) : (
-            <div className="space-y-3">
-              {incoming.map((r) => (
-                <RequestRow key={r.id} request={r} />
-              ))}
-            </div>
-          )}
-        </section>
-      )}
-
-      {active === "communities" && (
-        <section className="mt-6 space-y-4">
-          <Link href="/communities" className="block">
-            <GlassCard className="flex items-center gap-3 p-4">
-              <div className="glass flex h-11 w-11 shrink-0 items-center justify-center rounded-full">
-                <Users className="h-5 w-5 text-fg-muted" aria-hidden />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold">Discover communities</p>
-                <p className="text-xs text-fg-muted">
-                  Browse and join campus communities
-                </p>
-              </div>
-            </GlassCard>
-          </Link>
-
-          <div>
-            <h2 className="mb-2 text-sm font-medium text-fg-muted">
-              Your communities
-            </h2>
-            {myCommunities.length === 0 ? (
-              <GlassCard className="p-5">
-                <p className="text-sm text-fg-muted">
-                  You haven&rsquo;t joined any communities yet.
-                </p>
-              </GlassCard>
-            ) : (
-              <div className="space-y-2">
-                {myCommunities.map((c) => (
+            {newMatches.map((otherId) => {
+              const p = profiles.get(otherId);
+              return (
+                <div
+                  key={otherId}
+                  className="flex items-center gap-3 rounded-[12px] px-3 py-3"
+                >
                   <Link
-                    key={c.id}
-                    href={`/communities/${c.id}`}
-                    className="block"
+                    href={`/profile/${otherId}`}
+                    className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full bg-card"
                   >
-                    <GlassCard className="flex items-center gap-3 p-4">
-                      <div className="glass flex h-11 w-11 shrink-0 items-center justify-center rounded-full">
-                        <Users className="h-5 w-5 text-fg-muted" aria-hidden />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-semibold">{c.name}</p>
-                        {c.description && (
-                          <p className="truncate text-xs text-fg-muted">
-                            {c.description}
-                          </p>
-                        )}
-                      </div>
-                      <GlassChip>{c.member_count}</GlassChip>
-                    </GlassCard>
+                    {p?.avatar_url && (
+                      <AppImage
+                        src={p.avatar_url}
+                        alt={p.full_name ?? "Match"}
+                        sizes="44px"
+                      />
+                    )}
                   </Link>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-      )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[15px] font-semibold text-fg">
+                      {p?.full_name ?? "Student"}
+                    </p>
+                    <p className="truncate text-sm text-accent">New match ✨</p>
+                  </div>
+                  <OpenChatButton otherId={otherId} />
+                </div>
+              );
+            })}
+          </>
+        )}
+      </div>
     </main>
   );
 }

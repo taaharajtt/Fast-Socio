@@ -21,7 +21,7 @@ export default async function StudentLayout({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("onboarding_completed")
+    .select("onboarding_completed, avatar_url")
     .eq("id", user.id)
     .single();
 
@@ -55,7 +55,10 @@ export default async function StudentLayout({
         }}
       />
       <div className="flex-1 pb-20">{children}</div>
-      <FloatingDock badges={{ "/chat": chatBadge }} />
+      <FloatingDock
+        badges={{ "/chat": chatBadge }}
+        avatarUrl={profile?.avatar_url}
+      />
     </div>
   );
 }

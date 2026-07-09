@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { ImagePlus, VenetianMask, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ImagePlus, Loader2, VenetianMask, X } from "lucide-react";
 import { GlassButton, GlassCard } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -17,6 +18,7 @@ export function PostComposer({
   /** Shown after a successful post when submissions require approval. */
   reviewNotice?: string;
 }) {
+  const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [body, setBody] = useState("");
   const [anon, setAnon] = useState(false);
@@ -77,6 +79,8 @@ export function PostComposer({
       setAnon(false);
       setImageUrl(null);
       if (reviewNotice) setNotice(reviewNotice);
+      // UAT-007: pull the freshly-created post into the feed automatically.
+      router.refresh();
     });
   }
 
@@ -84,7 +88,15 @@ export function PostComposer({
     pending || uploading || (body.trim().length === 0 && !imageUrl);
 
   return (
-    <GlassCard className="p-4">
+    <GlassCard className="relative overflow-hidden p-4">
+      {/* UAT-007: posting animation — a glass overlay with a spinner while the
+          server action runs, so the submit feels responsive and intentional. */}
+      {pending && (
+        <div className="glass-strong absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-[inherit]">
+          <Loader2 className="h-7 w-7 animate-spin text-aura" aria-hidden />
+          <p className="text-sm font-medium text-fg">Posting…</p>
+        </div>
+      )}
       <textarea
         value={body}
         onChange={(e) => setBody(e.target.value.slice(0, 2000))}

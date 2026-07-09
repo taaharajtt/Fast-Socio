@@ -3,13 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { SegmentedPills } from "@/components/ui";
-import { AppImage } from "@/components/ui/app-image";
-
-export type GridPost = {
-  id: string;
-  body: string | null;
-  image_url: string | null;
-};
+import { PostCard } from "@/components/feed/post-card";
+import type { FeedPost } from "@/lib/feed/types";
 
 export type ProfileCommunity = {
   id: string;
@@ -18,18 +13,21 @@ export type ProfileCommunity = {
 };
 
 /**
- * Posts | Communities switcher on the profile screen (Figma). Posts render as a
- * 3-column grid — image posts show their image, text posts show a gradient tile
- * with the opening line. Both link through to their detail routes.
+ * Posts | Communities switcher on the profile screen. Posts render exactly like
+ * the home feed (UAT-021) — a scrollable list of full post cards with images and
+ * text, likes, comments and share — instead of the old cramped grid.
  */
 export function ProfileTabs({
   posts,
   communities,
+  currentUserId,
 }: {
-  posts: GridPost[];
+  posts: FeedPost[];
   communities: ProfileCommunity[];
+  currentUserId?: string | null;
 }) {
   const [tab, setTab] = useState("posts");
+  const [list, setList] = useState<FeedPost[]>(posts);
 
   return (
     <div>
@@ -44,30 +42,23 @@ export function ProfileTabs({
       />
 
       {tab === "posts" ? (
-        posts.length === 0 ? (
+        list.length === 0 ? (
           <p className="py-8 text-center text-sm text-fg-muted">
             No posts yet.
           </p>
         ) : (
-          <div className="grid grid-cols-3 gap-2">
-            {posts.map((p) => (
-              <Link
+          // Negative margin lets the full-bleed cards match the home feed while
+          // the rest of the profile stays padded.
+          <div className="-mx-5 divide-y divide-glass-border border-y border-glass-border">
+            {list.map((p) => (
+              <PostCard
                 key={p.id}
-                href={`/post/${p.id}`}
-                className="relative aspect-square overflow-hidden rounded-[var(--radius-md)]"
-              >
-                {p.image_url ? (
-                  <AppImage
-                    src={p.image_url}
-                    alt=""
-                    sizes="(max-width: 448px) 33vw, 150px"
-                  />
-                ) : (
-                  <span className="gradient-brand flex h-full w-full items-center p-2 text-[11px] leading-snug text-white/90">
-                    <span className="line-clamp-4">{p.body ?? ""}</span>
-                  </span>
-                )}
-              </Link>
+                post={p}
+                currentUserId={currentUserId}
+                onDeleted={(id) =>
+                  setList((prev) => prev.filter((x) => x.id !== id))
+                }
+              />
             ))}
           </div>
         )

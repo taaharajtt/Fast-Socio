@@ -2,19 +2,21 @@
 
 import { memo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Heart,
   MessageCircle,
   Flag,
   VenetianMask,
   Share2,
-  Bookmark,
+  Trash2,
   MoreHorizontal,
 } from "lucide-react";
 import { GlassSheet, VerifiedBadge } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { toggleLike, reportPost } from "@/app/(student)/home/actions";
+import { toggleLike, reportPost, deletePost } from "@/app/(student)/home/actions";
 import { ShareSheet } from "@/components/feed/share-sheet";
+import { CommentsSheet } from "@/components/feed/comments-sheet";
 import { timeAgo, absoluteTime } from "@/lib/time";
 import { AppImage } from "@/components/ui/app-image";
 import type { FeedPost } from "@/lib/feed/types";
@@ -27,17 +29,35 @@ const REPORT_REASONS = [
   "Other",
 ];
 
-function PostCardImpl({ post }: { post: FeedPost }) {
+function PostCardImpl({
+  post,
+  currentUserId,
+  onDeleted,
+}: {
+  post: FeedPost;
+  /** Viewer's id — used to decide whether the options menu offers Delete (UAT-003). */
+  currentUserId?: string | null;
+  /** Called after the post is deleted so a list can drop it without a full reload. */
+  onDeleted?: (postId: string) => void;
+}) {
+  const router = useRouter();
   const [liked, setLiked] = useState(post.liked_by_me);
   const [likes, setLikes] = useState(post.like_count);
-  const [reporting, setReporting] = useState(false);
+  const [comments] = useState(post.comment_count);
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const [sharing, setSharing] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [commenting, setCommenting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleted, setDeleted] = useState(false);
   // Heart-burst overlay: bumping the key remounts the <Heart> and replays the
   // animation, so rapid double-taps each get their own burst.
   const [burstKey, setBurstKey] = useState(0);
   const lastTap = useRef(0);
-  const anon = post.is_anonymous && !post.author_name;
+  // UAT-001: an anonymous post reads as Anonymous for everyone — including its
+  // own author — so a poster never sees their own name/avatar on it.
+  const anon = post.is_anonymous;
+  const isMine = !!currentUserId && post.author_id === currentUserId;
 
   async function onLike() {
     const wasLiked = liked;
@@ -53,8 +73,8 @@ function PostCardImpl({ post }: { post: FeedPost }) {
     }
   }
 
-  /** Double-tap the post to like it (Instagram-style, UAT-003). Only ever likes
-   *  — never unlikes — and always plays the heart burst, even if already liked. */
+  /** Double-tap the post to like it (Instagram-style). Only ever likes — never
+   *  unlikes — and always plays the heart burst, even if already liked. */
   async function likeOnly() {
     setBurstKey((k) => k + 1);
     if (liked) return; // already liked: animate only, don't toggle off
@@ -67,13 +87,6 @@ function PostCardImpl({ post }: { post: FeedPost }) {
     }
   }
 
-  /**
-   * Double-tap anywhere on the card (except interactive controls) to like it.
-   * Taps that land on a link or button — the avatar/name, the like/comment/share
-   * controls, the options menu — are left alone so they behave normally (e.g.
-   * the avatar still opens the profile). A detected double-tap has its default
-   * suppressed so it can never trigger navigation.
-   */
   function onCardTap(e: React.MouseEvent) {
     const el = e.target as HTMLElement;
     if (el.closest("a, button, [role='button'], input, textarea, label")) {
@@ -89,6 +102,23 @@ function PostCardImpl({ post }: { post: FeedPost }) {
       lastTap.current = now;
     }
   }
+
+  async function onDelete() {
+    setDeleting(true);
+    const res = await deletePost(post.id);
+    if (!res.ok) {
+      setDeleting(false);
+      setConfirmDelete(false);
+      return;
+    }
+    setOptionsOpen(false);
+    setDeleted(true);
+    if (onDeleted) onDeleted(post.id);
+    else router.refresh();
+  }
+
+  // Once deleted, collapse the card in place for immediate feedback.
+  if (deleted) return null;
 
   return (
     <article
@@ -145,7 +175,10 @@ function PostCardImpl({ post }: { post: FeedPost }) {
         <button
           type="button"
           aria-label="Post options"
-          onClick={() => setReporting(true)}
+          onClick={() => {
+            setConfirmDelete(false);
+            setOptionsOpen(true);
+          }}
           className="shrink-0 text-fg-muted hover:text-fg"
         >
           <MoreHorizontal className="h-6 w-6" aria-hidden />
@@ -168,7 +201,7 @@ function PostCardImpl({ post }: { post: FeedPost }) {
         </div>
       )}
 
-      {/* Double-tap heart burst, centered over the card (UAT-003). */}
+      {/* Double-tap heart burst, centered over the card. */}
       {burstKey > 0 && (
         <span
           key={burstKey}
@@ -195,13 +228,16 @@ function PostCardImpl({ post }: { post: FeedPost }) {
           />
           {likes}
         </button>
-        <Link
-          href={`/post/${post.id}`}
-          className="flex items-center gap-1.5 hover:text-fg"
+        {/* UAT-004: open the half-screen comment sheet instead of navigating. */}
+        <button
+          type="button"
+          onClick={() => setCommenting(true)}
+          aria-label="Comments"
+          className="flex items-center gap-1.5 transition-all hover:text-fg active:scale-90"
         >
           <MessageCircle className="h-5 w-5" aria-hidden />
-          {post.comment_count}
-        </Link>
+          {comments}
+        </button>
         <button
           type="button"
           onClick={() => setSharing(true)}
@@ -211,18 +247,6 @@ function PostCardImpl({ post }: { post: FeedPost }) {
           <Share2 className="h-5 w-5" aria-hidden />
           Share
         </button>
-        <button
-          type="button"
-          onClick={() => setSaved((s) => !s)}
-          aria-label={saved ? "Remove bookmark" : "Bookmark post"}
-          aria-pressed={saved}
-          className={cn(
-            "ml-auto transition-all active:scale-90",
-            saved ? "text-accent" : "hover:text-fg"
-          )}
-        >
-          <Bookmark className={cn("h-5 w-5", saved && "fill-current")} aria-hidden />
-        </button>
       </div>
 
       <ShareSheet
@@ -231,25 +255,85 @@ function PostCardImpl({ post }: { post: FeedPost }) {
         onClose={() => setSharing(false)}
       />
 
-      <GlassSheet open={reporting} onClose={() => setReporting(false)}>
+      <CommentsSheet
+        postId={post.id}
+        open={commenting}
+        onClose={() => {
+          setCommenting(false);
+          // Refresh the count from server-truth next paint isn't cheap; bump
+          // optimistically handled inside the sheet is overkill — reflect that
+          // new comments may exist by nudging the router cache.
+          router.refresh();
+        }}
+      />
+
+      <GlassSheet
+        open={optionsOpen}
+        onClose={() => setOptionsOpen(false)}
+        label="Post options"
+      >
         <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <Flag className="h-5 w-5 text-error" aria-hidden />
-            <h3 className="text-lg font-bold">Report post</h3>
-          </div>
-          {REPORT_REASONS.map((r) => (
-            <button
-              key={r}
-              type="button"
-              onClick={async () => {
-                await reportPost(post.id, r);
-                setReporting(false);
-              }}
-              className="glass flex w-full items-center rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm text-fg"
-            >
-              {r}
-            </button>
-          ))}
+          {isMine ? (
+            confirmDelete ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <Trash2 className="h-5 w-5 text-error" aria-hidden />
+                  <h3 className="text-lg font-bold">Delete this post?</h3>
+                </div>
+                <p className="text-sm text-fg-muted">
+                  This can&rsquo;t be undone. Likes and comments will be removed too.
+                </p>
+                <button
+                  type="button"
+                  disabled={deleting}
+                  onClick={onDelete}
+                  className="w-full rounded-[var(--radius-sm)] bg-error px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  {deleting ? "Deleting…" : "Delete post"}
+                </button>
+                <button
+                  type="button"
+                  disabled={deleting}
+                  onClick={() => setConfirmDelete(false)}
+                  className="glass w-full rounded-[var(--radius-sm)] px-4 py-3 text-sm text-fg"
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                <h3 className="text-lg font-bold">Post options</h3>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  className="glass flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm font-medium text-error"
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden />
+                  Delete post
+                </button>
+              </>
+            )
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <Flag className="h-5 w-5 text-error" aria-hidden />
+                <h3 className="text-lg font-bold">Report post</h3>
+              </div>
+              {REPORT_REASONS.map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={async () => {
+                    await reportPost(post.id, r);
+                    setOptionsOpen(false);
+                  }}
+                  className="glass flex w-full items-center rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm text-fg"
+                >
+                  {r}
+                </button>
+              ))}
+            </>
+          )}
         </div>
       </GlassSheet>
     </article>
@@ -257,8 +341,6 @@ function PostCardImpl({ post }: { post: FeedPost }) {
 }
 
 /**
- * Memoized so appending a feed page (P4-05) doesn't re-render already-mounted
- * cards: FeedList preserves each post object's identity across pages, so shallow
- * prop equality skips every existing PostCard on load-more.
+ * Memoized so appending a feed page doesn't re-render already-mounted cards.
  */
 export const PostCard = memo(PostCardImpl);

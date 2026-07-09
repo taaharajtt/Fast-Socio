@@ -16,6 +16,9 @@ export default async function PostDetailPage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const { data: postRow } = await supabase
     .from("feed_posts")
@@ -58,7 +61,7 @@ export default async function PostDetailPage({
         <h1 className="text-lg font-bold">Post</h1>
       </div>
 
-      <PostCard post={post} />
+      <PostCard post={post} currentUserId={user?.id} />
 
       <section className="mt-4 flex-1 space-y-3">
         <CommentThread

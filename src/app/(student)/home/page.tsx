@@ -1,10 +1,10 @@
 import Image from "next/image";
 import Link from "next/link";
+import { Activity } from "lucide-react";
 import { PostComposer } from "@/components/feed/post-composer";
 import { FeedList } from "@/components/feed/feed-list";
 import { EventsStrip } from "@/components/feed/events-strip";
 import { NotificationBell } from "@/components/notifications/notification-bell";
-import { AppImage } from "@/components/ui/app-image";
 import { createClient } from "@/lib/supabase/server";
 import { FEED_PAGE_SIZE, type FeedPost } from "@/lib/feed/types";
 
@@ -13,19 +13,12 @@ export default async function HomePage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const [{ data }, { data: me }] = await Promise.all([
-    supabase
-      .from("feed_posts")
-      .select("*")
-      .is("community_id", null)
-      .order("created_at", { ascending: false })
-      .limit(FEED_PAGE_SIZE),
-    supabase
-      .from("profiles")
-      .select("avatar_url")
-      .eq("id", user?.id ?? "")
-      .single(),
-  ]);
+  const { data } = await supabase
+    .from("feed_posts")
+    .select("*")
+    .is("community_id", null)
+    .order("created_at", { ascending: false })
+    .limit(FEED_PAGE_SIZE);
   const posts = (data as FeedPost[]) ?? [];
 
   return (
@@ -47,14 +40,14 @@ export default async function HomePage() {
         </h1>
         <div className="flex items-center gap-3">
           <NotificationBell />
+          {/* UAT-005: the old dp slot now opens Activity; the dp itself moved to
+              the bottom nav's "Me" tab. */}
           <Link
-            href="/profile"
-            aria-label="Your profile"
-            className="relative block h-9 w-9 overflow-hidden rounded-full bg-card"
+            href="/activity"
+            aria-label="Activity"
+            className="glass flex h-9 w-9 items-center justify-center rounded-full text-fg-muted hover:text-fg"
           >
-            {me?.avatar_url && (
-              <AppImage src={me.avatar_url} alt="You" sizes="36px" />
-            )}
+            <Activity className="h-5 w-5" aria-hidden />
           </Link>
         </div>
       </header>
@@ -65,7 +58,7 @@ export default async function HomePage() {
       </div>
 
       <div className="mt-2">
-        <FeedList initial={posts} />
+        <FeedList initial={posts} currentUserId={user?.id} />
       </div>
     </main>
   );

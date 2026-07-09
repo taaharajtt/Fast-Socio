@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_ITEMS } from "@/lib/nav";
+import { AppImage } from "@/components/ui/app-image";
 import { cn } from "@/lib/utils";
 
 /**
@@ -17,9 +18,12 @@ import { cn } from "@/lib/utils";
  */
 export function FloatingDock({
   badges = {},
+  avatarUrl,
 }: {
   /** Unread counts keyed by nav href (e.g. { "/chat": 3 }). */
   badges?: Record<string, number>;
+  /** Viewer's avatar — rendered as the "Me" (/profile) tab icon (UAT-005). */
+  avatarUrl?: string | null;
 }) {
   const pathname = usePathname();
 
@@ -48,14 +52,27 @@ export function FloatingDock({
                   active && "bg-accent/15"
                 )}
               >
-                <Icon
-                  className={cn(
-                    "h-[22px] w-[22px]",
-                    active ? "text-accent" : "text-fg-muted"
-                  )}
-                  strokeWidth={active ? 2.4 : 1.9}
-                  aria-hidden
-                />
+                {/* UAT-005: the "Me" tab shows the user's dp instead of a
+                    generic person icon. Falls back to the icon if no avatar. */}
+                {href === "/profile" && avatarUrl ? (
+                  <span
+                    className={cn(
+                      "relative block h-[24px] w-[24px] overflow-hidden rounded-full ring-2",
+                      active ? "ring-accent" : "ring-transparent"
+                    )}
+                  >
+                    <AppImage src={avatarUrl} alt="" sizes="24px" />
+                  </span>
+                ) : (
+                  <Icon
+                    className={cn(
+                      "h-[22px] w-[22px]",
+                      active ? "text-accent" : "text-fg-muted"
+                    )}
+                    strokeWidth={active ? 2.4 : 1.9}
+                    aria-hidden
+                  />
+                )}
                 {badge > 0 && (
                   <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[9px] font-bold text-white">
                     {badge > 9 ? "9+" : badge}

@@ -259,8 +259,11 @@ export function ChatThread({
   }
 
   return (
-    <div className="flex flex-1 flex-col">
-      <div className="flex-1 space-y-2 overflow-y-auto py-4">
+    // min-h-0 lets this flex column shrink inside the fixed chat shell so the
+    // message list can actually scroll (UAT-017) instead of overflowing and
+    // pushing the composer off-screen.
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto py-4">
         {canLoadOlder && (
           <div className="flex justify-center pb-2">
             <button

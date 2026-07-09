@@ -10,11 +10,21 @@ import { FEED_PAGE_SIZE, type FeedPost } from "@/lib/feed/types";
  * and loads older posts by created_at cursor as the user nears the bottom, so
  * the feed keeps loading old content instead of stopping at 50.
  */
-export function FeedList({ initial }: { initial: FeedPost[] }) {
+export function FeedList({
+  initial,
+  currentUserId,
+}: {
+  initial: FeedPost[];
+  currentUserId?: string | null;
+}) {
   const [posts, setPosts] = useState<FeedPost[]>(initial);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(initial.length < FEED_PAGE_SIZE);
   const sentinel = useRef<HTMLDivElement>(null);
+
+  const removePost = useCallback((id: string) => {
+    setPosts((prev) => prev.filter((p) => p.id !== id));
+  }, []);
 
   const loadMore = useCallback(async () => {
     if (loading || done) return;
@@ -61,7 +71,11 @@ export function FeedList({ initial }: { initial: FeedPost[] }) {
           key={p.id}
           className="[content-visibility:auto] [contain-intrinsic-size:auto_600px]"
         >
-          <PostCard post={p} />
+          <PostCard
+            post={p}
+            currentUserId={currentUserId}
+            onDeleted={removePost}
+          />
         </div>
       ))}
       {!done && (
@@ -69,10 +83,18 @@ export function FeedList({ initial }: { initial: FeedPost[] }) {
           {loading ? "Loading more…" : ""}
         </div>
       )}
-      {done && posts.length > FEED_PAGE_SIZE && (
-        <p className="py-6 text-center text-xs text-fg-muted/70">
-          You&rsquo;re all caught up.
-        </p>
+      {/* End of feed (UAT-010): a friendly, animated "all caught up" marker so
+          reaching the bottom feels intentional rather than broken. */}
+      {done && (
+        <div className="flex flex-col items-center gap-2 py-10 text-center">
+          <div className="animate-like-burst text-3xl" aria-hidden>
+            🎉
+          </div>
+          <p className="text-sm font-semibold text-fg">You&rsquo;re all caught up</p>
+          <p className="text-xs text-fg-muted/80">
+            You&rsquo;ve seen every new post. Check back later for more.
+          </p>
+        </div>
       )}
     </div>
   );

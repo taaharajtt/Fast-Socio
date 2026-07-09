@@ -102,6 +102,74 @@ export async function toggleLike(
   return { ok: !error };
 }
 
+/**
+ * Delete one of the caller's own posts (UAT-003). RLS ("authors delete their
+ * own posts") is the real guard; we scope the delete to author_id as well so a
+ * mistargeted id can never touch someone else's row. Likes/comments cascade.
+ */
+export async function deletePost(
+  postId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const { error } = await supabase
+    .from("posts")
+    .delete()
+    .eq("id", postId)
+    .eq("author_id", user.id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/home");
+  revalidatePath("/profile");
+  return { ok: true };
+}
+
+export type FeedComment = {
+  id: string;
+  author_id: string;
+  body: string;
+  created_at: string;
+};
+
+/**
+ * Load a post's visible comments plus a lookup of their authors, for the
+ * in-feed comment sheet (UAT-004). Mirrors the post-detail page's server load
+ * so the sheet and the full page render identical data.
+ */
+export async function fetchComments(postId: string): Promise<{
+  comments: FeedComment[];
+  authors: Record<string, { full_name: string | null; avatar_url: string | null }>;
+}> {
+  const supabase = await createClient();
+  const { data: rows } = await supabase
+    .from("post_comments")
+    .select("id, author_id, body, created_at")
+    .eq("post_id", postId)
+    .eq("hidden", false)
+    .order("created_at", { ascending: true });
+  const comments = (rows as FeedComment[]) ?? [];
+
+  const ids = [...new Set(comments.map((c) => c.author_id))];
+  const authors: Record<
+    string,
+    { full_name: string | null; avatar_url: string | null }
+  > = {};
+  if (ids.length > 0) {
+    const { data: profs } = await supabase
+      .from("profiles")
+      .select("id, full_name, avatar_url")
+      .in("id", ids);
+    (profs ?? []).forEach((p: { id: string; full_name: string | null; avatar_url: string | null }) => {
+      authors[p.id] = { full_name: p.full_name, avatar_url: p.avatar_url };
+    });
+  }
+  return { comments, authors };
+}
+
 /** Add a comment to a post. */
 export async function addComment(
   postId: string,

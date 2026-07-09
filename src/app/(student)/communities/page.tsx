@@ -1,12 +1,18 @@
 import Link from "next/link";
-import { Plus, Users, Clock } from "lucide-react";
-import { GlassCard, GlassChip } from "@/components/ui";
+import { Plus, Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { ChatCommunityTabs } from "@/components/chat/chat-community-tabs";
+import {
+  CommunityBrowser,
+  type CommunityVM,
+} from "@/components/communities/community-browser";
 
 type Community = {
   id: string;
   name: string;
   description: string | null;
+  avatar_url: string | null;
+  cover_url: string | null;
   member_count: number;
   status: string;
   owner_id: string;
@@ -19,87 +25,74 @@ export default async function CommunitiesPage() {
   } = await supabase.auth.getUser();
   const me = user!.id;
 
-  // Approved communities (RLS also returns my own pending ones).
-  const { data: rows } = await supabase
-    .from("communities")
-    .select("id, name, description, member_count, status, owner_id")
-    .order("member_count", { ascending: false });
+  const [{ data: rows }, { data: memberRows }] = await Promise.all([
+    supabase
+      .from("communities")
+      .select("id, name, description, avatar_url, cover_url, member_count, status, owner_id")
+      .order("member_count", { ascending: false }),
+    supabase.from("community_members").select("community_id").eq("user_id", me),
+  ]);
   const communities = (rows ?? []) as Community[];
+  const myMemberships = new Set(
+    (memberRows ?? []).map((m) => m.community_id as string)
+  );
 
   const approved = communities.filter((c) => c.status === "approved");
   const myPending = communities.filter(
     (c) => c.status === "pending" && c.owner_id === me
   );
 
+  const vms: CommunityVM[] = approved.map((c) => ({
+    id: c.id,
+    name: c.name,
+    description: c.description,
+    avatar_url: c.avatar_url,
+    cover_url: c.cover_url,
+    member_count: c.member_count,
+    isMember: myMemberships.has(c.id) || c.owner_id === me,
+    isOwner: c.owner_id === me,
+  }));
+
   return (
-    <main className="mx-auto w-full max-w-md px-5 py-6">
+    <main className="mx-auto w-full max-w-md px-4 py-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Communities</h1>
+        <h1 className="text-[22px] font-bold tracking-tight">Community</h1>
         <Link
           href="/communities/new"
-          className="glass flex h-10 w-10 items-center justify-center rounded-full text-fg-muted hover:text-fg"
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-card text-fg-muted hover:text-fg"
           aria-label="Create community"
         >
           <Plus className="h-5 w-5" aria-hidden />
         </Link>
       </div>
 
+      <ChatCommunityTabs active="community" />
+
       {myPending.length > 0 && (
-        <section className="mt-5">
+        <section className="mt-4">
           <h2 className="mb-2 text-sm font-medium text-fg-muted">
             Awaiting approval
           </h2>
           <div className="space-y-2">
             {myPending.map((c) => (
-              <GlassCard key={c.id} className="flex items-center gap-3 p-4">
+              <div
+                key={c.id}
+                className="flex items-center gap-3 rounded-[14px] bg-card p-4"
+              >
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold">{c.name}</p>
-                  <p className="text-xs text-fg-muted">
-                    Pending admin review
-                  </p>
+                  <p className="text-xs text-fg-muted">Pending admin review</p>
                 </div>
-                <GlassChip tone="warning">
-                  <Clock className="mr-1 h-3 w-3" aria-hidden /> pending
-                </GlassChip>
-              </GlassCard>
+                <span className="flex items-center gap-1 rounded-full bg-warning/15 px-2.5 py-1 text-xs font-medium text-warning">
+                  <Clock className="h-3 w-3" aria-hidden /> pending
+                </span>
+              </div>
             ))}
           </div>
         </section>
       )}
 
-      <section className="mt-5">
-        <h2 className="mb-2 text-sm font-medium text-fg-muted">Discover</h2>
-        {approved.length === 0 ? (
-          <GlassCard className="p-5">
-            <p className="text-sm text-fg-muted">
-              No communities yet. Be the first to start one.
-            </p>
-          </GlassCard>
-        ) : (
-          <div className="space-y-2">
-            {approved.map((c) => (
-              <Link key={c.id} href={`/communities/${c.id}`} className="block">
-                <GlassCard className="flex items-center gap-3 p-4">
-                  <div className="glass flex h-11 w-11 shrink-0 items-center justify-center rounded-full">
-                    <Users className="h-5 w-5 text-fg-muted" aria-hidden />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-semibold">{c.name}</p>
-                    {c.description && (
-                      <p className="truncate text-xs text-fg-muted">
-                        {c.description}
-                      </p>
-                    )}
-                  </div>
-                  <span className="text-xs text-fg-muted">
-                    {c.member_count} member{c.member_count === 1 ? "" : "s"}
-                  </span>
-                </GlassCard>
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
+      <CommunityBrowser communities={vms} />
     </main>
   );
 }

@@ -4,11 +4,13 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { isAppStorageUrl } from "@/lib/url-safety";
 
 /** Submit a new community for admin approval (status starts pending). */
 export async function createCommunity(input: {
   name: string;
   description: string;
+  coverUrl?: string | null;
 }): Promise<{ error: string } | void> {
   const supabase = await createClient();
   const {
@@ -19,6 +21,9 @@ export async function createCommunity(input: {
   const name = input.name.trim();
   if (name.length < 2 || name.length > 60)
     return { error: "Name must be 2–60 characters." };
+  // Only accept covers we host (mirrors the post-image guard).
+  if (input.coverUrl && !isAppStorageUrl(input.coverUrl))
+    return { error: "Invalid cover image." };
 
   // Cap submissions to curb spam even though approval is manual.
   const allowed = await checkRateLimit("create_community", 5, 24 * 60 * 60);
@@ -30,6 +35,7 @@ export async function createCommunity(input: {
       owner_id: user.id,
       name,
       description: input.description.trim() || null,
+      cover_url: input.coverUrl ?? null,
       status: "pending",
     })
     .select("id")
@@ -37,6 +43,44 @@ export async function createCommunity(input: {
   if (error) return { error: error.message };
 
   redirect(`/communities/${data.id}`);
+}
+
+/**
+ * Owner-only metadata edit (UAT-020): name, description, and 16:9 cover photo.
+ * RLS ("owners edit their community") is the real guard; we scope by owner_id
+ * as well. Status is protected by a trigger and untouched here.
+ */
+export async function updateCommunity(input: {
+  id: string;
+  name: string;
+  description: string;
+  coverUrl?: string | null;
+}): Promise<{ error: string } | void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not signed in." };
+
+  const name = input.name.trim();
+  if (name.length < 2 || name.length > 60)
+    return { error: "Name must be 2–60 characters." };
+  if (input.coverUrl && !isAppStorageUrl(input.coverUrl))
+    return { error: "Invalid cover image." };
+
+  const { error } = await supabase
+    .from("communities")
+    .update({
+      name,
+      description: input.description.trim() || null,
+      cover_url: input.coverUrl ?? null,
+    })
+    .eq("id", input.id)
+    .eq("owner_id", user.id);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/communities/${input.id}`);
+  redirect(`/communities/${input.id}`);
 }
 
 /** Send a message to a community's open chat room (Zone 2). RLS enforces membership. */

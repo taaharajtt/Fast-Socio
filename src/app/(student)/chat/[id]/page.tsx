@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, Phone, Video } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import {
   ChatThread,
   type ChatMessage,
@@ -96,8 +96,8 @@ export default async function ConversationPage({
   }
 
   return (
-    <div className="fixed inset-0 z-40 mx-auto flex max-w-md flex-col bg-bg px-4">
-      <header className="flex items-center gap-3 border-b border-glass-border py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
+    <div className="fixed inset-0 z-40 mx-auto flex h-[100dvh] max-w-md flex-col overflow-hidden bg-bg px-4">
+      <header className="flex shrink-0 items-center gap-3 border-b border-glass-border py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <Link
           href="/chat"
           aria-label="Back"
@@ -124,20 +124,6 @@ export default async function ConversationPage({
           <p className="truncate text-[11px] text-fg-muted">
             {other?.department ? `${other.department} · ` : ""}Active now
           </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span
-            aria-hidden
-            className="glass flex h-8 w-8 items-center justify-center rounded-full text-fg-muted"
-          >
-            <Phone className="h-4 w-4" />
-          </span>
-          <span
-            aria-hidden
-            className="glass flex h-8 w-8 items-center justify-center rounded-full text-fg-muted"
-          >
-            <Video className="h-4 w-4" />
-          </span>
         </div>
       </header>
 

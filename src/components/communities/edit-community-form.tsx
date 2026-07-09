@@ -5,12 +5,22 @@ import { useState, useTransition } from "react";
 import { ChevronLeft } from "lucide-react";
 import { GlassButton, GlassCard, GlassInput } from "@/components/ui";
 import { CoverUpload } from "@/components/communities/cover-upload";
-import { createCommunity } from "@/app/(student)/communities/actions";
+import { updateCommunity } from "@/app/(student)/communities/actions";
 
-export default function NewCommunityPage() {
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [coverUrl, setCoverUrl] = useState<string | null>(null);
+export function EditCommunityForm({
+  id,
+  initialName,
+  initialDescription,
+  initialCoverUrl,
+}: {
+  id: string;
+  initialName: string;
+  initialDescription: string;
+  initialCoverUrl: string | null;
+}) {
+  const [name, setName] = useState(initialName);
+  const [description, setDescription] = useState(initialDescription);
+  const [coverUrl, setCoverUrl] = useState<string | null>(initialCoverUrl);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -18,7 +28,7 @@ export default function NewCommunityPage() {
     e.preventDefault();
     setError(null);
     start(async () => {
-      const res = await createCommunity({ name, description, coverUrl });
+      const res = await updateCommunity({ id, name, description, coverUrl });
       if (res?.error) setError(res.error);
     });
   }
@@ -27,13 +37,13 @@ export default function NewCommunityPage() {
     <main className="mx-auto w-full max-w-md px-5 py-6">
       <div className="mb-4 flex items-center gap-3">
         <Link
-          href="/communities"
+          href={`/communities/${id}`}
           aria-label="Back"
           className="glass flex h-9 w-9 items-center justify-center rounded-full text-fg-muted"
         >
           <ChevronLeft className="h-5 w-5" aria-hidden />
         </Link>
-        <h1 className="text-lg font-bold">Start a community</h1>
+        <h1 className="text-lg font-bold">Edit community</h1>
       </div>
 
       <GlassCard className="space-y-4 p-5">
@@ -45,7 +55,6 @@ export default function NewCommunityPage() {
             </label>
             <GlassInput
               id="name"
-              placeholder="e.g. ACM Society, Batch of 2027"
               value={name}
               maxLength={60}
               onChange={(e) => setName(e.target.value)}
@@ -64,16 +73,13 @@ export default function NewCommunityPage() {
               className="glass w-full resize-none rounded-[var(--radius-md)] p-4 text-[15px] text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
             />
           </div>
-          <p className="text-xs text-fg-muted">
-            Communities are reviewed by an admin before going live.
-          </p>
           <GlassButton
             type="submit"
             size="lg"
             className="w-full"
             disabled={pending || name.trim().length < 2}
           >
-            {pending ? "Submitting…" : "Submit for review"}
+            {pending ? "Saving…" : "Save changes"}
           </GlassButton>
           {error && <p className="text-sm text-error">{error}</p>}
         </form>

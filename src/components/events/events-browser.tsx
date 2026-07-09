@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Search, MapPin } from "lucide-react";
 import { AppImage } from "@/components/ui/app-image";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { EVENT_CATEGORIES } from "@/lib/events/constants";
 
@@ -70,6 +71,20 @@ function Banner({ event, className }: { event: EventVM; className?: string }) {
 export function EventsBrowser({ events }: { events: EventVM[] }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string>("All");
+
+  // Brief shimmer when the category tab changes (UAT-013) so switching feels
+  // smooth even though filtering is instant.
+  const [switching, setSwitching] = useState(false);
+  const firstCat = useRef(true);
+  useEffect(() => {
+    if (firstCat.current) {
+      firstCat.current = false;
+      return;
+    }
+    setSwitching(true);
+    const t = setTimeout(() => setSwitching(false), 350);
+    return () => clearTimeout(t);
+  }, [category]);
 
   const featured = events.slice(0, 4);
 
@@ -156,7 +171,18 @@ export function EventsBrowser({ events }: { events: EventVM[] }) {
         </div>
 
         <div className="mt-4 space-y-2">
-          {filtered.length === 0 ? (
+          {switching ? (
+            Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 rounded-[14px] bg-card p-3">
+                <Skeleton className="h-[72px] w-[72px] shrink-0 rounded-[10px]" />
+                <div className="min-w-0 flex-1">
+                  <Skeleton className="h-4 w-2/3" />
+                  <Skeleton className="mt-2 h-3 w-1/3" />
+                  <Skeleton className="mt-2 h-3 w-1/2" />
+                </div>
+              </div>
+            ))
+          ) : filtered.length === 0 ? (
             <p className="rounded-[14px] bg-card p-6 text-center text-sm text-fg-muted">
               No events found
               {category !== "All" ? ` in ${category}` : ""}

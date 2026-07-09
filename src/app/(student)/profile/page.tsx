@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { Settings, Pencil, Zap, Heart, Check } from "lucide-react";
-import { ProfileTabs, type GridPost, type ProfileCommunity } from "@/components/profile/profile-tabs";
+import { ProfileTabs, type ProfileCommunity } from "@/components/profile/profile-tabs";
 import { createClient } from "@/lib/supabase/server";
 import { AppImage } from "@/components/ui/app-image";
+import type { FeedPost } from "@/lib/feed/types";
 
 export default async function ProfilePage() {
   const supabase = await createClient();
@@ -20,10 +21,10 @@ export default async function ProfilePage() {
         .single(),
       supabase
         .from("feed_posts")
-        .select("id, body, image_url")
+        .select("*")
         .eq("author_id", me)
         .order("created_at", { ascending: false })
-        .limit(18),
+        .limit(30),
       supabase
         .from("matches")
         .select("id", { count: "exact", head: true })
@@ -34,7 +35,7 @@ export default async function ProfilePage() {
         .eq("user_id", me),
     ]);
 
-  const posts = (postRows as GridPost[]) ?? [];
+  const posts = (postRows as FeedPost[]) ?? [];
   const communities = ((commRows ?? [])
     .map((r) => r.community as unknown as (ProfileCommunity & { status: string }) | null)
     .filter((c): c is ProfileCommunity & { status: string } =>
@@ -118,7 +119,7 @@ export default async function ProfilePage() {
           </p>
         )}
 
-        <ProfileTabs posts={posts} communities={communities} />
+        <ProfileTabs posts={posts} communities={communities} currentUserId={me} />
       </main>
     </div>
   );
