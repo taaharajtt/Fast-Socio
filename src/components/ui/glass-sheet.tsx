@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 type GlassSheetProps = {
@@ -29,6 +29,10 @@ export function GlassSheet({
   const panelRef = useRef<HTMLDivElement>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
   const titleId = useId();
+  // Drag-to-dismiss is initiated ONLY from the grab handle, so a scrollable body
+  // (comments, share list) scrolls freely instead of being swallowed by the
+  // sheet's drag gesture (Instagram-style behaviour).
+  const dragControls = useDragControls();
 
   // Escape-to-close + focus trap while open.
   useEffect(() => {
@@ -105,16 +109,22 @@ export function GlassSheet({
             exit={{ y: "100%" }}
             transition={{ type: "spring", damping: 30, stiffness: 300 }}
             drag="y"
+            dragControls={dragControls}
+            dragListener={false}
             dragConstraints={{ top: 0, bottom: 0 }}
             dragElastic={{ top: 0, bottom: 0.4 }}
             onDragEnd={(_, info) => {
               if (info.offset.y > 120) onClose();
             }}
           >
+            {/* Grab handle — the only region that starts a drag-to-dismiss. */}
             <div
-              className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-fg/20"
+              onPointerDown={(e) => dragControls.start(e)}
+              className="mx-auto mb-4 flex w-full cursor-grab touch-none justify-center py-1 active:cursor-grabbing"
               aria-hidden
-            />
+            >
+              <div className="h-1.5 w-10 rounded-full bg-fg/20" />
+            </div>
             {children}
           </motion.div>
         </>
