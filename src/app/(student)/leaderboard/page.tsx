@@ -62,7 +62,9 @@ export default async function LeaderboardPage() {
         Who&rsquo;s running campus this week?
       </p>
 
-      <RanksTabs students={students} depts={depts} meId={me} />
+      {/* Leaderboard shows the top 10 students; the full board still feeds the
+          department-rivalry aura derivation above. */}
+      <RanksTabs students={students.slice(0, 10)} depts={depts} meId={me} />
     </main>
   );
 }

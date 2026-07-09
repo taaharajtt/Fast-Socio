@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { FloatingDock } from "@/components/floating-dock";
+import { PushAutoEnable } from "@/components/push/push-auto-enable";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -55,6 +56,8 @@ export default async function StudentLayout({
         }}
       />
       <div className="flex-1 pb-20">{children}</div>
+      {/* Enable push notifications by default for signed-in students. */}
+      <PushAutoEnable />
       <FloatingDock
         badges={{ "/chat": chatBadge }}
         avatarUrl={profile?.avatar_url}

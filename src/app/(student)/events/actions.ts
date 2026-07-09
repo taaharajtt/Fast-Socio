@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { isAppStorageUrl } from "@/lib/url-safety";
 
 /** Submit a new event for admin approval (status starts pending). */
 export async function createEvent(input: {
@@ -12,6 +13,7 @@ export async function createEvent(input: {
   category: string;
   location: string;
   startsAt: string; // ISO datetime-local value
+  coverUrl?: string | null;
   communityId?: string | null;
 }): Promise<{ error: string } | void> {
   const supabase = await createClient();
@@ -27,6 +29,9 @@ export async function createEvent(input: {
   const startsAt = new Date(input.startsAt);
   if (Number.isNaN(startsAt.getTime()))
     return { error: "Invalid start date." };
+  // Cover is client-supplied — only accept media we host (P2-04).
+  if (input.coverUrl && !isAppStorageUrl(input.coverUrl))
+    return { error: "Invalid cover image." };
 
   const allowed = await checkRateLimit("create_event", 10, 24 * 60 * 60);
   if (!allowed) return { error: "You've submitted too many events today." };
@@ -40,6 +45,7 @@ export async function createEvent(input: {
       description: input.description.trim() || null,
       category: input.category,
       location: input.location.trim() || null,
+      cover_url: input.coverUrl ?? null,
       starts_at: startsAt.toISOString(),
       status: "pending",
     })

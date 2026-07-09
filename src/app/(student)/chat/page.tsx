@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Search, Edit3, ChevronLeft } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { RequestRow, type IncomingRequest } from "@/components/chat/request-row";
 import { OpenChatButton } from "@/components/chat/open-chat-button";
 import { ChatCommunityTabs } from "@/components/chat/chat-community-tabs";
@@ -157,31 +157,17 @@ export default async function ChatPage({
     <main className="mx-auto w-full max-w-md px-4 py-6">
       <div className="flex items-center justify-between">
         <h1 className="text-[22px] font-bold tracking-tight">Messages</h1>
-        <div className="flex items-center gap-2.5">
-          <Link
-            href="/chat?view=requests"
-            className="flex items-center gap-1 rounded-full bg-card px-3 py-1.5 text-[13px] text-fg-muted"
-          >
-            Requests
-            {incoming.length > 0 && (
-              <span className="font-semibold text-accent">{incoming.length}</span>
-            )}
-          </Link>
-          <Link
-            href="/discover"
-            aria-label="Search people"
-            className="flex h-9 w-9 items-center justify-center text-fg"
-          >
-            <Search className="h-5 w-5" aria-hidden />
-          </Link>
-          <Link
-            href="/discover"
-            aria-label="New message"
-            className="flex h-9 w-9 items-center justify-center text-fg"
-          >
-            <Edit3 className="h-5 w-5" aria-hidden />
-          </Link>
-        </div>
+        {/* Requests is the sole top-right action (replaces the old search/edit
+            icons). */}
+        <Link
+          href="/chat?view=requests"
+          className="flex items-center gap-1 rounded-full bg-card px-3 py-1.5 text-[13px] text-fg-muted"
+        >
+          Requests
+          {incoming.length > 0 && (
+            <span className="font-semibold text-accent">{incoming.length}</span>
+          )}
+        </Link>
       </div>
 
       <ChatCommunityTabs active="messages" />

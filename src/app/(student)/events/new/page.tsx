@@ -6,6 +6,7 @@ import { ChevronLeft } from "lucide-react";
 import { GlassButton, GlassCard, GlassInput } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { createEvent } from "@/app/(student)/events/actions";
+import { CoverUpload } from "@/components/communities/cover-upload";
 import { EVENT_CATEGORIES } from "@/lib/events/constants";
 
 export default function NewEventPage() {
@@ -14,6 +15,7 @@ export default function NewEventPage() {
   const [category, setCategory] = useState<string>("Social");
   const [location, setLocation] = useState("");
   const [startsAt, setStartsAt] = useState("");
+  const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -27,6 +29,7 @@ export default function NewEventPage() {
         category,
         location,
         startsAt,
+        coverUrl,
       });
       if (res?.error) setError(res.error);
     });
@@ -47,6 +50,13 @@ export default function NewEventPage() {
 
       <GlassCard className="p-5">
         <form onSubmit={submit} className="space-y-4">
+          <CoverUpload
+            value={coverUrl}
+            onChange={setCoverUrl}
+            label="Cover photo (optional)"
+            prefix="event"
+          />
+
           <div className="space-y-2">
             <label htmlFor="title" className="text-sm font-medium">
               Title
