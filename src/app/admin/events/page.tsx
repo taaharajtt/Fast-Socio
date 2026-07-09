@@ -1,4 +1,5 @@
 import { EventModRow, type PendingEvent } from "@/components/admin/event-mod-row";
+import { PageHeader } from "@/components/admin/kit";
 import { createClient } from "@/lib/supabase/server";
 import { formatEventDate } from "@/lib/events/format";
 
@@ -32,18 +33,17 @@ export default async function AdminEventsPage() {
   }));
 
   return (
-    <main>
-      <h1 className="text-2xl font-bold tracking-tight">Events</h1>
-      <p className="mt-1 text-sm text-fg-muted">
-        {items.length} pending approval
-      </p>
-      <div className="mt-5 space-y-3">
+    <>
+      <PageHeader title="Events" count={items.length} sub="Pending approval." />
+      <div className="space-y-2">
         {items.length === 0 ? (
-          <p className="text-sm text-fg-muted">Nothing to review.</p>
+          <p className="rounded-[4px] border border-glass-border px-4 py-3 text-sm text-fg-muted">
+            Nothing to review.
+          </p>
         ) : (
           items.map((e) => <EventModRow key={e.id} event={e} />)
         )}
       </div>
-    </main>
+    </>
   );
 }

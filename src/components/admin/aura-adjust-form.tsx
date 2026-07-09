@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { GlassButton, GlassInput } from "@/components/ui";
+import { field, ctrl } from "@/components/admin/kit";
 import { adjustAura } from "@/app/admin/users/actions";
 
 export function AuraAdjustForm({ userId }: { userId: string }) {
@@ -33,31 +33,35 @@ export function AuraAdjustForm({ userId }: { userId: string }) {
 
   return (
     <form onSubmit={submit} className="space-y-3">
-      <div className="space-y-2">
-        <label className="text-sm font-medium">Adjustment (+/-)</label>
-        <GlassInput
+      <div className="space-y-1.5">
+        <label className="font-mono text-[10px] uppercase tracking-[0.12em] text-fg-muted">
+          Adjustment (+/-)
+        </label>
+        <input
           type="number"
           inputMode="numeric"
           placeholder="e.g. 50 or -20"
           value={delta}
           onChange={(e) => setDelta(e.target.value)}
+          className={`${field} w-full`}
         />
       </div>
-      <div className="space-y-2">
-        <label className="text-sm font-medium">
+      <div className="space-y-1.5">
+        <label className="font-mono text-[10px] uppercase tracking-[0.12em] text-fg-muted">
           Reason <span className="text-error">*</span>
         </label>
-        <GlassInput
+        <input
           placeholder="Required — logged to the audit trail"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
+          className={`${field} w-full`}
         />
       </div>
-      <GlassButton type="submit" size="md" disabled={!valid || pending}>
+      <button type="submit" className={ctrl} disabled={!valid || pending}>
         {pending ? "Applying…" : "Apply adjustment"}
-      </GlassButton>
-      {done && <p className="text-sm text-success">Adjustment applied.</p>}
-      {error && <p className="text-sm text-error">{error}</p>}
+      </button>
+      {done && <p className="text-xs text-success">Adjustment applied.</p>}
+      {error && <p className="text-xs text-error">{error}</p>}
     </form>
   );
 }

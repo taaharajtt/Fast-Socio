@@ -1,11 +1,12 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { AdminSidebar, AdminTopbar } from "@/components/admin/admin-nav";
 
 /**
- * Admin shell. Role-gated: only profiles with is_admin = true may enter; anyone
- * else is bounced to the app. No floating dock here (UI Spec §4: dock hidden on
- * /admin). Feature-specific admin views live as slices under this group.
+ * Admin console shell. Role-gated: only profiles with is_admin = true may enter;
+ * anyone else is bounced to the app. Deliberately minimal — a control centre, not
+ * a consumer screen (no floating dock; UI Spec §4). Feature slices live under
+ * this group and share the sidebar/topbar nav.
  */
 export default async function AdminLayout({
   children,
@@ -27,38 +28,14 @@ export default async function AdminLayout({
   if (!profile?.is_admin) redirect("/home");
 
   return (
-    <div className="min-h-full bg-bg">
-      <header className="border-b border-glass-border px-5 py-4">
-        <div className="mx-auto flex max-w-3xl items-center gap-4">
-          <Link href="/admin" className="font-bold">
-            <span className="gradient-brand-text">FAST SOCIO</span> Admin
-          </Link>
-          <nav className="flex flex-wrap gap-3 text-sm text-fg-muted">
-            <Link href="/admin" className="hover:text-fg">
-              Dashboard
-            </Link>
-            <Link href="/admin/reports?type=profile" className="hover:text-fg">
-              Reports
-            </Link>
-            <Link href="/admin/communities" className="hover:text-fg">
-              Communities
-            </Link>
-            <Link href="/admin/events" className="hover:text-fg">
-              Events
-            </Link>
-            <Link href="/admin/users" className="hover:text-fg">
-              Users
-            </Link>
-            <Link href="/admin/audit" className="hover:text-fg">
-              Audit
-            </Link>
-          </nav>
-          <Link href="/home" className="ml-auto text-sm text-fg-muted hover:text-fg">
-            Exit
-          </Link>
-        </div>
-      </header>
-      <div className="mx-auto max-w-3xl px-5 py-6">{children}</div>
+    <div className="min-h-full bg-bg text-fg">
+      <AdminTopbar />
+      <div className="flex">
+        <AdminSidebar />
+        <main className="min-w-0 flex-1 px-4 py-6 md:px-8">
+          <div className="mx-auto max-w-5xl">{children}</div>
+        </main>
+      </div>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import {
   CommunityModRow,
   type PendingCommunity,
 } from "@/components/admin/community-mod-row";
+import { PageHeader } from "@/components/admin/kit";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function AdminCommunitiesPage() {
@@ -33,18 +34,17 @@ export default async function AdminCommunitiesPage() {
   }));
 
   return (
-    <main>
-      <h1 className="text-2xl font-bold tracking-tight">Communities</h1>
-      <p className="mt-1 text-sm text-fg-muted">
-        {items.length} pending approval
-      </p>
-      <div className="mt-5 space-y-3">
+    <>
+      <PageHeader title="Communities" count={items.length} sub="Pending approval." />
+      <div className="space-y-2">
         {items.length === 0 ? (
-          <p className="text-sm text-fg-muted">Nothing to review.</p>
+          <p className="rounded-[4px] border border-glass-border px-4 py-3 text-sm text-fg-muted">
+            Nothing to review.
+          </p>
         ) : (
           items.map((c) => <CommunityModRow key={c.id} community={c} />)
         )}
       </div>
-    </main>
+    </>
   );
 }

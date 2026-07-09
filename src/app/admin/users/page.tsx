@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { GlassCard } from "@/components/ui";
+import { PageHeader, Table, Th, Td, field, ctrl, rowClass } from "@/components/admin/kit";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function AdminUsersPage({
@@ -12,55 +12,83 @@ export default async function AdminUsersPage({
 
   let query = supabase
     .from("profiles")
-    .select("id, full_name, department, aura_score")
+    .select("id, full_name, department, aura_score, is_banned")
     .order("aura_score", { ascending: false })
-    .limit(30);
+    .limit(50);
   if (q && q.trim()) query = query.ilike("full_name", `%${q.trim()}%`);
 
   const { data: users } = await query;
+  const rows = users ?? [];
 
   return (
-    <main>
-      <h1 className="text-2xl font-bold tracking-tight">Users</h1>
-      <p className="mt-1 text-sm text-fg-muted">
-        Search a student to view or adjust their Aura.
-      </p>
+    <>
+      <PageHeader title="Users" count={rows.length} sub="Search a student to view or adjust their record." />
 
-      <form method="GET" className="mt-4 flex gap-2">
+      <form method="GET" className="mb-4 flex gap-2">
         <input
           name="q"
           defaultValue={q ?? ""}
           placeholder="Search by name…"
-          className="glass h-10 flex-1 rounded-[var(--radius-pill)] px-4 text-sm text-fg outline-none placeholder:text-fg-muted"
+          className={`${field} flex-1`}
         />
-        <button
-          type="submit"
-          className="rounded-[var(--radius-pill)] bg-aura px-4 text-sm text-white"
-        >
+        <button type="submit" className={ctrl}>
           Search
         </button>
       </form>
 
-      <div className="mt-5 space-y-2">
-        {(users ?? []).map((u) => (
-          <Link key={u.id} href={`/admin/users/${u.id}`} className="block">
-            <GlassCard className="flex items-center justify-between p-4">
-              <div className="min-w-0">
-                <p className="truncate font-semibold">
-                  {u.full_name ?? "Unnamed"}
-                </p>
-                <p className="truncate text-xs text-fg-muted">
-                  {u.department ?? "—"}
-                </p>
-              </div>
-              <span className="text-sm text-aura">★ {u.aura_score}</span>
-            </GlassCard>
-          </Link>
-        ))}
-        {(users ?? []).length === 0 && (
-          <p className="text-sm text-fg-muted">No users found.</p>
-        )}
-      </div>
-    </main>
+      <Table minWidth={560}>
+        <thead>
+          <tr>
+            <Th>Name</Th>
+            <Th>Department</Th>
+            <Th>Status</Th>
+            <Th className="text-right">Aura</Th>
+            <Th className="w-8" />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr>
+              <Td className="text-fg-muted" >
+                No users found.
+              </Td>
+              <Td /><Td /><Td /><Td />
+            </tr>
+          ) : (
+            rows.map((u) => (
+              <tr key={u.id} className={rowClass}>
+                <Td>
+                  <Link
+                    href={`/admin/users/${u.id}`}
+                    className="font-medium text-fg hover:underline"
+                  >
+                    {u.full_name ?? "Unnamed"}
+                  </Link>
+                </Td>
+                <Td className="text-fg-muted">{u.department ?? "—"}</Td>
+                <Td>
+                  <span className="inline-flex items-center gap-1.5 text-xs text-fg">
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        u.is_banned ? "bg-error" : "bg-success"
+                      }`}
+                    />
+                    {u.is_banned ? "Banned" : "Active"}
+                  </span>
+                </Td>
+                <Td className="text-right font-mono tabular-nums text-fg">
+                  {u.aura_score}
+                </Td>
+                <Td className="text-right text-fg-disabled">
+                  <Link href={`/admin/users/${u.id}`} aria-label="Open">
+                    ›
+                  </Link>
+                </Td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </Table>
+    </>
   );
 }

@@ -1,4 +1,4 @@
-import { GlassCard } from "@/components/ui";
+import { PageHeader } from "@/components/admin/kit";
 import { createClient } from "@/lib/supabase/server";
 
 const PAGE_SIZE = 30;
@@ -6,8 +6,8 @@ const PAGE_SIZE = 30;
 /**
  * Cross-feature moderation audit-log viewer. Admins can SELECT
  * moderation_audit_log directly (RLS policy "admins read moderation audit
- * log"), so no new DB object is needed — we read the table and join actor names
- * client-side-free (a second query keyed by the page's actor ids).
+ * log"), so no new DB object is needed — we read the table and resolve actor
+ * names with a second query keyed by the page's actor ids.
  */
 export default async function AdminAuditPage({
   searchParams,
@@ -63,58 +63,45 @@ export default async function AdminAuditPage({
     return `/admin/audit${qs ? `?${qs}` : ""}`;
   };
 
-  return (
-    <main>
-      <h1 className="text-2xl font-bold tracking-tight">Audit log</h1>
-      <p className="mt-1 text-sm text-fg-muted">
-        Immutable record of moderation actions · {total} entr
-        {total === 1 ? "y" : "ies"}
-      </p>
+  const tab = (label: string, href: string, active: boolean) => (
+    <a
+      href={href}
+      className={
+        active
+          ? "-mb-px border-b-2 border-fg px-3 py-1.5 text-xs font-medium text-fg"
+          : "px-3 py-1.5 text-xs text-fg-muted hover:text-fg"
+      }
+    >
+      {label}
+    </a>
+  );
 
-      {/* Action filter — server-friendly link row, matching the reports page. */}
-      <nav className="mt-4 flex flex-wrap gap-2">
-        <a
-          href="/admin/audit"
-          className={
-            !action
-              ? "rounded-full bg-aura px-3 py-1 text-sm text-white"
-              : "glass rounded-full px-3 py-1 text-sm text-fg-muted"
-          }
-        >
-          all
-        </a>
-        {actions.map((a) => (
-          <a
-            key={a}
-            href={`/admin/audit?action=${encodeURIComponent(a)}`}
-            className={
-              a === action
-                ? "rounded-full bg-aura px-3 py-1 text-sm text-white"
-                : "glass rounded-full px-3 py-1 text-sm text-fg-muted"
-            }
-          >
-            {a}
-          </a>
-        ))}
+  return (
+    <>
+      <PageHeader title="Audit log" count={total} sub="Immutable record of moderation actions." />
+
+      {/* Action filter — underline tabs (server-friendly links). */}
+      <nav className="mb-4 flex flex-wrap gap-1 border-b border-glass-border">
+        {tab("all", "/admin/audit", !action)}
+        {actions.map((a) =>
+          tab(a, `/admin/audit?action=${encodeURIComponent(a)}`, a === action),
+        )}
       </nav>
 
-      <div className="mt-5 space-y-2">
+      <div className="divide-y divide-glass-border overflow-hidden rounded-[4px] border border-glass-border">
         {entries.length === 0 ? (
-          <p className="text-sm text-fg-muted">No audit entries.</p>
+          <p className="px-4 py-3 text-sm text-fg-muted">No audit entries.</p>
         ) : (
           entries.map((e) => (
-            <GlassCard key={e.id} className="p-4">
+            <div key={e.id} className="px-4 py-3">
               <div className="flex items-baseline justify-between gap-3">
-                <p className="font-semibold">
-                  <span className="text-aura">{e.action}</span>
+                <p className="font-mono text-sm">
+                  <span className="text-fg">{e.action}</span>
                   {e.target_type && (
-                    <span className="text-fg-muted">
-                      {" "}
-                      · {e.target_type}
-                    </span>
+                    <span className="text-fg-muted"> · {e.target_type}</span>
                   )}
                 </p>
-                <span className="shrink-0 text-xs text-fg-muted">
+                <span className="shrink-0 font-mono text-[11px] text-fg-muted">
                   {/* Stable UTC — avoids locale hydration mismatch. */}
                   {`${e.created_at.slice(0, 16).replace("T", " ")} UTC`}
                 </span>
@@ -125,32 +112,30 @@ export default async function AdminAuditPage({
                   <span className="font-mono"> · target {e.target_id.slice(0, 8)}</span>
                 )}
               </p>
-              {e.reason && (
-                <p className="mt-1 text-sm">{e.reason}</p>
-              )}
+              {e.reason && <p className="mt-1 text-sm text-fg">{e.reason}</p>}
               {e.metadata &&
                 Object.keys(e.metadata as Record<string, unknown>).length > 0 && (
-                  <pre className="mt-2 overflow-x-auto rounded-lg bg-black/20 p-2 text-[11px] text-fg-muted">
+                  <pre className="mt-2 overflow-x-auto rounded-[3px] border border-glass-border bg-input p-2 text-[11px] text-fg-muted">
                     {JSON.stringify(e.metadata, null, 2)}
                   </pre>
                 )}
-            </GlassCard>
+            </div>
           ))
         )}
       </div>
 
       {(hasPrev || hasNext) && (
-        <div className="mt-5 flex items-center justify-between">
+        <div className="mt-4 flex items-center justify-between">
           {hasPrev ? (
-            <a href={link(pageNum - 1)} className="text-sm text-aura hover:underline">
+            <a href={link(pageNum - 1)} className="text-xs text-fg-muted hover:text-fg hover:underline">
               ← Newer
             </a>
           ) : (
             <span />
           )}
-          <span className="text-xs text-fg-muted">page {pageNum + 1}</span>
+          <span className="font-mono text-[11px] text-fg-muted">page {pageNum + 1}</span>
           {hasNext ? (
-            <a href={link(pageNum + 1)} className="text-sm text-aura hover:underline">
+            <a href={link(pageNum + 1)} className="text-xs text-fg-muted hover:text-fg hover:underline">
               Older →
             </a>
           ) : (
@@ -158,6 +143,6 @@ export default async function AdminAuditPage({
           )}
         </div>
       )}
-    </main>
+    </>
   );
 }

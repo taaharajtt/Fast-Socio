@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { field, ctrl, ctrlDanger } from "@/components/admin/kit";
 import { setUserBan } from "@/app/admin/users/actions";
 
 export function BanUserButton({
@@ -34,24 +35,18 @@ export function BanUserButton({
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="Reason (optional, logged)"
-          className="glass h-10 w-full rounded-[var(--radius-sm)] px-3 text-sm text-fg outline-none placeholder:text-fg-muted"
+          className={`${field} w-full`}
         />
       )}
       <button
         type="button"
         onClick={submit}
         disabled={pending}
-        className={`w-full rounded-[var(--radius-pill)] py-2.5 text-sm font-semibold text-white disabled:opacity-50 ${
-          isBanned ? "bg-success/90" : "bg-error/90"
-        }`}
+        className={isBanned ? ctrl : ctrlDanger}
       >
-        {pending
-          ? "Working…"
-          : isBanned
-            ? "Restore access"
-            : "Ban user"}
+        {pending ? "Working…" : isBanned ? "Restore access" : "Ban user"}
       </button>
-      {error && <p className="text-sm text-error">{error}</p>}
+      {error && <p className="text-xs text-error">{error}</p>}
     </div>
   );
 }

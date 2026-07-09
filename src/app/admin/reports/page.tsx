@@ -1,4 +1,5 @@
 import { ReportRow, type AdminReport } from "@/components/admin/report-row";
+import { PageHeader } from "@/components/admin/kit";
 import { createClient } from "@/lib/supabase/server";
 
 const TYPES = ["profile", "post", "comment", "message", "community", "event"];
@@ -43,23 +44,19 @@ export default async function AdminReportsPage({
   }));
 
   return (
-    <main>
-      <h1 className="text-2xl font-bold tracking-tight">Reports</h1>
-      <p className="mt-1 text-sm text-fg-muted">
-        Moderation queue · {items.length} {type} report
-        {items.length === 1 ? "" : "s"}
-      </p>
+    <>
+      <PageHeader title="Reports" count={items.length} sub="Moderation queue." />
 
-      {/* Type filter — a server-friendly link row (admin is utilitarian). */}
-      <nav className="mt-4 flex flex-wrap gap-2">
+      {/* Type filter — underline tabs (server-friendly links). */}
+      <nav className="mb-4 flex flex-wrap gap-1 border-b border-glass-border">
         {TYPES.map((t) => (
           <a
             key={t}
             href={`/admin/reports?type=${t}`}
             className={
               t === type
-                ? "rounded-full bg-aura px-3 py-1 text-sm text-white"
-                : "glass rounded-full px-3 py-1 text-sm text-fg-muted"
+                ? "-mb-px border-b-2 border-fg px-3 py-1.5 text-xs font-medium text-fg"
+                : "px-3 py-1.5 text-xs text-fg-muted hover:text-fg"
             }
           >
             {t}
@@ -67,13 +64,15 @@ export default async function AdminReportsPage({
         ))}
       </nav>
 
-      <div className="mt-5 space-y-3">
+      <div className="space-y-2">
         {items.length === 0 ? (
-          <p className="text-sm text-fg-muted">No {type} reports.</p>
+          <p className="rounded-[4px] border border-glass-border px-4 py-3 text-sm text-fg-muted">
+            No {type} reports.
+          </p>
         ) : (
           items.map((r) => <ReportRow key={r.id} report={r} />)
         )}
       </div>
-    </main>
+    </>
   );
 }
