@@ -143,6 +143,8 @@ export type FeedComment = {
 export async function fetchComments(postId: string): Promise<{
   comments: FeedComment[];
   authors: Record<string, { full_name: string | null; avatar_url: string | null }>;
+  /** The signed-in viewer's avatar — rendered beside the composer (IG format). */
+  viewerAvatar: string | null;
 }> {
   const supabase = await createClient();
   const { data: rows } = await supabase
@@ -152,6 +154,19 @@ export async function fetchComments(postId: string): Promise<{
     .eq("hidden", false)
     .order("created_at", { ascending: true });
   const comments = (rows as FeedComment[]) ?? [];
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  let viewerAvatar: string | null = null;
+  if (user) {
+    const { data: me } = await supabase
+      .from("profiles")
+      .select("avatar_url")
+      .eq("id", user.id)
+      .single();
+    viewerAvatar = me?.avatar_url ?? null;
+  }
 
   const ids = [...new Set(comments.map((c) => c.author_id))];
   const authors: Record<
@@ -167,7 +182,7 @@ export async function fetchComments(postId: string): Promise<{
       authors[p.id] = { full_name: p.full_name, avatar_url: p.avatar_url };
     });
   }
-  return { comments, authors };
+  return { comments, authors, viewerAvatar };
 }
 
 /** Add a comment to a post. */

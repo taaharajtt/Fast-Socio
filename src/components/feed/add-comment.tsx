@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { Send, Smile } from "lucide-react";
 import { GlassButton } from "@/components/ui";
+import { AppImage } from "@/components/ui/app-image";
 import { addComment } from "@/app/(student)/home/actions";
 
 const EMOJIS = [
@@ -11,7 +12,20 @@ const EMOJIS = [
   "😎", "🤔", "😳", "🥳", "☕", "⚡", "🎮", "📚",
 ];
 
-export function AddComment({ postId }: { postId: string }) {
+/** Instagram-style quick reactions shown as a single always-visible row. */
+const QUICK_EMOJIS = ["❤️", "🙌", "🔥", "👏", "🥺", "😍", "😮", "😂"];
+
+export function AddComment({
+  postId,
+  avatarUrl,
+  showQuickEmojis = false,
+}: {
+  postId: string;
+  /** Viewer's avatar, shown to the left of the field (IG comment sheet). */
+  avatarUrl?: string | null;
+  /** Render a horizontal quick-reaction emoji row above the input (IG format). */
+  showQuickEmojis?: boolean;
+}) {
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [showEmoji, setShowEmoji] = useState(false);
@@ -20,7 +34,6 @@ export function AddComment({ postId }: { postId: string }) {
 
   function insertEmoji(emoji: string) {
     setBody((prev) => prev + emoji);
-    setShowEmoji(false);
     inputRef.current?.focus();
   }
 
@@ -40,14 +53,35 @@ export function AddComment({ postId }: { postId: string }) {
   }
 
   return (
-    <div className="sticky bottom-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
-      {showEmoji && (
+    <div className="pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
+      {/* IG quick-reaction strip. */}
+      {showQuickEmojis && (
+        <div className="mb-2 flex justify-between px-1">
+          {QUICK_EMOJIS.map((emoji) => (
+            <button
+              key={emoji}
+              type="button"
+              onClick={() => insertEmoji(emoji)}
+              className="text-2xl leading-none transition-transform active:scale-125"
+              aria-label={`React ${emoji}`}
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Full emoji grid (toggle) — used on the full post page. */}
+      {!showQuickEmojis && showEmoji && (
         <div className="glass-strong mb-2 grid grid-cols-8 gap-1 rounded-[var(--radius-sm)] p-2">
           {EMOJIS.map((emoji) => (
             <button
               key={emoji}
               type="button"
-              onClick={() => insertEmoji(emoji)}
+              onClick={() => {
+                insertEmoji(emoji);
+                setShowEmoji(false);
+              }}
               className="flex h-9 w-full items-center justify-center rounded-lg text-xl hover:bg-glass"
               aria-label={`Insert ${emoji}`}
             >
@@ -56,15 +90,22 @@ export function AddComment({ postId }: { postId: string }) {
           ))}
         </div>
       )}
+
       <form onSubmit={submit} className="flex items-center gap-2">
-        <button
-          type="button"
-          aria-label="Emoji"
-          onClick={() => setShowEmoji((s) => !s)}
-          className="glass flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-fg-muted hover:text-fg"
-        >
-          <Smile className="h-5 w-5" aria-hidden />
-        </button>
+        {avatarUrl !== undefined ? (
+          <div className="glass relative h-9 w-9 shrink-0 overflow-hidden rounded-full">
+            {avatarUrl ? <AppImage src={avatarUrl} alt="" sizes="36px" /> : null}
+          </div>
+        ) : (
+          <button
+            type="button"
+            aria-label="Emoji"
+            onClick={() => setShowEmoji((s) => !s)}
+            className="glass flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-fg-muted hover:text-fg"
+          >
+            <Smile className="h-5 w-5" aria-hidden />
+          </button>
+        )}
         <input
           ref={inputRef}
           value={body}

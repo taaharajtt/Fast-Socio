@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AppImage } from "@/components/ui/app-image";
+import { timeAgo } from "@/lib/time";
 
 export type Comment = {
   id: string;
@@ -86,9 +87,6 @@ export function CommentThread({
 
   return (
     <>
-      <h2 className="text-sm font-medium text-fg-muted">
-        {comments.length} comment{comments.length === 1 ? "" : "s"}
-      </h2>
       {comments.map((c) => {
         const a = authors[c.author_id];
         return (
@@ -103,8 +101,15 @@ export function CommentThread({
               ) : null}
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-semibold">{a?.full_name ?? "Student"}</p>
-              <p className="text-[15px]">{c.body}</p>
+              <p className="text-[13px]">
+                <span className="font-semibold text-fg">
+                  {a?.full_name ?? "Student"}
+                </span>
+                <span className="ml-2 text-fg-muted">{timeAgo(c.created_at)}</span>
+              </p>
+              <p className="mt-0.5 whitespace-pre-wrap text-[15px] leading-[20px] text-fg">
+                {c.body}
+              </p>
             </div>
           </div>
         );

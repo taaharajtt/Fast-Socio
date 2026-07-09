@@ -9,9 +9,11 @@ import { fetchComments } from "@/app/(student)/home/actions";
 type Authors = Record<string, { full_name: string | null; avatar_url: string | null }>;
 
 /**
- * Half-screen, scrollable comment sheet (UAT-004). Opens in place over the feed
- * instead of navigating to /post/[id]. Loads the thread on open, then hands off
- * to the same realtime CommentThread + AddComment used on the full post page.
+ * Half-screen, scrollable comment sheet (UAT-004) styled to match Instagram:
+ * slides up from the bottom over everything, stops around mid-screen, with a
+ * centered "Comments" header, an edge-to-edge scrollable thread, a quick-emoji
+ * reaction strip, and an avatar + pill composer pinned to the bottom. Opens in
+ * place over the feed instead of navigating to /post/[id].
  */
 export function CommentsSheet({
   postId,
@@ -23,7 +25,12 @@ export function CommentsSheet({
   onClose: () => void;
 }) {
   return (
-    <GlassSheet open={open} onClose={onClose} label="Comments" className="h-[75vh]">
+    <GlassSheet
+      open={open}
+      onClose={onClose}
+      label="Comments"
+      className="flex h-[75vh] flex-col"
+    >
       {open && <CommentsSheetContent postId={postId} />}
     </GlassSheet>
   );
@@ -33,6 +40,7 @@ function CommentsSheetContent({ postId }: { postId: string }) {
   const [data, setData] = useState<{
     comments: Comment[];
     authors: Authors;
+    viewerAvatar: string | null;
   } | null>(null);
 
   useEffect(() => {
@@ -46,13 +54,18 @@ function CommentsSheetContent({ postId }: { postId: string }) {
   }, [postId]);
 
   return (
-    <div className="flex h-full flex-col">
-      <h2 className="mb-2 text-lg font-bold">Comments</h2>
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pb-2">
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* Centered header with a full-width hairline (IG comment sheet). */}
+      <h2 className="-mx-5 shrink-0 border-b border-glass-border px-5 pb-3 text-center text-base font-bold text-fg">
+        Comments
+      </h2>
+
+      {/* Scrollable thread — edge to edge, scrolls independently of the sheet. */}
+      <div className="-mx-5 min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
         {data === null ? (
           <p className="py-6 text-center text-sm text-fg-muted">Loading comments…</p>
         ) : data.comments.length === 0 ? (
-          <p className="py-6 text-center text-sm text-fg-muted">
+          <p className="py-10 text-center text-sm text-fg-muted">
             No comments yet. Be the first.
           </p>
         ) : (
@@ -63,8 +76,14 @@ function CommentsSheetContent({ postId }: { postId: string }) {
           />
         )}
       </div>
-      <div className="shrink-0 border-t border-glass-border">
-        <AddComment postId={postId} />
+
+      {/* Composer pinned to the bottom, above a full-width divider. */}
+      <div className="-mx-5 shrink-0 border-t border-glass-border px-5">
+        <AddComment
+          postId={postId}
+          avatarUrl={data?.viewerAvatar ?? null}
+          showQuickEmojis
+        />
       </div>
     </div>
   );
