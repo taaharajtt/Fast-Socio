@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +34,12 @@ export function GlassSheet({
   // (comments, share list) scrolls freely instead of being swallowed by the
   // sheet's drag gesture (Instagram-style behaviour).
   const dragControls = useDragControls();
+  // Portal target (document.body) is only available after mount on the client.
+  // Rendering into body escapes any transformed/filtered ancestor, which would
+  // otherwise become the containing block for our position:fixed panel and make
+  // the sheet span from the post's edge instead of the app's bottom.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   // Escape-to-close + focus trap while open.
   useEffect(() => {
@@ -80,7 +87,9 @@ export function GlassSheet({
     };
   }, [open, onClose]);
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <AnimatePresence>
       {open && (
         <>
@@ -129,6 +138,7 @@ export function GlassSheet({
           </motion.div>
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }
