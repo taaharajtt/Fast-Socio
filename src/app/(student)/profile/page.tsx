@@ -1,9 +1,18 @@
 import Link from "next/link";
-import { Settings, Pencil, Zap, Heart, Check } from "lucide-react";
+import { Settings, Pencil, Plus, Zap, Heart } from "lucide-react";
 import { ProfileTabs, type ProfileCommunity } from "@/components/profile/profile-tabs";
+import { ShareProfileButton } from "@/components/profile/share-profile-button";
 import { createClient } from "@/lib/supabase/server";
 import { AppImage } from "@/components/ui/app-image";
+import { deptMeta } from "@/lib/leaderboard/departments";
 import type { FeedPost } from "@/lib/feed/types";
+
+/** 1 → "1st", 6 → "6th" (UISpec V3 "6th Semester"). */
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]);
+}
 
 export default async function ProfilePage() {
   const supabase = await createClient();
@@ -16,7 +25,7 @@ export default async function ProfilePage() {
     await Promise.all([
       supabase
         .from("profiles")
-        .select("full_name, department, semester, bio, avatar_url, aura_score")
+        .select("full_name, department, semester, bio, avatar_url, aura_score, verified")
         .eq("id", me)
         .single(),
       supabase
@@ -42,81 +51,111 @@ export default async function ProfilePage() {
       Boolean(c) && c!.status === "approved"
     )) as ProfileCommunity[];
 
+  const deptLabel = profile?.department
+    ? deptMeta(profile.department).abbr +
+      (profile.semester ? ` · ${ordinal(profile.semester)} Semester` : "")
+    : "—";
+
   return (
     <div className="mx-auto w-full max-w-md">
-      {/* Cover banner (gradient — no cover image in schema) + overlapping avatar. */}
-      <div className="relative h-44">
+      {/* Cover banner (200px — gradient, no cover image in schema) + overlapping
+          80px avatar and a purple verified badge (UISpec V3 Screen 14). */}
+      <div className="relative h-[200px]">
         <div className="h-full w-full gradient-brand opacity-80" />
-        <div className="absolute inset-0 bg-gradient-to-t from-bg to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/20 to-transparent" />
         <Link
           href="/settings"
           aria-label="Settings"
-          className="glass absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full text-white"
+          className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white"
         >
           <Settings className="h-4 w-4" aria-hidden />
         </Link>
-        <div className="absolute -bottom-10 left-5">
-          <div className="relative">
-            <div className="relative h-20 w-20 overflow-hidden rounded-full border-[3px] border-bg">
-              {profile?.avatar_url ? (
-                <AppImage
-                  src={profile.avatar_url}
-                  alt={profile.full_name ?? "Avatar"}
-                  sizes="80px"
-                />
-              ) : (
-                <span className="glass block h-full w-full" />
-              )}
-            </div>
-            <span className="gradient-brand absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-bg">
-              <Check className="h-3 w-3 text-white" aria-hidden />
-            </span>
+        {profile?.full_name && (
+          <span className="absolute bottom-3 left-[108px] text-[13px] font-semibold text-white/70">
+            {profile.full_name}
+          </span>
+        )}
+        <div className="absolute -bottom-10 left-4">
+          <div className="relative h-20 w-20 overflow-hidden rounded-full border-[3px] border-bg bg-card">
+            {profile?.avatar_url ? (
+              <AppImage
+                src={profile.avatar_url}
+                alt={profile.full_name ?? "Avatar"}
+                sizes="80px"
+              />
+            ) : (
+              <span className="block h-full w-full" />
+            )}
           </div>
         </div>
       </div>
 
-      <main className="px-5 pb-28">
-        <div className="mb-4 mt-12 flex items-end justify-between">
-          <div className="min-w-0">
-            <h1 className="truncate text-xl font-extrabold tracking-tight">
-              {profile?.full_name ?? "—"}
-            </h1>
-            <p className="truncate text-sm text-fg-muted">
-              {profile?.department ?? "—"}
-              {profile?.semester ? ` · Semester ${profile.semester}` : ""}
-            </p>
-          </div>
-          <Link
-            href="/profile/edit"
-            className="gradient-brand flex items-center gap-1.5 rounded-[var(--radius-pill)] px-4 py-2 text-sm font-semibold text-white"
+      <main className="px-4 pb-28">
+        {profile?.verified && (
+          <span
+            aria-label="Verified"
+            className="mt-12 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-white"
           >
-            <Pencil className="h-4 w-4" aria-hidden />
-            Edit
-          </Link>
+            <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" aria-hidden>
+              <path
+                d="M5 13l4 4L19 7"
+                stroke="currentColor"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </span>
+        )}
+
+        <div className={profile?.verified ? "mt-1" : "mt-12"}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="truncate text-[22px] font-bold tracking-tight">
+                {profile?.full_name ?? "—"}
+              </h1>
+              <p className="truncate text-sm text-fg-muted">{deptLabel}</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <ShareProfileButton profileId={me} />
+              <Link
+                href="/profile/edit"
+                className="gradient-brand flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold text-white"
+              >
+                <Pencil className="h-4 w-4" aria-hidden />
+                Edit
+              </Link>
+              <Link
+                href="/home"
+                aria-label="Create post"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white"
+              >
+                <Plus className="h-4 w-4" aria-hidden />
+              </Link>
+            </div>
+          </div>
         </div>
 
-        {/* Stats */}
-        <div className="mb-5 flex gap-3">
-          <Link href="/profile/aura" className="glass flex-1 rounded-[var(--radius-md)] p-3 text-center">
-            <div className="flex items-center justify-center gap-1">
-              <Zap className="h-3.5 w-3.5 text-warning" aria-hidden />
-              <p className="text-lg font-bold">{profile?.aura_score ?? 0}</p>
+        {/* Stats — Aura (gold ⚡) + Matches (red ❤️). */}
+        <div className="mb-5 mt-4 flex gap-3">
+          <Link href="/profile/aura" className="flex-1 rounded-xl bg-card p-3 text-center">
+            <div className="flex items-center justify-center gap-1.5">
+              <Zap className="h-4 w-4 text-gold" aria-hidden />
+              <p className="text-xl font-bold">{profile?.aura_score ?? 0}</p>
             </div>
-            <p className="text-[11px] text-fg-muted">Aura</p>
+            <p className="mt-1 text-xs text-fg-muted">Aura</p>
           </Link>
-          <div className="glass flex-1 rounded-[var(--radius-md)] p-3 text-center">
-            <div className="flex items-center justify-center gap-1">
-              <Heart className="h-3.5 w-3.5 text-accent" aria-hidden />
-              <p className="text-lg font-bold">{matchCount ?? 0}</p>
+          <div className="flex-1 rounded-xl bg-card p-3 text-center">
+            <div className="flex items-center justify-center gap-1.5">
+              <Heart className="h-4 w-4 fill-error text-error" aria-hidden />
+              <p className="text-xl font-bold">{matchCount ?? 0}</p>
             </div>
-            <p className="text-[11px] text-fg-muted">Matches</p>
+            <p className="mt-1 text-xs text-fg-muted">Matches</p>
           </div>
         </div>
 
         {profile?.bio && (
-          <p className="mb-5 text-[15px] leading-relaxed text-fg/90">
-            {profile.bio}
-          </p>
+          <p className="mb-5 text-sm leading-relaxed text-fg">{profile.bio}</p>
         )}
 
         <ProfileTabs posts={posts} communities={communities} currentUserId={me} />

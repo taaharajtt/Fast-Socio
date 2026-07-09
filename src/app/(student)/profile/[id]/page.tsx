@@ -5,7 +5,15 @@ import { OpenChatButton } from "@/components/chat/open-chat-button";
 import { ProfileTabs, type ProfileCommunity } from "@/components/profile/profile-tabs";
 import { createClient } from "@/lib/supabase/server";
 import { AppImage } from "@/components/ui/app-image";
+import { deptMeta } from "@/lib/leaderboard/departments";
 import type { FeedPost } from "@/lib/feed/types";
+
+/** 1 → "1st", 6 → "6th" (UISpec V3 "6th Semester"). */
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]);
+}
 
 export default async function PublicProfilePage({
   params,
@@ -22,7 +30,7 @@ export default async function PublicProfilePage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, full_name, department, semester, bio, avatar_url, aura_score")
+    .select("id, full_name, department, semester, bio, avatar_url, aura_score, verified")
     .eq("id", id)
     .single();
   if (!profile) notFound();
@@ -74,20 +82,31 @@ export default async function PublicProfilePage({
       .join("")
       .toUpperCase() || "?";
 
+  const deptLabel = profile.department
+    ? deptMeta(profile.department).abbr +
+      (profile.semester ? ` · ${ordinal(profile.semester)} Semester` : "")
+    : "—";
+
   return (
     <div className="mx-auto w-full max-w-md">
-      <div className="relative h-44">
+      {/* Cover banner (200px) + overlapping 80px avatar (UISpec V3 Screen 14). */}
+      <div className="relative h-[200px]">
         <div className="h-full w-full gradient-brand opacity-80" />
-        <div className="absolute inset-0 bg-gradient-to-t from-bg to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/20 to-transparent" />
         <Link
           href="/home"
           aria-label="Back"
-          className="glass absolute left-4 top-4 flex h-9 w-9 items-center justify-center rounded-full text-white"
+          className="absolute left-4 top-[max(1rem,env(safe-area-inset-top))] flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white"
         >
           <ChevronLeft className="h-5 w-5" aria-hidden />
         </Link>
-        <div className="absolute -bottom-10 left-5">
-          <div className="relative h-20 w-20 overflow-hidden rounded-full border-[3px] border-bg">
+        {profile.full_name && (
+          <span className="absolute bottom-3 left-[108px] text-[13px] font-semibold text-white/70">
+            {profile.full_name}
+          </span>
+        )}
+        <div className="absolute -bottom-10 left-4">
+          <div className="relative h-20 w-20 overflow-hidden rounded-full border-[3px] border-bg bg-card">
             {profile.avatar_url ? (
               <AppImage
                 src={profile.avatar_url}
@@ -95,7 +114,7 @@ export default async function PublicProfilePage({
                 sizes="80px"
               />
             ) : (
-              <span className="glass flex h-full w-full items-center justify-center text-xl font-bold">
+              <span className="flex h-full w-full items-center justify-center text-xl font-bold">
                 {initials}
               </span>
             )}
@@ -103,55 +122,60 @@ export default async function PublicProfilePage({
         </div>
       </div>
 
-      <main className="px-5 pb-28">
-        <div className="mb-4 mt-12 flex items-end justify-between gap-3">
+      <main className="px-4 pb-28">
+        {profile.verified && (
+          <span
+            aria-label="Verified"
+            className="mt-12 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-white"
+          >
+            <Check className="h-3 w-3" strokeWidth={3} aria-hidden />
+          </span>
+        )}
+        <div
+          className={`flex items-start justify-between gap-3 ${profile.verified ? "mt-1" : "mt-12"}`}
+        >
           <div className="min-w-0">
-            <h1 className="truncate text-xl font-extrabold tracking-tight">
+            <h1 className="truncate text-[22px] font-bold tracking-tight">
               {profile.full_name ?? "Student"}
             </h1>
-            <p className="truncate text-sm text-fg-muted">
-              {profile.department ?? "—"}
-              {profile.semester ? ` · Semester ${profile.semester}` : ""}
-            </p>
+            <p className="truncate text-sm text-fg-muted">{deptLabel}</p>
           </div>
           {isSelf ? (
             <Link
               href="/profile/edit"
-              className="gradient-brand flex items-center gap-1.5 rounded-[var(--radius-pill)] px-4 py-2 text-sm font-semibold text-white"
+              className="gradient-brand flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold text-white"
             >
               Edit
             </Link>
           ) : matched ? (
             <OpenChatButton otherId={profile.id} />
           ) : (
-            <span className="glass flex items-center gap-1.5 rounded-[var(--radius-pill)] px-4 py-2 text-sm font-medium text-fg-muted">
+            <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-card px-4 py-2 text-sm font-medium text-fg-muted">
               <Check className="h-4 w-4" aria-hidden />
               Match to chat
             </span>
           )}
         </div>
 
-        <div className="mb-5 flex gap-3">
-          <div className="glass flex-1 rounded-[var(--radius-md)] p-3 text-center">
-            <div className="flex items-center justify-center gap-1">
-              <Zap className="h-3.5 w-3.5 text-warning" aria-hidden />
-              <p className="text-lg font-bold">{profile.aura_score ?? 0}</p>
+        <div className="mb-5 mt-4 flex gap-3">
+          <div className="flex-1 rounded-xl bg-card p-3 text-center">
+            <div className="flex items-center justify-center gap-1.5">
+              <Zap className="h-4 w-4 text-gold" aria-hidden />
+              <p className="text-xl font-bold">{profile.aura_score ?? 0}</p>
             </div>
-            <p className="text-[11px] text-fg-muted">Aura</p>
+            <p className="mt-1 text-xs text-fg-muted">Aura</p>
           </div>
-          <div className="glass flex-1 rounded-[var(--radius-md)] p-3 text-center">
-            <div className="flex items-center justify-center gap-1">
-              <Heart className="h-3.5 w-3.5 text-accent" aria-hidden />
-              <p className="text-lg font-bold">{matchCount ?? 0}</p>
+          <div className="flex-1 rounded-xl bg-card p-3 text-center">
+            <div className="flex items-center justify-center gap-1.5">
+              <Heart className="h-4 w-4 fill-error text-error" aria-hidden />
+              <p className="text-xl font-bold">{matchCount ?? 0}</p>
             </div>
-            <p className="text-[11px] text-fg-muted">Matches</p>
+            <p className="mt-1 text-xs text-fg-muted">Matches</p>
           </div>
         </div>
 
         {profile.bio && (
-          <p className="mb-5 text-[15px] leading-relaxed text-fg/90">
-            {profile.bio}
-          </p>
+          <p className="mb-5 text-sm leading-relaxed text-fg">{profile.bio}</p>
         )}
 
         <ProfileTabs posts={posts} communities={communities} currentUserId={me} />
