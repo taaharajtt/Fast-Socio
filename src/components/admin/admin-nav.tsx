@@ -9,18 +9,28 @@ import {
   Boxes,
   CalendarDays,
   ScrollText,
+  Database,
   type LucideIcon,
 } from "lucide-react";
+import type { AdminRole } from "@/lib/admin/access";
 
-type NavItem = { href: string; label: string; icon: LucideIcon; match: string };
+type NavItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  match: string;
+  super?: boolean;
+};
 
-/** Console sections. `match` is the pathname prefix that marks a link active. */
+/** Console sections. `match` is the pathname prefix that marks a link active;
+ *  `super` items are hidden from moderators. */
 const NAV: NavItem[] = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard, match: "/admin" },
   { href: "/admin/reports?type=profile", label: "Reports", icon: Flag, match: "/admin/reports" },
   { href: "/admin/users", label: "Users", icon: Users, match: "/admin/users" },
   { href: "/admin/communities", label: "Communities", icon: Boxes, match: "/admin/communities" },
   { href: "/admin/events", label: "Events", icon: CalendarDays, match: "/admin/events" },
+  { href: "/admin/database", label: "Database", icon: Database, match: "/admin/database", super: true },
   { href: "/admin/audit", label: "Audit log", icon: ScrollText, match: "/admin/audit" },
 ];
 
@@ -30,8 +40,9 @@ function useActive() {
     match === "/admin" ? pathname === "/admin" : pathname.startsWith(match);
 }
 
-export function AdminSidebar() {
+export function AdminSidebar({ isSuper, role }: { isSuper: boolean; role: AdminRole }) {
   const isActive = useActive();
+  const items = NAV.filter((n) => !n.super || isSuper);
   return (
     <aside className="sticky top-0 hidden h-screen w-52 shrink-0 flex-col border-r border-glass-border bg-bg md:flex">
       <div className="flex h-14 items-center gap-2 border-b border-glass-border px-4">
@@ -39,11 +50,11 @@ export function AdminSidebar() {
           Socio
         </span>
         <span className="rounded-[3px] border border-glass-border px-1.5 py-0.5 font-mono text-[10px] uppercase text-fg-muted">
-          admin
+          {role === "super_admin" ? "super" : "mod"}
         </span>
       </div>
       <nav className="flex-1 space-y-0.5 p-2">
-        {NAV.map(({ href, label, icon: Icon, match }) => {
+        {items.map(({ href, label, icon: Icon, match }) => {
           const active = isActive(match);
           return (
             <Link
@@ -74,14 +85,15 @@ export function AdminSidebar() {
   );
 }
 
-export function AdminTopbar() {
+export function AdminTopbar({ isSuper }: { isSuper: boolean }) {
   const isActive = useActive();
+  const items = NAV.filter((n) => !n.super || isSuper);
   return (
     <div className="sticky top-0 z-10 flex items-center gap-1 overflow-x-auto border-b border-glass-border bg-bg px-3 py-2 [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden">
       <span className="mr-1 shrink-0 font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-fg">
         Socio·admin
       </span>
-      {NAV.map(({ href, label, match }) => {
+      {items.map(({ href, label, match }) => {
         const active = isActive(match);
         return (
           <Link
