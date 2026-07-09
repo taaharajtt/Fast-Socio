@@ -7,8 +7,9 @@ import {
   useTransform,
   type PanInfo,
 } from "framer-motion";
-import { Heart, X, Mail, RotateCcw, Flag, Info } from "lucide-react";
+import { Heart, X, MessageCircle, RotateCcw, Flag, Info, Zap } from "lucide-react";
 import { GlassButton, GlassChip, GlassSheet, GlassInput } from "@/components/ui";
+import { VerifiedBadge } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { AppImage } from "@/components/ui/app-image";
 import type { DiscoverProfile } from "@/lib/profile/types";
@@ -120,7 +121,6 @@ export function SwipeDeck({
                 key={p.id}
                 profile={p}
                 onDecision={act}
-                onReport={() => setReportFor(p)}
                 onExpand={() => setDetailFor(p)}
               />
             ) : (
@@ -144,35 +144,32 @@ export function SwipeDeck({
         </div>
       )}
 
-      {/* Action row (UI Spec §5.6: Pass / Message / Like) */}
+      {/* Action row (UISpec V3 Screen 5): Pass 56 · Message 56 · Like 64 (glow). */}
       <div className="mt-5 flex items-center justify-center gap-6">
-        <GlassButton
-          variant="glass"
-          size="icon"
-          className="h-14 w-14"
+        <button
+          type="button"
           aria-label="Pass"
           onClick={() => act(top, "pass")}
+          className="flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-card text-fg-muted transition-all hover:text-fg active:scale-90"
         >
-          <X className="h-6 w-6 text-error" aria-hidden />
-        </GlassButton>
-        <GlassButton
-          variant="glass"
-          size="icon"
-          className="h-12 w-12"
+          <X className="h-6 w-6" aria-hidden />
+        </button>
+        <button
+          type="button"
           aria-label="Message"
           onClick={() => setSheetFor(top)}
+          className="flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-card text-fg-muted transition-all hover:text-fg active:scale-90"
         >
-          <Mail className="h-5 w-5 text-cyan" aria-hidden />
-        </GlassButton>
-        <GlassButton
-          variant="primary"
-          size="icon"
-          className="h-14 w-14"
+          <MessageCircle className="h-5 w-5" aria-hidden />
+        </button>
+        <button
+          type="button"
           aria-label="Like"
           onClick={() => act(top, "like")}
+          className="flex h-16 w-16 items-center justify-center rounded-full bg-accent text-white shadow-[0_8px_24px_rgba(124,58,237,0.5)] transition-all hover:bg-accent-light active:scale-90"
         >
-          <Heart className="h-6 w-6" aria-hidden />
-        </GlassButton>
+          <Heart className="h-7 w-7" aria-hidden />
+        </button>
       </div>
 
       <MessageRequestSheet
@@ -180,7 +177,14 @@ export function SwipeDeck({
         onClose={() => setSheetFor(null)}
       />
       <ReportSheet profile={reportFor} onClose={() => setReportFor(null)} />
-      <DetailSheet profile={detailFor} onClose={() => setDetailFor(null)} />
+      <DetailSheet
+        profile={detailFor}
+        onClose={() => setDetailFor(null)}
+        onReport={(p) => {
+          setDetailFor(null);
+          setReportFor(p);
+        }}
+      />
       {matchName && (
         <MatchOverlay name={matchName} onClose={() => setMatchName(null)} />
       )}
@@ -191,12 +195,10 @@ export function SwipeDeck({
 function TopCard({
   profile,
   onDecision,
-  onReport,
   onExpand,
 }: {
   profile: DiscoverProfile;
   onDecision: (p: DiscoverProfile, d: "like" | "pass") => void;
-  onReport: () => void;
   onExpand: () => void;
 }) {
   const x = useMotionValue(0);
@@ -220,33 +222,26 @@ function TopCard({
       whileTap={{ scale: 0.98 }}
     >
       <ProfileCardBody profile={profile}>
-        <button
-          type="button"
-          aria-label="Report"
-          onPointerDownCapture={(e) => e.stopPropagation()}
-          onClick={onReport}
-          className="absolute left-4 top-4 flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-black/35 text-white/90 hover:bg-black/55 hover:text-white"
-        >
-          <Flag className="h-4 w-4" aria-hidden />
-        </button>
+        {/* Full-profile + report affordance (kept subtle so it doesn't clash
+            with the V3 name badge / aura pill overlays). Report lives inside. */}
         <button
           type="button"
           aria-label="View full profile"
           onPointerDownCapture={(e) => e.stopPropagation()}
           onClick={onExpand}
-          className="absolute bottom-4 right-4 flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-black/35 text-white/90 hover:bg-black/55 hover:text-white"
+          className="absolute bottom-4 right-4 flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-black/40 text-white/90 hover:bg-black/60 hover:text-white"
         >
           <Info className="h-4 w-4" aria-hidden />
         </button>
         <motion.div
           style={{ opacity: likeOpacity }}
-          className="absolute left-5 top-5 rounded-xl border-2 border-success px-3 py-1 text-lg font-extrabold uppercase text-success"
+          className="absolute left-5 top-20 rounded-xl border-2 border-success px-3 py-1 text-lg font-extrabold uppercase text-success"
         >
           Like
         </motion.div>
         <motion.div
           style={{ opacity: passOpacity }}
-          className="absolute right-5 top-5 rounded-xl border-2 border-error px-3 py-1 text-lg font-extrabold uppercase text-error"
+          className="absolute right-5 top-20 rounded-xl border-2 border-error px-3 py-1 text-lg font-extrabold uppercase text-error"
         >
           Pass
         </motion.div>
@@ -265,7 +260,7 @@ function StackedCard({ index }: { index: number }) {
         zIndex: -index,
       }}
     >
-      <div className="glass h-full w-full rounded-[36px]" />
+      <div className="h-full w-full rounded-3xl bg-card" />
     </div>
   );
 }
@@ -277,8 +272,9 @@ function ProfileCardBody({
   profile: DiscoverProfile;
   children?: React.ReactNode;
 }) {
+  const firstName = profile.full_name?.split(" ")[0] ?? "Student";
   return (
-    <div className="glass relative h-full w-full overflow-hidden rounded-[36px]">
+    <div className="relative h-full w-full overflow-hidden rounded-3xl bg-card">
       {profile.avatar_url ? (
         <AppImage
           src={profile.avatar_url}
@@ -293,28 +289,32 @@ function ProfileCardBody({
         </div>
       )}
 
-      {/* Aura chip overlaid top-right (UI Spec §5.6). Dark backing (not the
-          translucent .glass) so it stays legible over any photo without a
+      {/* TOP OVERLAY (UISpec V3 Screen 5) — name badge (top-left) + aura pill
+          (top-right). Dark pill backings stay legible over any photo without a
           per-frame backdrop blur. */}
-      <div className="absolute right-4 top-4">
-        <GlassChip tone="aura" className="border-white/15 !bg-black/40">
-          ★ {profile.aura_score}
-        </GlassChip>
+      <div className="absolute left-4 top-4 flex items-center gap-1.5 rounded-full bg-black/50 px-3 py-1.5">
+        <Zap className="h-3 w-3 text-gold-text" aria-hidden />
+        <span className="text-[13px] font-semibold text-white">{firstName}</span>
+      </div>
+      <div className="absolute right-4 top-4 flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-1">
+        <Zap className="h-3 w-3 text-gold-text" aria-hidden />
+        <span className="text-[13px] font-semibold text-gold-text">
+          {profile.aura_score.toLocaleString()}
+        </span>
       </div>
 
-      {/* Gradient scrim + identity (bottom third) */}
-      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent p-5 pt-16">
-        <h2 className="text-2xl font-bold text-white">
+      {/* BOTTOM OVERLAY — gradient fade + identity. */}
+      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent p-5 pt-20">
+        <h2 className="flex items-center gap-1.5 text-[22px] font-bold text-white">
           {profile.full_name ?? "Student"}
+          {profile.verified && <VerifiedBadge size={16} />}
         </h2>
-        <p className="text-white/80">
+        <p className="mt-1 text-sm text-fg-muted">
           {profile.department ?? ""}
-          {profile.semester ? ` · Semester ${profile.semester}` : ""}
+          {profile.semester ? ` · ${ordinal(profile.semester)} Semester` : ""}
         </p>
         {profile.bio && (
-          <p className="mt-1 line-clamp-2 text-sm text-white/70">
-            {profile.bio}
-          </p>
+          <p className="mt-1.5 line-clamp-2 text-sm text-white">{profile.bio}</p>
         )}
         {profile.interests?.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
@@ -332,6 +332,13 @@ function ProfileCardBody({
       {children}
     </div>
   );
+}
+
+/** 1 → "1st", 6 → "6th", etc. (UISpec V3 "6th Semester"). */
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]);
 }
 
 function MessageRequestSheet({
@@ -405,17 +412,20 @@ function MessageRequestSheet({
 function DetailSheet({
   profile,
   onClose,
+  onReport,
 }: {
   profile: DiscoverProfile | null;
   onClose: () => void;
+  onReport: (p: DiscoverProfile) => void;
 }) {
   return (
     <GlassSheet open={Boolean(profile)} onClose={onClose}>
       {profile && (
         <div className="space-y-4">
           <div>
-            <h3 className="text-2xl font-bold">
+            <h3 className="flex items-center gap-1.5 text-2xl font-bold">
               {profile.full_name ?? "Student"}
+              {profile.verified && <VerifiedBadge size={18} />}
             </h3>
             <p className="text-fg-muted">
               {profile.department ?? ""}
@@ -441,6 +451,14 @@ function DetailSheet({
               </div>
             </div>
           )}
+          <button
+            type="button"
+            onClick={() => onReport(profile)}
+            className="flex items-center gap-2 pt-1 text-sm font-medium text-error/90 hover:text-error"
+          >
+            <Flag className="h-4 w-4" aria-hidden />
+            Report {profile.full_name?.split(" ")[0] ?? "profile"}
+          </button>
         </div>
       )}
     </GlassSheet>

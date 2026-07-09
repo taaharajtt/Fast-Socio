@@ -7,6 +7,8 @@ export type DiscoverProfile = {
   bio: string | null;
   avatar_url: string | null;
   aura_score: number;
+  /** Whether this candidate is a verified account (UISpec V3 §2.7). */
+  verified?: boolean | null;
   interests: string[];
   /** True when this candidate is a previously-liked profile being recycled
    *  because fresh candidates ran low (Discover never runs empty, P4-05). */

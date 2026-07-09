@@ -1,26 +1,24 @@
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
-import { GlassCard } from "@/components/ui";
 import { createClient } from "@/lib/supabase/server";
+import { timeAgo } from "@/lib/time";
 import {
   notificationView,
   notificationActionPhrase,
-  notificationCategory,
   SYSTEM_NOTIFICATION_TYPES,
 } from "@/lib/notifications/view";
 import {
   ActivityList,
   type ActivityItem,
 } from "@/components/notifications/activity-list";
+import { MarkAllReadButton } from "@/components/notifications/mark-all-read";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** Bucket an item by recency into Today / This Week / Earlier. */
+/** Bucket an item into Today / Earlier (UISpec V3 Screen 4 sections). */
 function bucketOf(latestAt: string): ActivityItem["bucket"] {
   const age = Date.now() - new Date(latestAt).getTime();
-  if (age < DAY_MS) return "Today";
-  if (age < 7 * DAY_MS) return "This Week";
-  return "Earlier";
+  return age < DAY_MS ? "Today" : "Earlier";
 }
 
 type Notif = {
@@ -139,46 +137,49 @@ export default async function ActivityPage() {
   }
 
   const feed = buildFeed(notifs);
+  const unreadCount = notifs.filter((n) => !n.read_at).length;
 
-  // Mark everything read now that they've opened the panel.
-  if (notifs.some((n) => !n.read_at)) await supabase.rpc("mark_notifications_read");
+  // NB: reads are no longer cleared on open (UISpec V3) — the unread purple
+  // borders persist until the user taps "Mark all read".
 
-  // Flatten into serializable rows for the client filter/list.
+  // Flatten into serializable rows for the list.
   const items: ActivityItem[] = feed.map((item) => {
     const actor = item.actorId ? actors.get(item.actorId) : undefined;
     const latest = item.actions[0];
     return {
       key: item.key,
-      category: notificationCategory(latest.type),
       type: latest.type,
+      actorName: actor?.name ?? null,
       avatar: actor?.avatar ?? null,
       text: summarize(item, actor?.name ?? null),
       href: notificationView(latest.type, actor?.name ?? null, latest.data).href,
       unread: item.anyUnread,
+      timeAgo: `${timeAgo(item.latestAt)} ago`,
       bucket: bucketOf(item.latestAt),
     };
   });
 
   return (
-    <main className="mx-auto w-full max-w-md px-5 py-6">
-      <div className="mb-4 flex items-center gap-3">
+    <main className="mx-auto w-full max-w-md px-4 py-4">
+      {/* Header (UISpec V3 Screen 4): back · title · Mark all read. */}
+      <header className="mb-2 flex items-center gap-3">
         <Link
           href="/home"
           aria-label="Back"
-          className="glass flex h-9 w-9 items-center justify-center rounded-full text-fg-muted"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-fg"
         >
-          <ChevronLeft className="h-5 w-5" aria-hidden />
+          <ChevronLeft className="h-6 w-6" aria-hidden />
         </Link>
-        <h1 className="text-xl font-extrabold tracking-tight">Activity</h1>
-      </div>
+        <h1 className="flex-1 text-[22px] font-bold tracking-tight">
+          Notifications
+        </h1>
+        {unreadCount > 0 && <MarkAllReadButton />}
+      </header>
 
       {items.length === 0 ? (
-        <GlassCard className="p-6 text-center">
-          <p className="text-sm text-fg-muted">
-            No activity yet. Reacts, replies, matches, and announcements will
-            show up here.
-          </p>
-        </GlassCard>
+        <p className="py-16 text-center text-[15px] text-fg-muted">
+          You&apos;re all caught up! 🎉
+        </p>
       ) : (
         <ActivityList items={items} />
       )}
