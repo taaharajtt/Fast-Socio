@@ -2,9 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, Zap, Heart, Check } from "lucide-react";
 import { OpenChatButton } from "@/components/chat/open-chat-button";
-import { ProfileTabs, type GridPost, type ProfileCommunity } from "@/components/profile/profile-tabs";
+import { ProfileTabs, type ProfileCommunity } from "@/components/profile/profile-tabs";
 import { createClient } from "@/lib/supabase/server";
 import { AppImage } from "@/components/ui/app-image";
+import type { FeedPost } from "@/lib/feed/types";
 
 export default async function PublicProfilePage({
   params,
@@ -43,10 +44,10 @@ export default async function PublicProfilePage({
     await Promise.all([
       supabase
         .from("feed_posts")
-        .select("id, body, image_url")
+        .select("*")
         .eq("author_id", id)
         .order("created_at", { ascending: false })
-        .limit(18),
+        .limit(30),
       supabase
         .from("matches")
         .select("id", { count: "exact", head: true })
@@ -57,7 +58,7 @@ export default async function PublicProfilePage({
         .eq("user_id", id),
     ]);
 
-  const posts = (postRows as GridPost[]) ?? [];
+  const posts = (postRows as FeedPost[]) ?? [];
   const communities = ((commRows ?? [])
     .map((r) => r.community as unknown as (ProfileCommunity & { status: string }) | null)
     .filter((c): c is ProfileCommunity & { status: string } =>
@@ -153,7 +154,7 @@ export default async function PublicProfilePage({
           </p>
         )}
 
-        <ProfileTabs posts={posts} communities={communities} />
+        <ProfileTabs posts={posts} communities={communities} currentUserId={me} />
       </main>
     </div>
   );
