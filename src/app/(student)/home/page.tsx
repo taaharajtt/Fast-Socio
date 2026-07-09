@@ -4,7 +4,6 @@ import { Activity } from "lucide-react";
 import { PostComposer } from "@/components/feed/post-composer";
 import { FeedList } from "@/components/feed/feed-list";
 import { EventsStrip } from "@/components/feed/events-strip";
-import { NotificationBell } from "@/components/notifications/notification-bell";
 import { createClient } from "@/lib/supabase/server";
 import { FEED_PAGE_SIZE, type FeedPost } from "@/lib/feed/types";
 
@@ -23,7 +22,9 @@ export default async function HomePage() {
 
   return (
     <main className="mx-auto w-full max-w-md pb-4">
-      {/* Header (UISpec V3 Screen 2) — 56px, title + bell + avatar */}
+      {/* Header (UISpec V3 Screen 2) — brand logo + Activity (top-right).
+          The in-app notification bell was removed; notifications now surface as
+          PWA push on mobile/iOS (Settings → Enable push). */}
       <header className="flex h-20 items-center justify-between px-4">
         {/* Brand logo (UAT-001). PNG lives at public/brand/logo.png; the h1 text
             stays as the accessible name and renders if the asset is missing. */}
@@ -38,18 +39,15 @@ export default async function HomePage() {
           />
           <span className="sr-only">FAST SOCIO</span>
         </h1>
-        <div className="flex items-center gap-3">
-          <NotificationBell />
-          {/* UAT-005: the old dp slot now opens Activity; the dp itself moved to
-              the bottom nav's "Me" tab. */}
-          <Link
-            href="/activity"
-            aria-label="Activity"
-            className="glass flex h-9 w-9 items-center justify-center rounded-full text-fg-muted hover:text-fg"
-          >
-            <Activity className="h-5 w-5" aria-hidden />
-          </Link>
-        </div>
+        {/* Activity is the sole top-right action; the dp lives on the bottom
+            nav's "Me" tab (UAT-005). */}
+        <Link
+          href="/activity"
+          aria-label="Activity"
+          className="glass flex h-9 w-9 items-center justify-center rounded-full text-fg-muted hover:text-fg"
+        >
+          <Activity className="h-5 w-5" aria-hidden />
+        </Link>
       </header>
 
       <div className="px-4">
