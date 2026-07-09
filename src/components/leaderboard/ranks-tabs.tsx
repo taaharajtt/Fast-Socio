@@ -204,49 +204,38 @@ function StudentBoard({ rows, meId }: { rows: StudentRow[]; meId: string }) {
             Rankings
           </p>
           <div className="space-y-2">
-            {rest.map((r) => {
-              const t = LEADERBOARD_TITLES[r.rank];
-              return (
-                <div
-                  key={r.user_id}
-                  className={cn(
-                    "flex items-center gap-3 rounded-[12px] px-4 py-3.5",
-                    r.user_id === meId
-                      ? "bg-accent/[0.10] ring-1 ring-accent/40"
-                      : "bg-card"
+            {rest.map((r) => (
+              <div
+                key={r.user_id}
+                className={cn(
+                  "flex items-center gap-3 rounded-[12px] px-4 py-3.5",
+                  r.user_id === meId
+                    ? "bg-accent/[0.10] ring-1 ring-accent/40"
+                    : "bg-card"
+                )}
+              >
+                <span className="w-7 shrink-0 text-center text-base font-bold text-fg-disabled">
+                  {r.rank}
+                </span>
+                <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full bg-bg-elevated">
+                  {r.avatar_url && (
+                    <AppImage src={r.avatar_url} alt={r.full_name ?? ""} sizes="44px" />
                   )}
-                >
-                  <span className="w-7 shrink-0 text-center text-base font-bold text-fg-disabled">
-                    {r.rank}
-                  </span>
-                  <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full bg-bg-elevated">
-                    {r.avatar_url && (
-                      <AppImage src={r.avatar_url} alt={r.full_name ?? ""} sizes="44px" />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[15px] font-semibold text-fg">
-                      {r.full_name ?? "Student"}
-                    </p>
-                    <p className="truncate text-[13px] text-fg-muted">
-                      {deptMeta(r.department).abbr}
-                    </p>
-                    {t && (
-                      <span
-                        className="mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-bold"
-                        style={{ backgroundColor: `${t.tint}26`, color: t.tint }}
-                      >
-                        {t.emoji} {t.title}
-                      </span>
-                    )}
-                  </div>
-                  <span className="flex shrink-0 items-center gap-1 text-[15px] font-semibold text-gold">
-                    <Zap className="h-3.5 w-3.5" aria-hidden />
-                    {r.weekly_aura.toLocaleString()}
-                  </span>
                 </div>
-              );
-            })}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[15px] font-semibold text-fg">
+                    {r.full_name ?? "Student"}
+                  </p>
+                  <p className="truncate text-[13px] text-fg-muted">
+                    {deptMeta(r.department).abbr}
+                  </p>
+                </div>
+                <span className="flex shrink-0 items-center gap-1 text-[15px] font-semibold text-gold">
+                  <Zap className="h-3.5 w-3.5" aria-hidden />
+                  {r.weekly_aura.toLocaleString()}
+                </span>
+              </div>
+            ))}
           </div>
         </>
       )}
