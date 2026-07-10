@@ -42,9 +42,8 @@ export function ImageCropper({
   onCancel: () => void;
   onCropped: (result: CropResult) => void;
 }) {
-  // The parent only renders this once the user has picked a file, so it never
-  // exists during SSR and document.body is always available for the portal.
-  const [src] = useState(() => URL.createObjectURL(file));
+  const [src, setSrc] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [natural, setNatural] = useState<Size | null>(null);
   const [frame, setFrame] = useState<Size>({ width: 0, height: 0 });
   const [zoom, setZoom] = useState(MIN_ZOOM);
@@ -59,7 +58,21 @@ export function ImageCropper({
   const gesture = useRef<{ distance: number; zoom: number } | null>(null);
   const panStart = useRef<{ x: number; y: number; offset: Offset } | null>(null);
 
-  useEffect(() => () => URL.revokeObjectURL(src), [src]);
+  // Create the preview URL *inside* the effect and revoke it in the SAME
+  // cleanup, so its lifetime is bound to the effect (UAT-003). The previous
+  // lazy-useState URL was revoked by an unrelated cleanup before the <img>
+  // could load it — under React Strict Mode's setup→cleanup→setup in dev, and
+  // under remount/PWA-resume races in prod — leaving the cropper pointed at a
+  // dead blob (naturalWidth 0, Done permanently disabled). Here the strict-mode
+  // teardown revokes the first URL and immediately mints a live replacement.
+  useEffect(() => {
+    const url = URL.createObjectURL(file);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing an external Object URL resource to state; must run after commit
+    setSrc(url);
+    setLoadFailed(false);
+    setNatural(null);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
 
   // The frame fills the available width at the requested aspect, but never grows
   // past the viewport height it has to share with the header and controls.
@@ -247,25 +260,42 @@ export function ImageCropper({
             round ? "rounded-full" : "rounded-[10px]"
           }`}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            ref={imgRef}
-            src={src}
-            alt=""
-            draggable={false}
-            onLoad={(e) =>
-              setNatural({
-                width: e.currentTarget.naturalWidth,
-                height: e.currentTarget.naturalHeight,
-              })
-            }
-            style={{
-              width: natural ? natural.width * scale : undefined,
-              height: natural ? natural.height * scale : undefined,
-              transform: `translate3d(${offset.x}px, ${offset.y}px, 0)`,
-            }}
-            className="max-w-none origin-top-left select-none"
-          />
+          {src && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              ref={imgRef}
+              src={src}
+              alt=""
+              draggable={false}
+              onLoad={(e) => {
+                const w = e.currentTarget.naturalWidth;
+                const h = e.currentTarget.naturalHeight;
+                if (w > 0 && h > 0) setNatural({ width: w, height: h });
+                else setLoadFailed(true);
+              }}
+              onError={() => setLoadFailed(true)}
+              style={{
+                width: natural ? natural.width * scale : undefined,
+                height: natural ? natural.height * scale : undefined,
+                transform: `translate3d(${offset.x}px, ${offset.y}px, 0)`,
+              }}
+              className="max-w-none origin-top-left select-none"
+            />
+          )}
+          {loadFailed && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center">
+              <p className="text-sm font-medium text-white">
+                Couldn&rsquo;t load that image.
+              </p>
+              <button
+                type="button"
+                onClick={onCancel}
+                className="rounded-full bg-white/15 px-4 py-2 text-sm font-medium text-white"
+              >
+                Pick another
+              </button>
+            </div>
+          )}
           {/* Rule-of-thirds guides, drawn over the image and never exported. */}
           <div className="pointer-events-none absolute inset-0" aria-hidden>
             <div className="absolute inset-y-0 left-1/3 w-px bg-white/20" />

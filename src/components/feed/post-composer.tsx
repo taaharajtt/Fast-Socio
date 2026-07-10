@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { ImagePlus, Loader2, VenetianMask, X } from "lucide-react";
 import { GlassButton, GlassCard } from "@/components/ui";
 import { ImageCropper, type CropResult } from "@/components/ui/image-cropper";
+import { UploadProgressBar } from "@/components/ui/upload-progress";
+import { uploadWithProgress, publicStorageUrl } from "@/lib/storage-upload";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { createPost } from "@/app/(student)/home/actions";
@@ -26,6 +28,7 @@ export function PostComposer({
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadPct, setUploadPct] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -41,32 +44,29 @@ export function PostComposer({
   /** Upload the cropped result (UAT-008); the original never leaves the device. */
   async function onCropped({ blob, extension, mimeType }: CropResult) {
     setPendingFile(null);
-    setUploading(true);
     setError(null);
     const supabase = createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) {
-      setUploading(false);
-      return;
-    }
+    if (!user) return;
     // De-identified path (P3-01): never embed the author's uid in a post image
     // URL, otherwise anonymous posts leak their author. `shared/` is allowed by
     // the post-media INSERT policy; the object key is random.
     const path = `shared/${crypto.randomUUID()}.${extension}`;
-    const { error: upErr } = await supabase.storage
-      .from("post-media")
-      .upload(path, blob, { contentType: mimeType });
-    if (upErr) {
+    setUploading(true);
+    setUploadPct(0);
+    try {
+      await uploadWithProgress("post-media", path, blob, {
+        contentType: mimeType,
+        onProgress: (p) => setUploadPct(p.percent),
+      });
+      setImageUrl(publicStorageUrl("post-media", path));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
       setUploading(false);
-      setError(upErr.message);
-      return;
     }
-    setImageUrl(
-      supabase.storage.from("post-media").getPublicUrl(path).data.publicUrl
-    );
-    setUploading(false);
   }
 
   function submit() {
@@ -113,7 +113,13 @@ export function PostComposer({
         className="w-full resize-none bg-transparent text-[15px] text-fg outline-none placeholder:text-fg-muted"
       />
 
-      {imageUrl && (
+      {uploading && (
+        <div className="mt-2 rounded-xl bg-bg-elevated px-4 py-3">
+          <UploadProgressBar percent={uploadPct} label="Uploading image" />
+        </div>
+      )}
+
+      {imageUrl && !uploading && (
         <div className="relative mt-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img

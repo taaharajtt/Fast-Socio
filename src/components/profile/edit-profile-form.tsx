@@ -9,6 +9,8 @@ import { createClient } from "@/lib/supabase/client";
 import { updateProfile } from "@/app/(student)/profile/actions";
 import { CoverUpload } from "@/components/communities/cover-upload";
 import { ImageCropper, type CropResult } from "@/components/ui/image-cropper";
+import { UploadProgressRing } from "@/components/ui/upload-progress";
+import { uploadWithProgress, publicStorageUrl } from "@/lib/storage-upload";
 import {
   BIO_MAX,
   DEPARTMENTS,
@@ -54,6 +56,7 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
   const [coverUrl, setCoverUrl] = useState<string | null>(initial.coverUrl);
   const [pendingAvatar, setPendingAvatar] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadPct, setUploadPct] = useState(0);
   const [department, setDepartment] = useState(initial.department);
   const [semester, setSemester] = useState<number | null>(initial.semester);
   const [gender, setGender] = useState<string | null>(initial.gender);
@@ -92,27 +95,29 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
 
   async function onAvatarCropped({ blob, extension, mimeType }: CropResult) {
     setPendingAvatar(null);
-    setUploading(true);
+    setError(null);
     const {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) {
-      setUploading(false);
       setError("You are not signed in.");
       return;
     }
     const path = `${user.id}/${Date.now()}.${extension}`;
-    const { error: upErr } = await supabase.storage
-      .from("avatars")
-      .upload(path, blob, { upsert: true, contentType: mimeType });
-    if (upErr) {
+    setUploading(true);
+    setUploadPct(0);
+    try {
+      await uploadWithProgress("avatars", path, blob, {
+        contentType: mimeType,
+        upsert: true,
+        onProgress: (p) => setUploadPct(p.percent),
+      });
+      setAvatarUrl(publicStorageUrl("avatars", path));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
       setUploading(false);
-      setError(upErr.message);
-      return;
     }
-    const { data } = supabase.storage.from("avatars").getPublicUrl(path);
-    setAvatarUrl(data.publicUrl);
-    setUploading(false);
   }
 
   function toggleInterest(tag: string) {
@@ -190,6 +195,11 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
           ) : (
             <span className="text-2xl font-bold text-fg">{initials}</span>
           )}
+          {uploading && (
+            <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/60">
+              <UploadProgressRing percent={uploadPct} size={64} />
+            </span>
+          )}
           <span className="absolute bottom-0 right-0 flex h-9 w-9 items-center justify-center rounded-full bg-aura text-white shadow-[0_2px_10px_rgba(124,92,255,0.5)]">
             <Camera className="h-4 w-4" aria-hidden />
           </span>
@@ -249,9 +259,9 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
         </p>
       </div>
 
-      {/* Department */}
+      {/* School (UAT-008) */}
       <div className="space-y-2">
-        <label className="text-sm font-medium">Department</label>
+        <label className="text-sm font-medium">School</label>
         <div className="flex flex-wrap gap-2">
           {DEPARTMENTS.map((d) => (
             <Pill key={d} active={department === d} onClick={() => setDepartment(d)}>

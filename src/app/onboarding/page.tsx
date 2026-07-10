@@ -166,10 +166,10 @@ export default function OnboardingPage() {
         <section className="space-y-6">
           <div>
             <h1 className="text-2xl font-bold">Your academics</h1>
-            <p className="mt-1 text-fg-muted">Department and semester.</p>
+            <p className="mt-1 text-fg-muted">School and semester.</p>
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Department</label>
+            <label className="text-sm font-medium">School</label>
             <div className="flex flex-wrap gap-2">
               {DEPARTMENTS.map((d) => (
                 <Pill

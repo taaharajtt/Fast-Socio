@@ -31,11 +31,16 @@ export async function recordSwipe(
   );
   if (!allowed) return { ok: false, error: "Slow down a little." };
 
+  // Upsert, not insert (UAT-002): re-deciding a recycled profile refreshes its
+  // swipe timestamp so it drops to the BACK of the resurfaced queue instead of
+  // immediately looping back to the front. Composite PK (swiper_id, target_id).
   const { error } = await supabase
     .from("swipes")
-    .insert({ swiper_id: user.id, target_id: targetId, direction });
-  // Ignore duplicate swipes (already decided); treat as success.
-  if (error && error.code !== "23505") {
+    .upsert(
+      { swiper_id: user.id, target_id: targetId, direction },
+      { onConflict: "swiper_id,target_id" }
+    );
+  if (error) {
     return { ok: false, error: error.message };
   }
 

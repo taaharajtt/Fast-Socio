@@ -8,16 +8,25 @@
 type DeptMeta = { abbr: string; icon: string };
 
 const DEPT_META: Record<string, DeptMeta> = {
-  "Computer Science": { abbr: "CS", icon: "💻" },
-  "Artificial Intelligence": { abbr: "AI", icon: "🤖" },
-  "Software Engineering": { abbr: "SE", icon: "⚙️" },
-  "Electrical Engineering": { abbr: "EE", icon: "⚡" },
-  "Business Administration": { abbr: "BBA", icon: "📊" },
-  "Accounting & Finance": { abbr: "A&F", icon: "💰" },
-  "Data Science": { abbr: "DS", icon: "📈" },
-  "Civil Engineering": { abbr: "CE", icon: "🏗️" },
-  "Mechanical Engineering": { abbr: "ME", icon: "🔧" },
-  "Computer Engineering": { abbr: "CE", icon: "🖥️" },
+  // Three schools (UAT-008).
+  "Fast School of Computing": { abbr: "FSC", icon: "💻" },
+  "Fast School of Engineering": { abbr: "FSE", icon: "⚙️" },
+  "Fast School of Management": { abbr: "FSM", icon: "📊" },
+  // Legacy degree names — kept so a profile not yet remapped still renders a
+  // sensible badge until the 0048 backfill + user reconfirmation lands.
+  "Computer Science": { abbr: "FSC", icon: "💻" },
+  "Artificial Intelligence": { abbr: "FSC", icon: "💻" },
+  "Software Engineering": { abbr: "FSC", icon: "💻" },
+  "Data Science": { abbr: "FSC", icon: "💻" },
+  "Cyber Security": { abbr: "FSC", icon: "💻" },
+  "Computational Finance": { abbr: "FSC", icon: "💻" },
+  Mathematics: { abbr: "FSC", icon: "💻" },
+  "Electrical Engineering": { abbr: "FSE", icon: "⚙️" },
+  "Civil Engineering": { abbr: "FSE", icon: "⚙️" },
+  "Mechanical Engineering": { abbr: "FSE", icon: "⚙️" },
+  "Business Administration": { abbr: "FSM", icon: "📊" },
+  "Business Analytics": { abbr: "FSM", icon: "📊" },
+  "Accounting & Finance": { abbr: "FSM", icon: "📊" },
 };
 
 /** Build an initialism from a full name ("Foo Bar Baz" → "FBB"), capped at 4. */

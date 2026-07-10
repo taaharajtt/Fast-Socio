@@ -1,20 +1,16 @@
 /**
- * FAST NUCES academic constants for the profile wizard. Department list covers
- * the common FAST programs; adjust as the canonical list is confirmed.
+ * FAST NUCES schools (UAT-008). Individual degrees were collapsed into the three
+ * schools; `profiles.department` now stores one of these full names. The picker
+ * asks for your school, not your programme.
  */
 export const DEPARTMENTS = [
-  "Computer Science",
-  "Software Engineering",
-  "Artificial Intelligence",
-  "Data Science",
-  "Cyber Security",
-  "Electrical Engineering",
-  "Business Analytics",
-  "Business Administration",
-  "Accounting & Finance",
-  "Computational Finance",
-  "Mathematics",
+  "Fast School of Computing",
+  "Fast School of Engineering",
+  "Fast School of Management",
 ] as const;
+
+/** UI noun for `profiles.department` after the schools change (UAT-008). */
+export const SCHOOL_FIELD_LABEL = "School";
 
 /** Semesters 1–8 cover a standard four-year program. */
 export const SEMESTERS = Array.from({ length: 8 }, (_, i) => i + 1);

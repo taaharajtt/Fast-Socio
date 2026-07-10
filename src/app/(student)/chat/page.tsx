@@ -116,6 +116,93 @@ export default async function ChatPage({
     };
   });
 
+  // UAT-007: the communities you're in appear in Messages like IG group chats.
+  const { data: memberRows } = await supabase
+    .from("community_members")
+    .select("community:communities(id, name, avatar_url, cover_url, status)")
+    .eq("user_id", me);
+  type CommunityLite = {
+    id: string;
+    name: string;
+    avatar_url: string | null;
+    cover_url: string | null;
+    status: string;
+  };
+  const myCommunities = ((memberRows ?? [])
+    .map((r) => r.community as unknown as CommunityLite | null)
+    .filter((c): c is CommunityLite => Boolean(c) && c!.status === "approved"));
+
+  // Latest chat line per community for the preview + ordering.
+  const communityThreads: {
+    id: string;
+    name: string;
+    avatar: string | null;
+    preview: string;
+    ts: string;
+  }[] = [];
+  if (myCommunities.length > 0) {
+    const { data: cmsgs } = await supabase
+      .from("community_chat_view")
+      .select("community_id, body, sender_name, is_anonymous, created_at")
+      .in(
+        "community_id",
+        myCommunities.map((c) => c.id)
+      )
+      .order("created_at", { ascending: false })
+      .limit(200);
+    const latest = new Map<string, { preview: string; ts: string }>();
+    for (const m of cmsgs ?? []) {
+      if (latest.has(m.community_id)) continue;
+      const who = m.is_anonymous ? "Anonymous" : (m.sender_name ?? "Member");
+      latest.set(m.community_id, {
+        preview: `${who}: ${m.body}`,
+        ts: m.created_at,
+      });
+    }
+    for (const c of myCommunities) {
+      const l = latest.get(c.id);
+      communityThreads.push({
+        id: c.id,
+        name: c.name,
+        avatar: c.cover_url ?? c.avatar_url,
+        preview: l?.preview ?? "No messages yet — say hello 👋",
+        ts: l?.ts ?? "1970-01-01T00:00:00Z",
+      });
+    }
+  }
+
+  // A unified, recency-sorted inbox of DM conversations + community rooms.
+  type Thread =
+    | { kind: "dm"; ts: string; convId: string; otherId: string }
+    | {
+        kind: "community";
+        ts: string;
+        id: string;
+        name: string;
+        avatar: string | null;
+        preview: string;
+      };
+  const threads: Thread[] = [
+    ...conversations.map(
+      (c): Thread => ({
+        kind: "dm",
+        ts: c.last_message_at ?? "1970-01-01T00:00:00Z",
+        convId: c.id,
+        otherId: c.user_low === me ? c.user_high : c.user_low,
+      })
+    ),
+    ...communityThreads.map(
+      (c): Thread => ({
+        kind: "community",
+        ts: c.ts,
+        id: c.id,
+        name: c.name,
+        avatar: c.avatar,
+        preview: c.preview,
+      })
+    ),
+  ].sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+
   // Matches that don't yet have a conversation AND that we haven't already
   // reached out to — surfaced so a chat can start. A match we've messaged
   // (open conversation or a pending outgoing request) is removed here (UAT-018).
@@ -151,20 +238,46 @@ export default async function ChatPage({
           </div>
         ) : (
       <div className="mt-5 space-y-1">
-        {conversations.length === 0 && newMatches.length === 0 ? (
+        {threads.length === 0 && newMatches.length === 0 ? (
           <p className="py-16 text-center text-sm text-fg-muted">
             No conversations yet. Match in Discover to start chatting.
           </p>
         ) : (
           <>
-            {conversations.map((c) => {
-              const otherId = c.user_low === me ? c.user_high : c.user_low;
-              const p = profiles.get(otherId);
-              const preview = lastMsg.get(c.id);
+            {threads.map((t) => {
+              if (t.kind === "community") {
+                return (
+                  <Link
+                    key={`c:${t.id}`}
+                    href={`/communities/${t.id}/chat`}
+                    className="flex items-center gap-3 rounded-[12px] px-3 py-3 transition-colors hover:bg-card"
+                  >
+                    <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-2xl bg-card">
+                      {t.avatar && (
+                        <AppImage src={t.avatar} alt={t.name} sizes="44px" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="flex items-center gap-1.5 truncate text-[15px] font-semibold text-fg">
+                        <span className="truncate">{t.name}</span>
+                        <span className="shrink-0 rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent">
+                          Community
+                        </span>
+                      </p>
+                      <p className="truncate text-sm text-fg-muted">{t.preview}</p>
+                    </div>
+                    <span className="shrink-0 self-start text-xs text-fg-muted">
+                      {timeAgo(t.ts)}
+                    </span>
+                  </Link>
+                );
+              }
+              const p = profiles.get(t.otherId);
+              const preview = lastMsg.get(t.convId);
               return (
                 <Link
-                  key={c.id}
-                  href={`/chat/${c.id}`}
+                  key={t.convId}
+                  href={`/chat/${t.convId}`}
                   className="flex items-center gap-3 rounded-[12px] px-3 py-3 transition-colors hover:bg-card"
                 >
                   <div className="relative h-11 w-11 shrink-0 rounded-full">
@@ -187,11 +300,9 @@ export default async function ChatPage({
                       {preview ?? "Say hi 👋"}
                     </p>
                   </div>
-                  {c.last_message_at && (
-                    <span className="shrink-0 self-start text-xs text-fg-muted">
-                      {timeAgo(c.last_message_at)}
-                    </span>
-                  )}
+                  <span className="shrink-0 self-start text-xs text-fg-muted">
+                    {timeAgo(t.ts)}
+                  </span>
                 </Link>
               );
             })}

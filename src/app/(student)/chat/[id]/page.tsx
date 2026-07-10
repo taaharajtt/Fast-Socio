@@ -89,6 +89,20 @@ export default async function ConversationPage({
   // UAT-010: enough to render a real preview card in the bubble, not just a
   // "tap to view" stub. feed_posts already masks the author of an anonymous
   // post and hides posts from blocked users, so a share can't leak either.
+  // UAT-005: initial reactions for the loaded page of messages. RLS scopes rows
+  // to conversation participants. Aggregated into chips client-side.
+  const reactions: Record<string, { emoji: string; user_id: string }[]> = {};
+  const messageIds = messages.map((m) => m.id);
+  if (messageIds.length > 0) {
+    const { data: reactRows } = await supabase
+      .from("message_reactions")
+      .select("message_id, emoji, user_id")
+      .in("message_id", messageIds);
+    for (const r of reactRows ?? []) {
+      (reactions[r.message_id] ??= []).push({ emoji: r.emoji, user_id: r.user_id });
+    }
+  }
+
   const sharedPosts: Record<string, SharedPostPreview> = {};
   if (sharedIds.length > 0) {
     const { data: preRows } = await supabase
@@ -152,6 +166,7 @@ export default async function ConversationPage({
         sharedPosts={sharedPosts}
         hasMore={hasMore}
         initialSignedAttachments={signedAttachments}
+        initialReactions={reactions}
       />
     </div>
   );

@@ -30,10 +30,29 @@ export function GlassSheet({
   const panelRef = useRef<HTMLDivElement>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
   const titleId = useId();
-  // Drag-to-dismiss is initiated ONLY from the grab handle, so a scrollable body
-  // (comments, share list) scrolls freely instead of being swallowed by the
-  // sheet's drag gesture (Instagram-style behaviour).
+  // Drag-to-dismiss (UAT-001): the grab handle always starts a drag, and so does
+  // a downward pull anywhere on the sheet — EXCEPT on interactive controls, and
+  // except when the finger is inside a scroll area that isn't at the top (there,
+  // the gesture scrolls the content instead of dragging the sheet). This is the
+  // Instagram bottom-sheet feel; before, only the tiny handle worked, so people
+  // resorted to the Back button.
   const dragControls = useDragControls();
+
+  function maybeStartDrag(e: React.PointerEvent) {
+    if (e.button !== 0) return;
+    let node = e.target as HTMLElement | null;
+    while (node && node !== panelRef.current) {
+      if (
+        node.matches(
+          "button, a, input, textarea, select, [role='button'], [data-no-drag]"
+        )
+      )
+        return;
+      if (node.scrollHeight > node.clientHeight + 1 && node.scrollTop > 0) return;
+      node = node.parentElement;
+    }
+    dragControls.start(e);
+  }
   // Portal target (document.body) is only available after mount on the client.
   // Rendering into body escapes any transformed/filtered ancestor, which would
   // otherwise become the containing block for our position:fixed panel and make
@@ -122,14 +141,15 @@ export function GlassSheet({
             dragListener={false}
             dragConstraints={{ top: 0, bottom: 0 }}
             dragElastic={{ top: 0, bottom: 0.4 }}
+            onPointerDown={maybeStartDrag}
             onDragEnd={(_, info) => {
-              if (info.offset.y > 120) onClose();
+              if (info.offset.y > 120 || info.velocity.y > 600) onClose();
             }}
           >
-            {/* Grab handle — the only region that starts a drag-to-dismiss. */}
+            {/* Grab handle — the obvious drag affordance; the whole sheet also
+                drags now (maybeStartDrag on the panel). */}
             <div
-              onPointerDown={(e) => dragControls.start(e)}
-              className="mx-auto mb-4 flex w-full cursor-grab touch-none justify-center py-1 active:cursor-grabbing"
+              className="mx-auto mb-4 flex w-full cursor-grab justify-center py-1 active:cursor-grabbing"
               aria-hidden
             >
               <div className="h-1.5 w-10 rounded-full bg-fg/20" />

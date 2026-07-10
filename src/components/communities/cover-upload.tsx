@@ -4,6 +4,8 @@ import { useRef, useState } from "react";
 import { ImagePlus, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ImageCropper, type CropResult } from "@/components/ui/image-cropper";
+import { UploadProgressBar } from "@/components/ui/upload-progress";
+import { uploadWithProgress, publicStorageUrl } from "@/lib/storage-upload";
 
 /**
  * 16:9 cover picker (UAT-019/020). The chosen file goes through the cropper
@@ -27,6 +29,7 @@ export function CoverUpload({
   const fileRef = useRef<HTMLInputElement>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadPct, setUploadPct] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   function onPick(e: React.ChangeEvent<HTMLInputElement>) {
@@ -39,34 +42,40 @@ export function CoverUpload({
 
   async function onCropped({ blob, extension, mimeType }: CropResult) {
     setPendingFile(null);
-    setUploading(true);
+    setError(null);
     const supabase = createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) {
-      setUploading(false);
       setError("You are not signed in.");
       return;
     }
     const path = `${user.id}/${prefix}-${crypto.randomUUID()}.${extension}`;
-    const { error: upErr } = await supabase.storage
-      .from("post-media")
-      .upload(path, blob, { contentType: mimeType });
-    if (upErr) {
+    setUploading(true);
+    setUploadPct(0);
+    try {
+      await uploadWithProgress("post-media", path, blob, {
+        contentType: mimeType,
+        onProgress: (p) => setUploadPct(p.percent),
+      });
+      onChange(publicStorageUrl("post-media", path));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
       setUploading(false);
-      setError(upErr.message);
-      return;
     }
-    onChange(supabase.storage.from("post-media").getPublicUrl(path).data.publicUrl);
-    setUploading(false);
   }
 
   return (
     <div className="space-y-2">
       <span className="text-sm font-medium">{label}</span>
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPick} />
-      {value ? (
+      {uploading ? (
+        <div className="flex aspect-video w-full flex-col items-center justify-center rounded-[var(--radius-md)] bg-bg-elevated px-8">
+          <UploadProgressBar percent={uploadPct} label="Uploading cover" />
+        </div>
+      ) : value ? (
         <div className="relative aspect-video w-full overflow-hidden rounded-[var(--radius-md)]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img

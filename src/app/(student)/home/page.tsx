@@ -39,13 +39,24 @@ export default async function HomePage() {
         {/* Brand logo (UAT-001). PNG lives at public/brand/logo.png; the h1 text
             stays as the accessible name and renders if the asset is missing. */}
         <h1 className="text-xl font-black tracking-tight">
+          {/* UAT-006: theme-aware logo. Dark keeps logo.png; light shows the new
+              logo1.png. Class-strategy dark mode (html.dark / html.light) lets us
+              swap with CSS alone — no JS, no hydration flash. */}
           <Image
             src="/brand/logo.png"
             alt="FAST SOCIO"
             width={512}
             height={256}
             priority
-            className="h-[70px] w-auto"
+            className="hidden h-[70px] w-auto dark:block"
+          />
+          <Image
+            src="/brand/logo1.png"
+            alt="FAST SOCIO"
+            width={512}
+            height={256}
+            priority
+            className="block h-[70px] w-auto dark:hidden"
           />
           <span className="sr-only">FAST SOCIO</span>
         </h1>

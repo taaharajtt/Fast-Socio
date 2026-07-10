@@ -251,6 +251,62 @@ export async function deleteMessage(
   return { ok: true };
 }
 
+/** Toggle the caller's emoji reaction on a message (UAT-005). One per user. */
+export async function toggleMessageReaction(
+  messageId: string,
+  emoji: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("toggle_message_reaction", {
+    p_message_id: messageId,
+    p_emoji: emoji,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/**
+ * Forward a message's content to a matched friend (UAT-005). Text and shared
+ * posts are forwarded verbatim; the caller only ever forwards what they can
+ * already read. Reuses the chat send-rate limit since it inserts a message.
+ */
+export async function forwardMessage(
+  friendId: string,
+  payload: { body?: string | null; sharedPostId?: string | null }
+): Promise<{ ok: true; conversationId: string } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  if (!payload.body && !payload.sharedPostId)
+    return { ok: false, error: "Nothing to forward." };
+
+  const allowed = await checkRateLimit(
+    "chatSend",
+    RATE_LIMITS.chatSend.max,
+    RATE_LIMITS.chatSend.windowSeconds
+  );
+  if (!allowed) return { ok: false, error: "You're forwarding too fast." };
+
+  const { data: conversationId, error: convErr } = await supabase.rpc(
+    "get_or_create_conversation",
+    { other_id: friendId }
+  );
+  if (convErr || !conversationId)
+    return { ok: false, error: convErr?.message ?? "Could not open chat." };
+
+  const { error } = await supabase.from("messages").insert({
+    conversation_id: conversationId,
+    sender_id: user.id,
+    body: payload.sharedPostId ? (payload.body ?? "Forwarded a post") : payload.body,
+    shared_post_id: payload.sharedPostId ?? null,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, conversationId: conversationId as string };
+}
+
 /** Report a specific message for moderator review (target_type = 'message'). */
 export async function reportMessage(
   messageId: string,

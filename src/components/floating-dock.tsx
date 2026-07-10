@@ -30,7 +30,10 @@ export function FloatingDock({
 }) {
   const pathname = usePathname();
 
-  if (/^\/chat\/.+/.test(pathname)) return null;
+  // Immersive conversation screens hide the dock: 1:1 threads and community
+  // chat rooms (UAT-007).
+  if (/^\/chat\/.+/.test(pathname) || /^\/communities\/[^/]+\/chat$/.test(pathname))
+    return null;
 
   const activeHref = activeNavHref(pathname, viewerId);
 

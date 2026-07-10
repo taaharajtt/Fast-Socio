@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Check,
+  CornerUpRight,
   Flag,
   ImagePlus,
   Mic,
@@ -13,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { GlassButton, GlassSheet } from "@/components/ui";
+import { AppImage } from "@/components/ui/app-image";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { chatMediaPath, CHAT_MEDIA_TTL_SECONDS } from "@/lib/chat-media";
@@ -29,7 +31,14 @@ import {
   fetchOlderMessages,
   editMessage,
   deleteMessage,
+  toggleMessageReaction,
+  forwardMessage,
+  listMatchedFriends,
+  type MatchedFriend,
 } from "@/app/(student)/chat/actions";
+
+type Reaction = { emoji: string; user_id: string };
+const QUICK_EMOJIS = ["❤️", "😂", "🔥", "👍", "😮", "😢", "🙏"];
 
 export type ChatMessage = {
   id: string;
@@ -60,6 +69,7 @@ export function ChatThread({
   sharedPosts = {},
   hasMore = false,
   initialSignedAttachments = {},
+  initialReactions = {},
 }: {
   conversationId: string;
   meId: string;
@@ -68,6 +78,8 @@ export function ChatThread({
   hasMore?: boolean;
   /** messageId -> signed URL for private chat-media attachments (P5-01). */
   initialSignedAttachments?: Record<string, string>;
+  /** messageId -> reactions (UAT-005). */
+  initialReactions?: Record<string, Reaction[]>;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [signedAttachments, setSignedAttachments] = useState<
@@ -79,6 +91,9 @@ export function ChatThread({
   const [recording, setRecording] = useState(false);
   const [reportId, setReportId] = useState<string | null>(null);
   const [actionsFor, setActionsFor] = useState<ChatMessage | null>(null);
+  const [forwardFor, setForwardFor] = useState<ChatMessage | null>(null);
+  const [reactions, setReactions] =
+    useState<Record<string, Reaction[]>>(initialReactions);
   const [editing, setEditing] = useState<ChatMessage | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +119,36 @@ export function ChatThread({
     if (data?.signedUrl)
       setSignedAttachments((prev) => ({ ...prev, [m.id]: data.signedUrl }));
   }, []);
+
+  const refreshReactions = useCallback(async (messageId: string) => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("message_reactions")
+      .select("emoji, user_id")
+      .eq("message_id", messageId);
+    setReactions((prev) => ({ ...prev, [messageId]: (data as Reaction[]) ?? [] }));
+  }, []);
+
+  async function react(messageId: string, emoji: string) {
+    setActionsFor(null);
+    // Optimistic: reflect my toggle immediately, reconcile on the realtime event.
+    setReactions((prev) => {
+      const list = prev[messageId] ?? [];
+      const mineHere = list.find((r) => r.user_id === meId);
+      let next: Reaction[];
+      if (mineHere && mineHere.emoji === emoji) {
+        next = list.filter((r) => r.user_id !== meId);
+      } else {
+        next = [...list.filter((r) => r.user_id !== meId), { emoji, user_id: meId }];
+      }
+      return { ...prev, [messageId]: next };
+    });
+    const res = await toggleMessageReaction(messageId, emoji);
+    if (!res.ok) {
+      setError(res.error);
+      refreshReactions(messageId);
+    }
+  }
 
   async function loadOlder() {
     if (loadingOlder || messages.length === 0) return;
@@ -178,6 +223,17 @@ export function ChatThread({
             );
           }
         )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "message_reactions" },
+          (payload) => {
+            // Reactions carry no conversation_id, so we can't filter server-side.
+            // RLS already limits delivery to our conversations; re-read the one
+            // affected message's reactions (works for INSERT/UPDATE/DELETE alike).
+            const row = (payload.new ?? payload.old) as { message_id?: string };
+            if (row?.message_id) refreshReactions(row.message_id);
+          }
+        )
         .on("broadcast", { event: "typing" }, () => {
           setOtherTyping(true);
           if (typingTimeout.current) clearTimeout(typingTimeout.current);
@@ -192,7 +248,7 @@ export function ChatThread({
     return () => {
       if (channelRef.current) supabase.removeChannel(channelRef.current);
     };
-  }, [conversationId, meId, signAttachment]);
+  }, [conversationId, meId, signAttachment, refreshReactions]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -382,14 +438,16 @@ export function ChatThread({
           const isMedia =
             !deleted && (m.attachment_type === "image" || Boolean(m.shared_post_id));
 
+          const chips = aggregateReactions(reactions[m.id], meId);
+
           return (
             <div key={m.id}>
               <div className={cn("flex", mine ? "justify-end" : "justify-start")}>
                 <div
-                  {...(mine ? pressHandlers(m) : {})}
-                  onClick={() => !mine && !deleted && setReportId(m.id)}
+                  {...(deleted ? {} : pressHandlers(m))}
+                  onDoubleClick={() => !deleted && react(m.id, "❤️")}
                   className={cn(
-                    "max-w-[78%] overflow-hidden rounded-2xl text-[15px]",
+                    "relative max-w-[78%] overflow-hidden rounded-2xl text-[15px]",
                     // UAT-002: media sizes the bubble, so the bubble must not add
                     // padding around it. Text and voice keep their inset.
                     isMedia ? "p-1" : "px-4 py-2",
@@ -446,6 +504,33 @@ export function ChatThread({
                   )}
                 </div>
               </div>
+
+              {/* UAT-005: reaction chips under the bubble. Tap yours to remove. */}
+              {chips.length > 0 && (
+                <div
+                  className={cn(
+                    "-mt-1 flex flex-wrap gap-1",
+                    mine ? "justify-end pr-1" : "justify-start pl-1"
+                  )}
+                >
+                  {chips.map((c) => (
+                    <button
+                      key={c.emoji}
+                      type="button"
+                      onClick={() => react(m.id, c.emoji)}
+                      className={cn(
+                        "flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[11px]",
+                        c.mine
+                          ? "border-accent/50 bg-accent/15 text-fg"
+                          : "border-glass-border bg-card text-fg-muted"
+                      )}
+                    >
+                      <span>{c.emoji}</span>
+                      {c.count > 1 && <span className="tabular-nums">{c.count}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* UAT-004: a read receipt now says WHEN, not just "Read". */}
               {mine && m.id === (lastReadMine ?? lastMineId) && (
@@ -582,39 +667,96 @@ export function ChatThread({
         </form>
       )}
 
-      {/* UAT-009: long-press your own message to edit or delete it. */}
+      {/* UAT-005/009: long-press any message to react, forward, edit or unsend. */}
       <GlassSheet
         open={Boolean(actionsFor)}
         onClose={() => setActionsFor(null)}
         label="Message actions"
       >
-        <div className="space-y-3">
-          {actionsFor &&
-            !actionsFor.attachment_url &&
-            !actionsFor.shared_post_id && (
-              <button
-                type="button"
-                onClick={() => {
-                  setEditDraft(actionsFor.body ?? "");
-                  setEditing(actionsFor);
-                  setActionsFor(null);
-                }}
-                className="glass flex w-full items-center gap-3 rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm text-fg"
-              >
-                <Pencil className="h-4 w-4" aria-hidden />
-                Edit message
-              </button>
-            )}
-          <button
-            type="button"
-            onClick={() => actionsFor && confirmDelete(actionsFor)}
-            className="glass flex w-full items-center gap-3 rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm text-error"
-          >
-            <Trash2 className="h-4 w-4" aria-hidden />
-            Delete message
-          </button>
-        </div>
+        {actionsFor &&
+          (() => {
+            const a = actionsFor;
+            const mine = a.sender_id === meId;
+            const isText = !a.attachment_url && !a.shared_post_id;
+            const canForward = Boolean(a.body) || Boolean(a.shared_post_id);
+            return (
+              <div className="space-y-3">
+                {/* Quick-emoji reaction row (UAT-005). */}
+                <div className="flex items-center justify-between px-1">
+                  {QUICK_EMOJIS.map((e) => (
+                    <button
+                      key={e}
+                      type="button"
+                      onClick={() => react(a.id, e)}
+                      className="flex h-10 w-10 items-center justify-center rounded-full text-2xl active:scale-90"
+                      aria-label={`React ${e}`}
+                    >
+                      {e}
+                    </button>
+                  ))}
+                </div>
+
+                {canForward && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForwardFor(a);
+                      setActionsFor(null);
+                    }}
+                    className="glass flex w-full items-center gap-3 rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm text-fg"
+                  >
+                    <CornerUpRight className="h-4 w-4" aria-hidden />
+                    Forward
+                  </button>
+                )}
+
+                {mine && isText && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditDraft(a.body ?? "");
+                      setEditing(a);
+                      setActionsFor(null);
+                    }}
+                    className="glass flex w-full items-center gap-3 rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm text-fg"
+                  >
+                    <Pencil className="h-4 w-4" aria-hidden />
+                    Edit message
+                  </button>
+                )}
+
+                {mine ? (
+                  <button
+                    type="button"
+                    onClick={() => confirmDelete(a)}
+                    className="glass flex w-full items-center gap-3 rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm text-error"
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden />
+                    Unsend
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReportId(a.id);
+                      setActionsFor(null);
+                    }}
+                    className="glass flex w-full items-center gap-3 rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm text-error"
+                  >
+                    <Flag className="h-4 w-4" aria-hidden />
+                    Report message
+                  </button>
+                )}
+              </div>
+            );
+          })()}
       </GlassSheet>
+
+      <ForwardSheet
+        message={forwardFor}
+        onClose={() => setForwardFor(null)}
+        onError={setError}
+      />
 
       <GlassSheet open={Boolean(reportId)} onClose={() => setReportId(null)}>
         <div className="space-y-3">
@@ -635,5 +777,136 @@ export function ChatThread({
         </div>
       </GlassSheet>
     </div>
+  );
+}
+
+/** Group a message's raw reactions into per-emoji chips, flagging mine. */
+function aggregateReactions(
+  list: Reaction[] | undefined,
+  meId: string
+): { emoji: string; count: number; mine: boolean }[] {
+  if (!list || list.length === 0) return [];
+  const byEmoji = new Map<string, { count: number; mine: boolean }>();
+  for (const r of list) {
+    const cur = byEmoji.get(r.emoji) ?? { count: 0, mine: false };
+    cur.count += 1;
+    if (r.user_id === meId) cur.mine = true;
+    byEmoji.set(r.emoji, cur);
+  }
+  return [...byEmoji.entries()]
+    .map(([emoji, v]) => ({ emoji, ...v }))
+    .sort((a, b) => b.count - a.count);
+}
+
+/** Forward a message's content to one of the caller's matches (UAT-005). */
+function ForwardSheet({
+  message,
+  onClose,
+  onError,
+}: {
+  message: ChatMessage | null;
+  onClose: () => void;
+  onError: (msg: string) => void;
+}) {
+  return (
+    <GlassSheet open={Boolean(message)} onClose={onClose} label="Forward to">
+      {/* Mounts fresh each open, so friends/sent state resets per message with
+          no effect-driven resetting (keeps the linter's no-setState-in-effect
+          rule happy). */}
+      {message && (
+        <ForwardSheetContent message={message} onError={onError} />
+      )}
+    </GlassSheet>
+  );
+}
+
+function ForwardSheetContent({
+  message,
+  onError,
+}: {
+  message: ChatMessage;
+  onError: (msg: string) => void;
+}) {
+  const [friends, setFriends] = useState<MatchedFriend[] | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [sentIds, setSentIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    let active = true;
+    listMatchedFriends().then((f) => active && setFriends(f));
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function send(friend: MatchedFriend) {
+    if (sentIds.has(friend.id) || busyId) return;
+    setBusyId(friend.id);
+    const res = await forwardMessage(friend.id, {
+      body: message.body,
+      sharedPostId: message.shared_post_id,
+    });
+    setBusyId(null);
+    if (!res.ok) {
+      onError(res.error);
+      return;
+    }
+    setSentIds((prev) => new Set(prev).add(friend.id));
+  }
+
+  return (
+      <div className="flex max-h-[70vh] flex-col">
+        <h3 className="mb-3 text-lg font-bold">Forward to</h3>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {friends === null ? (
+            <p className="py-6 text-center text-sm text-fg-muted">Loading…</p>
+          ) : friends.length === 0 ? (
+            <p className="py-6 text-center text-sm text-fg-muted">
+              No matches yet to forward to.
+            </p>
+          ) : (
+            <ul className="space-y-1">
+              {friends.map((f) => {
+                const sent = sentIds.has(f.id);
+                return (
+                  <li
+                    key={f.id}
+                    className="glass flex items-center gap-3 rounded-[var(--radius-sm)] p-3"
+                  >
+                    <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-card">
+                      {f.avatar_url && (
+                        <AppImage src={f.avatar_url} alt="" sizes="40px" />
+                      )}
+                    </div>
+                    <span className="flex-1 truncate text-sm font-medium">
+                      {f.full_name ?? "Student"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => send(f)}
+                      disabled={sent || busyId === f.id}
+                      className={cn(
+                        "flex h-9 min-w-[76px] items-center justify-center gap-1.5 rounded-full px-3 text-sm font-semibold",
+                        sent ? "bg-aura/15 text-aura" : "bg-aura text-white"
+                      )}
+                    >
+                      {sent ? (
+                        <>
+                          <Check className="h-4 w-4" aria-hidden />
+                          Sent
+                        </>
+                      ) : busyId === f.id ? (
+                        "Sending…"
+                      ) : (
+                        "Send"
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </div>
   );
 }

@@ -1,24 +1,19 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, Pencil } from "lucide-react";
+import { ChevronLeft, ChevronRight, MessageCircle, Pencil } from "lucide-react";
 import { GlassCard, GlassChip } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
 import { communityIcon } from "@/lib/communities/icon";
 import { JoinButton } from "@/components/communities/join-button";
 import { PostComposer } from "@/components/feed/post-composer";
 import { PostCard } from "@/components/feed/post-card";
-import { CommunityChat, type CommunityMessage } from "@/components/communities/community-chat";
 import { ReviewPostRow, type PendingPost } from "@/components/communities/review-post-row";
 import { RouteTabs, type RouteTab } from "@/components/ui/route-tabs";
-import { SkeletonCards, SkeletonChat } from "@/components/ui/skeleton";
+import { SkeletonCards } from "@/components/ui/skeleton";
 import { createClient } from "@/lib/supabase/server";
-import {
-  fetchPollResults,
-  type PollOptionResult,
-} from "@/app/(student)/communities/actions";
 import type { FeedPost } from "@/lib/feed/types";
 
-type CommunityTab = "posts" | "chat" | "review";
+type CommunityTab = "posts" | "review";
 
 export default async function CommunityPage({
   params,
@@ -55,15 +50,16 @@ export default async function CommunityPage({
   const isMod = role === "owner" || role === "moderator";
   const pending = community.status !== "approved";
 
+  // UAT-007: the Chat tab moved out to the Messages list (a full-screen room at
+  // /communities/[id]/chat). Only Main (the broadcast feed) and the mod Review
+  // queue remain here.
   const active: CommunityTab =
-    tab === "chat" || (tab === "review" && isMod) ? (tab as CommunityTab) : "posts";
+    tab === "review" && isMod ? "review" : "posts";
 
   // Load only what the active tab needs.
   let posts: FeedPost[] = [];
   let pendingPosts: PendingPost[] = [];
   let pendingCount = 0;
-  let chatMessages: CommunityMessage[] = [];
-  let polls: Record<string, PollOptionResult[]> = {};
 
   if (isMod) {
     const { count } = await supabase
@@ -88,21 +84,6 @@ export default async function CommunityPage({
       .eq("community_id", id)
       .order("created_at", { ascending: true });
     pendingPosts = (rows as PendingPost[]) ?? [];
-  } else if (!pending && active === "chat" && isMember) {
-    // community_chat_view, not the base table: it masks the author of another
-    // member's anonymous message (UAT-005).
-    const { data: rows } = await supabase
-      .from("community_chat_view")
-      .select(
-        "id, sender_id, sender_name, sender_avatar, body, poll_id, is_anonymous, created_at"
-      )
-      .eq("community_id", id)
-      .order("created_at", { ascending: true })
-      .limit(100);
-    chatMessages = (rows as CommunityMessage[]) ?? [];
-    polls = await fetchPollResults(
-      [...new Set(chatMessages.map((m) => m.poll_id).filter(Boolean) as string[])]
-    );
   }
 
   const tabHref = (t: CommunityTab) =>
@@ -110,7 +91,6 @@ export default async function CommunityPage({
 
   const tabs: RouteTab[] = [
     { key: "posts", href: tabHref("posts"), label: "Main" },
-    { key: "chat", href: tabHref("chat"), label: "Chat" },
     ...(isMod
       ? [
           {
@@ -201,12 +181,32 @@ export default async function CommunityPage({
           // next tab's server render lands.
           skeletons={{
             posts: <SkeletonCards />,
-            chat: <SkeletonChat />,
             review: <SkeletonCards count={2} />,
           }}
         >
           {active === "posts" && (
             <>
+              {/* UAT-007: the live chat room now lives in Messages. Members get a
+                  quick way in from here too. */}
+              {isMember && (
+                <Link
+                  href={`/communities/${community.id}/chat`}
+                  className="mt-4 flex items-center gap-3 rounded-[var(--radius-md)] bg-card px-4 py-3"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
+                    <MessageCircle className="h-5 w-5" aria-hidden />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold text-fg">
+                      Community chat room
+                    </span>
+                    <span className="block text-xs text-fg-muted">
+                      Chat live with members — opens in Messages
+                    </span>
+                  </span>
+                  <ChevronRight className="h-5 w-5 shrink-0 text-fg-muted" aria-hidden />
+                </Link>
+              )}
               {isMember && (
                 <div className="mt-4">
                   <PostComposer
@@ -233,22 +233,6 @@ export default async function CommunityPage({
               </div>
             </>
           )}
-
-          {active === "chat" &&
-            (isMember ? (
-              <div className="mt-4 flex flex-1 flex-col">
-                <CommunityChat
-                  communityId={community.id}
-                  meId={me}
-                  initialMessages={chatMessages}
-                  initialPolls={polls}
-                />
-              </div>
-            ) : (
-              <p className="mt-8 text-center text-sm text-fg-muted">
-                Join this community to access the chat room.
-              </p>
-            ))}
 
           {active === "review" && isMod && (
             <div className="mt-4 space-y-4">
