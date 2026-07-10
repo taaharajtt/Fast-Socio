@@ -1,13 +1,18 @@
-import { PageHeader, SectionLabel, Tag } from "@/components/admin/kit";
+import { PageHeader, SectionLabel } from "@/components/admin/kit";
 import { InfraDeployControls, type DeployRow } from "@/components/admin/infra-deploy-controls";
+import { InfraAuthSettings } from "@/components/admin/infra-auth-settings";
+import { InfraEnvEditor, type EnvRow } from "@/components/admin/infra-env-editor";
 import { requireSuperAdmin } from "@/lib/admin/access";
 import {
   infraConfigured,
   getSupabaseProject,
   getMigrations,
   getAdvisors,
+  getAuthConfig,
+  getBuckets,
   getDeployments,
   getEnvVars,
+  getDomains,
   type SbLint,
 } from "@/lib/admin/infra";
 
@@ -21,6 +26,10 @@ async function settled<T>(p: Promise<T>): Promise<{ ok: true; v: T } | { ok: fal
   } catch (e) {
     return { ok: false, e: (e as Error).message };
   }
+}
+
+function Err({ msg }: { msg: string }) {
+  return <p className="mt-2 font-mono text-xs text-error">{msg}</p>;
 }
 
 export default async function InfraPage() {
@@ -38,17 +47,20 @@ export default async function InfraPage() {
     );
   }
 
-  const [proj, migs, sec, perf, deps, envs] = await Promise.all([
+  const [proj, migs, sec, perf, auth, buckets, deps, envs, domains] = await Promise.all([
     settled(getSupabaseProject()),
     settled(getMigrations()),
     settled(getAdvisors("security")),
     settled(getAdvisors("performance")),
+    settled(getAuthConfig()),
+    settled(getBuckets()),
     settled(getDeployments(10)),
     settled(getEnvVars()),
+    settled(getDomains()),
   ]);
 
   const lintCounts = (lints: SbLint[]) => {
-    const c = { ERROR: 0, WARN: 0, INFO: 0 } as Record<string, number>;
+    const c: Record<string, number> = { ERROR: 0, WARN: 0, INFO: 0 };
     lints.forEach((l) => (c[l.level] = (c[l.level] ?? 0) + 1));
     return c;
   };
@@ -64,11 +76,19 @@ export default async function InfraPage() {
       }))
     : [];
 
+  const envRows: EnvRow[] = envs.ok
+    ? envs.v.map((e) => ({
+        id: e.id,
+        key: e.key,
+        targets: Array.isArray(e.target) ? e.target : [String(e.target)],
+      }))
+    : [];
+
   return (
     <>
       <PageHeader title="Infrastructure" sub="Supabase + Vercel — server-side, super_admin only." />
 
-      {/* Supabase */}
+      {/* ---- Supabase ---- */}
       <section>
         <SectionLabel>Supabase project</SectionLabel>
         {proj.ok ? (
@@ -77,30 +97,28 @@ export default async function InfraPage() {
             <p className="mt-1 font-mono text-[11px] text-fg-muted">
               {proj.v.region} · status {proj.v.status}
               {proj.v.database?.version ? ` · pg ${proj.v.database.version}` : ""}
+              {migs.ok ? ` · ${migs.v.length} migrations` : ""}
             </p>
           </div>
         ) : (
-          <p className="mt-2 font-mono text-xs text-error">{proj.e}</p>
+          <Err msg={proj.e} />
         )}
       </section>
 
       <section className="mt-6">
-        <SectionLabel>
-          Migrations {migs.ok ? `· ${migs.v.length}` : ""}
-        </SectionLabel>
-        {migs.ok ? (
-          <div className="mt-2 rounded-[4px] border border-glass-border p-3">
-            <p className="font-mono text-[11px] text-fg-muted">
-              latest:{" "}
-              {migs.v
-                .slice(-5)
-                .map((m) => m.version)
-                .join(", ")}
-            </p>
-          </div>
-        ) : (
-          <p className="mt-2 font-mono text-xs text-error">{migs.e}</p>
-        )}
+        <SectionLabel>Auth settings</SectionLabel>
+        <div className="mt-2">
+          {auth.ok ? (
+            <InfraAuthSettings
+              siteUrl={auth.v.site_url}
+              jwtExp={auth.v.jwt_exp}
+              autoconfirm={auth.v.mailer_autoconfirm}
+              disableSignup={auth.v.disable_signup}
+            />
+          ) : (
+            <Err msg={auth.e} />
+          )}
+        </div>
       </section>
 
       {(["security", "performance"] as const).map((kind, idx) => {
@@ -137,36 +155,70 @@ export default async function InfraPage() {
                 </>
               )
             ) : (
-              <p className="mt-2 font-mono text-xs text-error">{res.e}</p>
+              <Err msg={res.e} />
             )}
           </section>
         );
       })}
 
-      {/* Vercel */}
+      <section className="mt-6">
+        <SectionLabel>Storage buckets{buckets.ok ? ` · ${buckets.v.length}` : ""}</SectionLabel>
+        {buckets.ok ? (
+          <div className="mt-2 divide-y divide-glass-border overflow-hidden rounded-[4px] border border-glass-border">
+            {buckets.v.map((b) => (
+              <div key={b.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="font-mono text-xs text-fg">{b.name}</p>
+                  <p className="font-mono text-[10px] text-fg-disabled">
+                    {b.file_size_limit ? `${Math.round(b.file_size_limit / 1048576)} MB limit` : "no size limit"}
+                    {b.allowed_mime_types?.length ? ` · ${b.allowed_mime_types.length} mime types` : ""}
+                  </p>
+                </div>
+                <span className={`font-mono text-[10px] uppercase ${b.public ? "text-warning" : "text-fg-muted"}`}>
+                  {b.public ? "public" : "private"}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Err msg={buckets.e} />
+        )}
+      </section>
+
+      {/* ---- Vercel ---- */}
       <section className="mt-8">
         <SectionLabel>Vercel deployments · redeploy / rollback</SectionLabel>
         <div className="mt-2">
-          {deps.ok ? (
-            <InfraDeployControls deployments={deployRows} />
-          ) : (
-            <p className="font-mono text-xs text-error">{deps.e}</p>
-          )}
+          {deps.ok ? <InfraDeployControls deployments={deployRows} /> : <Err msg={deps.e} />}
         </div>
       </section>
 
       <section className="mt-6">
-        <SectionLabel>Environment variables {envs.ok ? `· ${envs.v.length}` : ""}</SectionLabel>
-        {envs.ok ? (
+        <SectionLabel>Domains{domains.ok ? ` · ${domains.v.length}` : ""}</SectionLabel>
+        {domains.ok ? (
           <div className="mt-2 flex flex-wrap gap-1.5">
-            {envs.v.map((e) => (
-              <Tag key={e.key}>{e.key}</Tag>
+            {domains.v.map((d) => (
+              <span
+                key={d.name}
+                className="rounded-[3px] border border-glass-border px-2 py-1 font-mono text-[11px] text-fg-muted"
+              >
+                {d.name}
+              </span>
             ))}
           </div>
         ) : (
-          <p className="mt-2 font-mono text-xs text-error">{envs.e}</p>
+          <Err msg={domains.e} />
         )}
-        <p className="mt-2 font-mono text-[10px] text-fg-disabled">values are encrypted and never read here</p>
+      </section>
+
+      <section className="mt-6">
+        <SectionLabel>Environment variables{envs.ok ? ` · ${envRows.length}` : ""}</SectionLabel>
+        <div className="mt-2">
+          {envs.ok ? <InfraEnvEditor envs={envRows} /> : <Err msg={envs.e} />}
+        </div>
+        <p className="mt-2 font-mono text-[10px] text-fg-disabled">
+          values are encrypted by Vercel and never read back · changes need a redeploy
+        </p>
       </section>
     </>
   );

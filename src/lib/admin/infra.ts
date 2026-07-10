@@ -72,6 +72,38 @@ export async function getAdvisors(kind: "security" | "performance"): Promise<SbL
   return r.lints ?? [];
 }
 
+export type SbAuthConfig = {
+  site_url: string;
+  disable_signup: boolean;
+  /** true = users are auto-confirmed (i.e. email verification is OFF). */
+  mailer_autoconfirm: boolean;
+  external_email_enabled: boolean;
+  jwt_exp: number;
+};
+export const getAuthConfig = () => sb<SbAuthConfig>("/config/auth");
+
+/** Patch auth settings (e.g. { mailer_autoconfirm: false } to require email confirmation). */
+export async function updateAuthConfig(patch: Partial<SbAuthConfig>): Promise<SbAuthConfig> {
+  if (!SB_TOKEN) throw new Error("SUPABASE_ACCESS_TOKEN not set");
+  const r = await fetch(`https://api.supabase.com/v1/projects/${SB_REF}/config/auth`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${SB_TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+    cache: "no-store",
+  });
+  if (!r.ok) throw new Error(`Supabase auth config → ${r.status} ${await r.text().catch(() => "")}`);
+  return r.json();
+}
+
+export type SbBucket = {
+  id: string;
+  name: string;
+  public: boolean;
+  file_size_limit: number | null;
+  allowed_mime_types: string[] | null;
+};
+export const getBuckets = () => sb<SbBucket[]>("/storage/buckets");
+
 /* ---- Vercel ------------------------------------------------------------ */
 
 export type VDeployment = {
@@ -82,7 +114,8 @@ export type VDeployment = {
   target: string | null;
   meta?: { githubCommitMessage?: string; githubCommitSha?: string };
 };
-export type VEnv = { key: string; target: string[] | string; type: string };
+export type VEnv = { id: string; key: string; target: string[] | string; type: string };
+export type VDomain = { name: string; verified?: boolean };
 
 export async function getDeployments(limit = 10): Promise<VDeployment[]> {
   const r = await vercel<{ deployments: VDeployment[] }>(
@@ -91,9 +124,27 @@ export async function getDeployments(limit = 10): Promise<VDeployment[]> {
   return r.deployments ?? [];
 }
 
+/** Env var metadata only — values are encrypted and deliberately never returned. */
 export async function getEnvVars(): Promise<VEnv[]> {
   const r = await vercel<{ envs: VEnv[] }>(`/v9/projects/${V_PROJECT}/env`);
-  return (r.envs ?? []).map((e) => ({ key: e.key, target: e.target, type: e.type }));
+  return (r.envs ?? []).map((e) => ({ id: e.id, key: e.key, target: e.target, type: e.type }));
+}
+
+/** Create or overwrite an encrypted env var (write-only: the value never comes back). */
+export async function upsertEnvVar(key: string, value: string, targets: string[]): Promise<void> {
+  await vercel(`/v10/projects/${V_PROJECT}/env?upsert=true`, {
+    method: "POST",
+    body: JSON.stringify({ key, value, type: "encrypted", target: targets }),
+  });
+}
+
+export async function deleteEnvVar(envId: string): Promise<void> {
+  await vercel(`/v9/projects/${V_PROJECT}/env/${envId}`, { method: "DELETE" });
+}
+
+export async function getDomains(): Promise<VDomain[]> {
+  const r = await vercel<{ domains: VDomain[] }>(`/v9/projects/${V_PROJECT}/domains`);
+  return r.domains ?? [];
 }
 
 /**
