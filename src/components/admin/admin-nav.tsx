@@ -9,6 +9,7 @@ import {
   Boxes,
   CalendarDays,
   ScrollText,
+  MessageSquareWarning,
   Database,
   type LucideIcon,
 } from "lucide-react";
@@ -26,6 +27,7 @@ type NavItem = {
  *  `super` items are hidden from moderators. */
 const NAV: NavItem[] = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard, match: "/admin" },
+  { href: "/admin/content", label: "Content", icon: MessageSquareWarning, match: "/admin/content" },
   { href: "/admin/reports?type=profile", label: "Reports", icon: Flag, match: "/admin/reports" },
   { href: "/admin/users", label: "Users", icon: Users, match: "/admin/users" },
   { href: "/admin/communities", label: "Communities", icon: Boxes, match: "/admin/communities" },
