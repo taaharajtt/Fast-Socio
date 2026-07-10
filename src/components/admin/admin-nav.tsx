@@ -10,6 +10,7 @@ import {
   CalendarDays,
   ScrollText,
   MessageSquareWarning,
+  Megaphone,
   Database,
   type LucideIcon,
 } from "lucide-react";
@@ -32,6 +33,7 @@ const NAV: NavItem[] = [
   { href: "/admin/users", label: "Users", icon: Users, match: "/admin/users" },
   { href: "/admin/communities", label: "Communities", icon: Boxes, match: "/admin/communities" },
   { href: "/admin/events", label: "Events", icon: CalendarDays, match: "/admin/events" },
+  { href: "/admin/broadcast", label: "Broadcast", icon: Megaphone, match: "/admin/broadcast", super: true },
   { href: "/admin/database", label: "Database", icon: Database, match: "/admin/database", super: true },
   { href: "/admin/audit", label: "Audit log", icon: ScrollText, match: "/admin/audit" },
 ];
