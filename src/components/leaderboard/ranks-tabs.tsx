@@ -44,29 +44,15 @@ export type DeptRow = {
   avatars: string[];
 };
 
-/** Per-rank medal styling for the top-3 student cards (UISpec V3 Screen 6). */
-const PODIUM: Record<
-  number,
-  { border: string; glow: string; badgeBg: string; score: string }
-> = {
-  1: {
-    border: "#D97706",
-    glow: "0 6px 28px rgba(217,119,6,0.28)",
-    badgeBg: "#D97706",
-    score: "#F59E0B",
-  },
-  2: {
-    border: "#9CA3AF",
-    glow: "0 6px 28px rgba(156,163,175,0.20)",
-    badgeBg: "#6B7280",
-    score: "#FFFFFF",
-  },
-  3: {
-    border: "#D97706",
-    glow: "0 6px 28px rgba(249,115,22,0.24)",
-    badgeBg: "#F97316",
-    score: "#F97316",
-  },
+/**
+ * Medal accent for the first three ranks (UAT-007). The board used to promote
+ * these into oversized podium hero cards, which crowded the remaining students
+ * off the screen; they are now ordinary rows with a coloured rank chip.
+ */
+const MEDAL: Record<number, { chip: string; ring: string }> = {
+  1: { chip: "#D97706", ring: "rgba(217,119,6,0.45)" },
+  2: { chip: "#6B7280", ring: "rgba(156,163,175,0.40)" },
+  3: { chip: "#F97316", ring: "rgba(249,115,22,0.40)" },
 };
 
 export function RanksTabs({
@@ -142,103 +128,69 @@ function StudentBoard({ rows, meId }: { rows: StudentRow[]; meId: string }) {
       </p>
     );
   }
-  const top3 = rows.filter((r) => r.rank <= 3);
-  const rest = rows.filter((r) => r.rank > 3);
-
   return (
     <>
-      <div className="space-y-3">
-        {top3.map((r) => {
-          const t = LEADERBOARD_TITLES[r.rank];
-          const p = PODIUM[r.rank];
+      <p className="mb-3 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-disabled">
+        Top {rows.length} this week
+      </p>
+      <div className="space-y-2">
+        {rows.map((r) => {
+          const medal = MEDAL[r.rank];
+          const title = LEADERBOARD_TITLES[r.rank]?.title;
+          const isMe = r.user_id === meId;
           return (
             <div
               key={r.user_id}
-              className="flex items-center gap-3 rounded-2xl bg-card p-4"
-              style={{ border: `2px solid ${p.border}`, boxShadow: p.glow }}
+              className={cn(
+                "flex items-center gap-3 rounded-[12px] px-3 py-3",
+                isMe ? "bg-accent/[0.10] ring-1 ring-accent/40" : "bg-card"
+              )}
             >
-              <div className="relative shrink-0">
-                <div className="relative h-14 w-14 overflow-hidden rounded-xl bg-bg-elevated">
-                  {r.avatar_url && (
-                    <AppImage src={r.avatar_url} alt={r.full_name ?? ""} sizes="56px" />
-                  )}
-                </div>
-                <span
-                  className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold text-white ring-2 ring-card"
-                  style={{ backgroundColor: p.badgeBg }}
-                >
+              <span
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[13px] font-bold"
+                style={
+                  medal
+                    ? { backgroundColor: medal.chip, color: "#fff" }
+                    : undefined
+                }
+              >
+                <span className={medal ? undefined : "text-fg-disabled"}>
                   {r.rank}
                 </span>
+              </span>
+
+              <div
+                className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full bg-bg-elevated"
+                style={medal ? { boxShadow: `0 0 0 2px ${medal.ring}` } : undefined}
+              >
+                {r.avatar_url && (
+                  <AppImage src={r.avatar_url} alt={r.full_name ?? ""} sizes="44px" />
+                )}
               </div>
+
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[17px] font-semibold text-fg">
+                <p className="truncate text-[15px] font-semibold text-fg">
                   {r.full_name ?? "Student"}
                 </p>
                 <p className="truncate text-[13px] text-fg-muted">
                   {deptMeta(r.department).abbr}
+                  {title && (
+                    <>
+                      {" · "}
+                      <span style={{ color: medal?.chip }}>{title}</span>
+                    </>
+                  )}
                 </p>
-                <span
-                  className="mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-bold text-white"
-                  style={{ backgroundColor: p.badgeBg }}
-                >
-                  {t?.title}
-                </span>
               </div>
-              <div className="shrink-0 text-right">
-                <p
-                  className="text-[28px] font-black leading-none"
-                  style={{ color: p.score }}
-                >
-                  {r.weekly_aura.toLocaleString()}
-                </p>
-                <p className="mt-1 text-xs text-fg-muted">Aura pts</p>
-              </div>
+
+              <span className="flex shrink-0 items-center gap-1 text-[15px] font-semibold text-gold">
+                <Zap className="h-3.5 w-3.5" aria-hidden />
+                {r.weekly_aura.toLocaleString()}
+              </span>
             </div>
           );
         })}
       </div>
-
-      {rest.length > 0 && (
-        <>
-          <p className="my-5 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-disabled">
-            Rankings
-          </p>
-          <div className="space-y-2">
-            {rest.map((r) => (
-              <div
-                key={r.user_id}
-                className={cn(
-                  "flex items-center gap-3 rounded-[12px] px-4 py-3.5",
-                  r.user_id === meId
-                    ? "bg-accent/[0.10] ring-1 ring-accent/40"
-                    : "bg-card"
-                )}
-              >
-                <span className="w-7 shrink-0 text-center text-base font-bold text-fg-disabled">
-                  {r.rank}
-                </span>
-                <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full bg-bg-elevated">
-                  {r.avatar_url && (
-                    <AppImage src={r.avatar_url} alt={r.full_name ?? ""} sizes="44px" />
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[15px] font-semibold text-fg">
-                    {r.full_name ?? "Student"}
-                  </p>
-                  <p className="truncate text-[13px] text-fg-muted">
-                    {deptMeta(r.department).abbr}
-                  </p>
-                </div>
-                <span className="flex shrink-0 items-center gap-1 text-[15px] font-semibold text-gold">
-                  <Zap className="h-3.5 w-3.5" aria-hidden />
-                  {r.weekly_aura.toLocaleString()}
-                </span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
     </>
   );
 }

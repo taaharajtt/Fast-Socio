@@ -1,17 +1,18 @@
 import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
 import { RequestRow, type IncomingRequest } from "@/components/chat/request-row";
 import { OpenChatButton } from "@/components/chat/open-chat-button";
 import { ChatCommunityTabs } from "@/components/chat/chat-community-tabs";
 import { createClient } from "@/lib/supabase/server";
 import { AppImage } from "@/components/ui/app-image";
-import { timeAgo } from "@/lib/time";
+import { OnlineDot } from "@/components/ui/badges";
+import { isOnline, timeAgo } from "@/lib/time";
 
 type ProfileLite = {
   id: string;
   full_name: string | null;
   avatar_url: string | null;
   department: string | null;
+  last_seen_at: string | null;
 };
 
 export default async function ChatPage({
@@ -68,7 +69,7 @@ export default async function ChatPage({
   if (convIds.length > 0) {
     const { data: msgs } = await supabase
       .from("messages")
-      .select("conversation_id, body, sender_id, created_at")
+      .select("conversation_id, body, sender_id, created_at, deleted_at")
       .in("conversation_id", convIds)
       .eq("hidden", false)
       .order("created_at", { ascending: false })
@@ -76,7 +77,12 @@ export default async function ChatPage({
     for (const m of msgs ?? []) {
       if (lastMsg.has(m.conversation_id)) continue;
       const prefix = m.sender_id === me ? "You: " : "";
-      lastMsg.set(m.conversation_id, `${prefix}${m.body ?? "Sent an attachment"}`);
+      // A deleted message keeps its row (read receipts reference it) but its
+      // body is blanked, so it must not preview as an empty line (UAT-009).
+      const text = m.deleted_at
+        ? "Message deleted"
+        : (m.body || "Sent an attachment");
+      lastMsg.set(m.conversation_id, `${prefix}${text}`);
     }
   }
 
@@ -94,7 +100,7 @@ export default async function ChatPage({
   if (otherIds.size > 0) {
     const { data: profRows } = await supabase
       .from("profiles")
-      .select("id, full_name, avatar_url, department")
+      .select("id, full_name, avatar_url, department, last_seen_at")
       .in("id", [...otherIds]);
     (profRows ?? []).forEach((p) => profiles.set(p.id, p));
   }
@@ -123,55 +129,27 @@ export default async function ChatPage({
     .map((m) => (m.user_low === me ? m.user_high : m.user_low))
     .filter((id) => !convOtherIds.has(id) && !initiatedIds.has(id));
 
-  // ── Requests sub-view ────────────────────────────────────────────────────
-  if (showRequests) {
-    return (
-      <main className="mx-auto w-full max-w-md px-4 py-6">
-        <header className="mb-4 flex items-center gap-3">
-          <Link
-            href="/chat"
-            aria-label="Back"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-fg"
-          >
-            <ChevronLeft className="h-6 w-6" aria-hidden />
-          </Link>
-          <h1 className="text-[22px] font-bold tracking-tight">Requests</h1>
-        </header>
-        {incoming.length === 0 ? (
-          <p className="py-16 text-center text-sm text-fg-muted">
-            No pending requests.
-          </p>
-        ) : (
-          <div className="space-y-3">
-            {incoming.map((r) => (
-              <RequestRow key={r.id} request={r} />
-            ))}
-          </div>
-        )}
-      </main>
-    );
-  }
-
-  // ── Messages view ────────────────────────────────────────────────────────
+  // Messages and Requests are two panels of one screen (UAT-006): the tab bar
+  // swaps them without a full-page header change.
   return (
     <main className="mx-auto w-full max-w-md px-4 py-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-[22px] font-bold tracking-tight">Messages</h1>
-        {/* Requests is the sole top-right action (replaces the old search/edit
-            icons). */}
-        <Link
-          href="/chat?view=requests"
-          className="flex items-center gap-1 rounded-full bg-card px-3 py-1.5 text-[13px] text-fg-muted"
-        >
-          Requests
-          {incoming.length > 0 && (
-            <span className="font-semibold text-accent">{incoming.length}</span>
-          )}
-        </Link>
-      </div>
+      <h1 className="text-[22px] font-bold tracking-tight">Messages</h1>
 
-      <ChatCommunityTabs active="messages" />
-
+      <ChatCommunityTabs
+        active={showRequests ? "requests" : "messages"}
+        requestCount={incoming.length}
+      >
+        {showRequests ? (
+          <div className="mt-5 space-y-3">
+            {incoming.length === 0 ? (
+              <p className="py-16 text-center text-sm text-fg-muted">
+                No pending requests.
+              </p>
+            ) : (
+              incoming.map((r) => <RequestRow key={r.id} request={r} />)
+            )}
+          </div>
+        ) : (
       <div className="mt-5 space-y-1">
         {conversations.length === 0 && newMatches.length === 0 ? (
           <p className="py-16 text-center text-sm text-fg-muted">
@@ -189,14 +167,17 @@ export default async function ChatPage({
                   href={`/chat/${c.id}`}
                   className="flex items-center gap-3 rounded-[12px] px-3 py-3 transition-colors hover:bg-card"
                 >
-                  <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full bg-card">
-                    {p?.avatar_url && (
-                      <AppImage
-                        src={p.avatar_url}
-                        alt={p.full_name ?? "Match"}
-                        sizes="44px"
-                      />
-                    )}
+                  <div className="relative h-11 w-11 shrink-0 rounded-full">
+                    <div className="relative h-full w-full overflow-hidden rounded-full bg-card">
+                      {p?.avatar_url && (
+                        <AppImage
+                          src={p.avatar_url}
+                          alt={p.full_name ?? "Match"}
+                          sizes="44px"
+                        />
+                      )}
+                    </div>
+                    {isOnline(p?.last_seen_at) && <OnlineDot />}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[15px] font-semibold text-fg">
@@ -246,7 +227,9 @@ export default async function ChatPage({
             })}
           </>
         )}
-      </div>
+          </div>
+        )}
+      </ChatCommunityTabs>
     </main>
   );
 }

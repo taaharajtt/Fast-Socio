@@ -9,7 +9,13 @@ import { PostComposer } from "@/components/feed/post-composer";
 import { PostCard } from "@/components/feed/post-card";
 import { CommunityChat, type CommunityMessage } from "@/components/communities/community-chat";
 import { ReviewPostRow, type PendingPost } from "@/components/communities/review-post-row";
+import { RouteTabs, type RouteTab } from "@/components/ui/route-tabs";
+import { SkeletonCards, SkeletonChat } from "@/components/ui/skeleton";
 import { createClient } from "@/lib/supabase/server";
+import {
+  fetchPollResults,
+  type PollOptionResult,
+} from "@/app/(student)/communities/actions";
 import type { FeedPost } from "@/lib/feed/types";
 
 type CommunityTab = "posts" | "chat" | "review";
@@ -57,7 +63,7 @@ export default async function CommunityPage({
   let pendingPosts: PendingPost[] = [];
   let pendingCount = 0;
   let chatMessages: CommunityMessage[] = [];
-  const chatSenders: Record<string, { name: string | null; avatar: string | null }> = {};
+  let polls: Record<string, PollOptionResult[]> = {};
 
   if (isMod) {
     const { count } = await supabase
@@ -83,27 +89,39 @@ export default async function CommunityPage({
       .order("created_at", { ascending: true });
     pendingPosts = (rows as PendingPost[]) ?? [];
   } else if (!pending && active === "chat" && isMember) {
+    // community_chat_view, not the base table: it masks the author of another
+    // member's anonymous message (UAT-005).
     const { data: rows } = await supabase
-      .from("community_chat_messages")
-      .select("id, sender_id, body, created_at")
+      .from("community_chat_view")
+      .select(
+        "id, sender_id, sender_name, sender_avatar, body, poll_id, is_anonymous, created_at"
+      )
       .eq("community_id", id)
       .order("created_at", { ascending: true })
       .limit(100);
     chatMessages = (rows as CommunityMessage[]) ?? [];
-    const senderIds = [...new Set(chatMessages.map((m) => m.sender_id))];
-    if (senderIds.length > 0) {
-      const { data: profs } = await supabase
-        .from("profiles")
-        .select("id, full_name, avatar_url")
-        .in("id", senderIds);
-      (profs ?? []).forEach((p) => {
-        chatSenders[p.id] = { name: p.full_name, avatar: p.avatar_url };
-      });
-    }
+    polls = await fetchPollResults(
+      [...new Set(chatMessages.map((m) => m.poll_id).filter(Boolean) as string[])]
+    );
   }
 
   const tabHref = (t: CommunityTab) =>
     t === "posts" ? `/communities/${id}` : `/communities/${id}?tab=${t}`;
+
+  const tabs: RouteTab[] = [
+    { key: "posts", href: tabHref("posts"), label: "Main" },
+    { key: "chat", href: tabHref("chat"), label: "Chat" },
+    ...(isMod
+      ? [
+          {
+            key: "review",
+            href: tabHref("review"),
+            label: "Review",
+            badge: pendingCount,
+          },
+        ]
+      : []),
+  ];
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col">
@@ -175,21 +193,18 @@ export default async function CommunityPage({
           This community is awaiting admin approval.
         </p>
       ) : (
-        <>
-          {/* Zone tabs: Main (approval feed) · Chat (open room) · Review (mods) */}
-          <div className="mt-4 flex gap-2">
-            <TabLink href={tabHref("posts")} active={active === "posts"} label="Main" />
-            <TabLink href={tabHref("chat")} active={active === "chat"} label="Chat" />
-            {isMod && (
-              <TabLink
-                href={tabHref("review")}
-                active={active === "review"}
-                label="Review"
-                badge={pendingCount}
-              />
-            )}
-          </div>
-
+        <RouteTabs
+          tabs={tabs}
+          activeKey={active}
+          className="mt-4"
+          // UAT-006: the pill lights on tap and the panel shimmers until the
+          // next tab's server render lands.
+          skeletons={{
+            posts: <SkeletonCards />,
+            chat: <SkeletonChat />,
+            review: <SkeletonCards count={2} />,
+          }}
+        >
           {active === "posts" && (
             <>
               {isMember && (
@@ -226,7 +241,7 @@ export default async function CommunityPage({
                   communityId={community.id}
                   meId={me}
                   initialMessages={chatMessages}
-                  initialSenders={chatSenders}
+                  initialPolls={polls}
                 />
               </div>
             ) : (
@@ -251,43 +266,9 @@ export default async function CommunityPage({
               )}
             </div>
           )}
-        </>
+        </RouteTabs>
       )}
       </div>
     </main>
-  );
-}
-
-function TabLink({
-  href,
-  active,
-  label,
-  badge,
-}: {
-  href: string;
-  active: boolean;
-  label: string;
-  badge?: number;
-}) {
-  return (
-    <Link
-      href={href}
-      className={`inline-flex items-center justify-center gap-1.5 rounded-full px-5 py-2 text-center text-sm font-semibold transition-all active:scale-95 ${
-        active
-          ? "gradient-brand text-white shadow-[0_4px_16px_rgba(124,58,237,0.4)]"
-          : "bg-card text-fg-muted hover:text-fg"
-      }`}
-    >
-      {label}
-      {badge ? (
-        <span
-          className={`rounded-full px-1.5 text-xs ${
-            active ? "bg-white/25" : "gradient-brand text-white"
-          }`}
-        >
-          {badge}
-        </span>
-      ) : null}
-    </Link>
   );
 }

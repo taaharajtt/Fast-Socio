@@ -1,40 +1,48 @@
-import Link from "next/link";
-import { cn } from "@/lib/utils";
+import { RouteTabs, type RouteTab } from "@/components/ui/route-tabs";
+import { SkeletonCards, SkeletonRows } from "@/components/ui/skeleton";
+
+export type ChatTabKey = "messages" | "requests" | "community";
 
 /**
- * The Messages | Community segmented pills (UISpec V3 Screens 10–11). The two
- * views live at separate routes (/chat and /communities); these pills navigate
- * between them, so exactly one is active per screen.
+ * The Messages · Requests · Community segmented pills (UISpec V3 Screens 10–11).
+ *
+ * The three panels are separate routes, so switching used to wait on a server
+ * round-trip before the pill even moved. RouteTabs highlights on tap and
+ * shimmers the panel until the next route renders (UAT-006).
  */
-export function ChatCommunityTabs({ active }: { active: "messages" | "community" }) {
-  return (
-    <div className="mt-4 flex gap-2">
-      <Pill href="/chat" label="Messages" active={active === "messages"} />
-      <Pill href="/communities" label="Community" active={active === "community"} />
-    </div>
-  );
-}
-
-function Pill({
-  href,
-  label,
+export function ChatCommunityTabs({
   active,
+  requestCount = 0,
+  children,
 }: {
-  href: string;
-  label: string;
-  active: boolean;
+  active: ChatTabKey;
+  /** Pending incoming message requests, shown as a pill badge. */
+  requestCount?: number;
+  children: React.ReactNode;
 }) {
+  const tabs: RouteTab[] = [
+    { key: "messages", href: "/chat", label: "Messages" },
+    {
+      key: "requests",
+      href: "/chat?view=requests",
+      label: "Requests",
+      badge: requestCount,
+    },
+    { key: "community", href: "/communities", label: "Community" },
+  ];
+
   return (
-    <Link
-      href={href}
-      className={cn(
-        "rounded-full px-4 py-2 text-sm font-semibold transition-all active:scale-95",
-        active
-          ? "gradient-brand text-white shadow-[0_4px_16px_rgba(124,58,237,0.4)]"
-          : "bg-card text-fg-muted hover:text-fg"
-      )}
+    <RouteTabs
+      tabs={tabs}
+      activeKey={active}
+      className="mt-4"
+      skeletons={{
+        messages: <SkeletonRows />,
+        requests: <SkeletonRows count={3} />,
+        community: <SkeletonCards />,
+      }}
     >
-      {label}
-    </Link>
+      {children}
+    </RouteTabs>
   );
 }

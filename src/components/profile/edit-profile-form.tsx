@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { updateProfile } from "@/app/(student)/profile/actions";
 import { CoverUpload } from "@/components/communities/cover-upload";
+import { ImageCropper, type CropResult } from "@/components/ui/image-cropper";
 import {
   BIO_MAX,
   DEPARTMENTS,
@@ -51,6 +52,7 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
   const [fullName, setFullName] = useState(initial.fullName);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(initial.avatarUrl);
   const [coverUrl, setCoverUrl] = useState<string | null>(initial.coverUrl);
+  const [pendingAvatar, setPendingAvatar] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [department, setDepartment] = useState(initial.department);
   const [semester, setSemester] = useState<number | null>(initial.semester);
@@ -79,11 +81,17 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
     interests.length <= MAX_INTERESTS &&
     bio.length <= BIO_MAX;
 
-  async function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
+  /** Pick → crop (UAT-008) → upload. Only the square crop reaches storage. */
+  function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
     setError(null);
+    setPendingAvatar(file);
+  }
+
+  async function onAvatarCropped({ blob, extension, mimeType }: CropResult) {
+    setPendingAvatar(null);
     setUploading(true);
     const {
       data: { user },
@@ -93,11 +101,10 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
       setError("You are not signed in.");
       return;
     }
-    const ext = file.name.split(".").pop() ?? "jpg";
-    const path = `${user.id}/${Date.now()}.${ext}`;
+    const path = `${user.id}/${Date.now()}.${extension}`;
     const { error: upErr } = await supabase.storage
       .from("avatars")
-      .upload(path, file, { upsert: true, contentType: file.type });
+      .upload(path, blob, { upsert: true, contentType: mimeType });
     if (upErr) {
       setUploading(false);
       setError(upErr.message);
@@ -197,6 +204,16 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
           hidden
           onChange={onPickFile}
         />
+        {pendingAvatar && (
+          <ImageCropper
+            file={pendingAvatar}
+            aspect={1}
+            round
+            title="Crop photo"
+            onCancel={() => setPendingAvatar(null)}
+            onCropped={onAvatarCropped}
+          />
+        )}
       </div>
 
       {/* Name */}

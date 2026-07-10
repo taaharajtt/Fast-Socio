@@ -33,6 +33,11 @@ export default async function EventsPage() {
       .order("starts_at", { ascending: true }),
     supabase.from("profiles").select("full_name").eq("id", me).single(),
   ]);
+
+  // UAT-013: opening this page clears the dock's "new events" badge. The layout
+  // has already counted for this render, so the badge clears on the next one.
+  await supabase.rpc("touch_events_seen");
+
   const events = (rows ?? []) as EventRow[];
   const approved = events.filter((e) => e.status === "approved");
   const myPending = events.filter(

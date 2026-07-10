@@ -6,6 +6,28 @@ export function absoluteTime(iso: string): string {
   });
 }
 
+/**
+ * A user counts as online if their heartbeat landed within this window. The
+ * client beats every 45s, so two minutes tolerates one missed beat plus clock
+ * skew without flickering someone offline mid-conversation.
+ */
+export const ONLINE_WINDOW_MS = 2 * 60 * 1000;
+
+export function isOnline(lastSeenAt: string | null | undefined): boolean {
+  if (!lastSeenAt) return false;
+  return Date.now() - new Date(lastSeenAt).getTime() < ONLINE_WINDOW_MS;
+}
+
+/**
+ * Presence caption for a profile: "Active now", "Active 5m ago", or "Offline"
+ * for a user who has never been seen (null before the heartbeat shipped).
+ */
+export function presenceLabel(lastSeenAt: string | null | undefined): string {
+  if (!lastSeenAt) return "Offline";
+  if (isOnline(lastSeenAt)) return "Active now";
+  return `Active ${timeAgo(lastSeenAt)} ago`;
+}
+
 /** Compact relative time, e.g. "now", "5m", "3h", "2d", "4w". */
 export function timeAgo(iso: string): string {
   const then = new Date(iso).getTime();

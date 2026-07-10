@@ -1,17 +1,34 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { Send, ImagePlus, Mic, Square, Flag, FileText } from "lucide-react";
+import {
+  Check,
+  Flag,
+  ImagePlus,
+  Mic,
+  Pencil,
+  Send,
+  Square,
+  Trash2,
+  X,
+} from "lucide-react";
 import { GlassButton, GlassSheet } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { chatMediaPath, CHAT_MEDIA_TTL_SECONDS } from "@/lib/chat-media";
+import { timeAgo } from "@/lib/time";
+import { VoiceNote } from "@/components/chat/voice-note";
+import {
+  SharedPostCard,
+  type SharedPostPreview,
+} from "@/components/chat/shared-post-preview";
 import {
   sendMessage,
   markConversationRead,
   reportMessage,
   fetchOlderMessages,
+  editMessage,
+  deleteMessage,
 } from "@/app/(student)/chat/actions";
 
 export type ChatMessage = {
@@ -23,9 +40,11 @@ export type ChatMessage = {
   shared_post_id: string | null;
   created_at: string;
   read_at: string | null;
+  edited_at: string | null;
+  deleted_at: string | null;
 };
 
-export type SharedPostPreview = { body: string | null; image_url: string | null };
+export type { SharedPostPreview };
 
 const REPORT_REASONS = [
   "Harassment or hate",
@@ -59,31 +78,32 @@ export function ChatThread({
   const [otherTyping, setOtherTyping] = useState(false);
   const [recording, setRecording] = useState(false);
   const [reportId, setReportId] = useState<string | null>(null);
+  const [actionsFor, setActionsFor] = useState<ChatMessage | null>(null);
+  const [editing, setEditing] = useState<ChatMessage | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const [canLoadOlder, setCanLoadOlder] = useState(hasMore);
   const [loadingOlder, setLoadingOlder] = useState(false);
 
   // Resolve a signed URL for a private chat-media attachment (P5-01). Images get
   // a 1080px transform; voice notes are signed as-is.
-  const signAttachment = useCallback(
-    async (m: ChatMessage) => {
-      if (!m.attachment_url) return;
-      const path = chatMediaPath(m.attachment_url);
-      if (!path) return;
-      const supabase = createClient();
-      const { data } = await supabase.storage
-        .from("chat-media")
-        .createSignedUrl(
-          path,
-          CHAT_MEDIA_TTL_SECONDS,
-          m.attachment_type === "image"
-            ? { transform: { width: 1080, height: 1080, resize: "contain" } }
-            : undefined
-        );
-      if (data?.signedUrl)
-        setSignedAttachments((prev) => ({ ...prev, [m.id]: data.signedUrl }));
-    },
-    []
-  );
+  const signAttachment = useCallback(async (m: ChatMessage) => {
+    if (!m.attachment_url) return;
+    const path = chatMediaPath(m.attachment_url);
+    if (!path) return;
+    const supabase = createClient();
+    const { data } = await supabase.storage
+      .from("chat-media")
+      .createSignedUrl(
+        path,
+        CHAT_MEDIA_TTL_SECONDS,
+        m.attachment_type === "image"
+          ? { transform: { width: 1080, height: 1080, resize: "contain" } }
+          : undefined
+      );
+    if (data?.signedUrl)
+      setSignedAttachments((prev) => ({ ...prev, [m.id]: data.signedUrl }));
+  }, []);
 
   async function loadOlder() {
     if (loadingOlder || messages.length === 0) return;
@@ -109,8 +129,9 @@ export function ChatThread({
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPress = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Realtime: new messages, read updates, and typing broadcasts.
+  // Realtime: new messages, edits/deletes/read updates, and typing broadcasts.
   useEffect(() => {
     const supabase = createClient();
     (async () => {
@@ -149,9 +170,11 @@ export function ChatThread({
             filter: `conversation_id=eq.${conversationId}`,
           },
           (payload) => {
+            // Take the whole row, not just read_at: an UPDATE now also carries
+            // edits and soft-deletes (UAT-009), which the old handler dropped.
             const m = payload.new as ChatMessage;
             setMessages((prev) =>
-              prev.map((x) => (x.id === m.id ? { ...x, read_at: m.read_at } : x))
+              prev.map((x) => (x.id === m.id ? { ...x, ...m } : x))
             );
           }
         )
@@ -192,10 +215,10 @@ export function ChatThread({
   ): Promise<string | null> {
     const supabase = createClient();
     const path = `${conversationId}/${crypto.randomUUID()}.${ext}`;
-    const { error } = await supabase.storage
+    const { error: upErr } = await supabase.storage
       .from("chat-media")
       .upload(path, file, { contentType });
-    if (error) return null;
+    if (upErr) return null;
     return path;
   }
 
@@ -258,6 +281,80 @@ export function ChatThread({
     setReportId(null);
   }
 
+  async function submitEdit() {
+    if (!editing) return;
+    const text = editDraft.trim();
+    if (!text) return;
+    const target = editing;
+    setEditing(null);
+    // Optimistic: the bubble updates now and reconciles on the realtime UPDATE.
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === target.id
+          ? { ...m, body: text, edited_at: new Date().toISOString() }
+          : m
+      )
+    );
+    const res = await editMessage(target.id, text);
+    if (!res.ok) {
+      setError(res.error);
+      setMessages((prev) =>
+        prev.map((m) => (m.id === target.id ? target : m))
+      );
+    }
+  }
+
+  async function confirmDelete(message: ChatMessage) {
+    setActionsFor(null);
+    const res = await deleteMessage(message.id);
+    if (!res.ok) {
+      setError(res.error);
+      return;
+    }
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === message.id
+          ? {
+              ...m,
+              body: "",
+              attachment_url: null,
+              attachment_type: null,
+              shared_post_id: null,
+              deleted_at: new Date().toISOString(),
+            }
+          : m
+      )
+    );
+  }
+
+  /** Long-press (touch) or right-click opens the per-message action sheet. */
+  function pressHandlers(m: ChatMessage) {
+    if (m.deleted_at) return {};
+    const open = () => setActionsFor(m);
+    return {
+      onPointerDown: () => {
+        longPress.current = setTimeout(open, 450);
+      },
+      onPointerUp: () => {
+        if (longPress.current) clearTimeout(longPress.current);
+      },
+      onPointerLeave: () => {
+        if (longPress.current) clearTimeout(longPress.current);
+      },
+      onContextMenu: (e: React.MouseEvent) => {
+        e.preventDefault();
+        open();
+      },
+    };
+  }
+
+  // The last message I sent that the other party has read — the only place a
+  // receipt belongs, IG/WhatsApp style.
+  const lastReadMine = [...messages]
+    .reverse()
+    .find((m) => m.sender_id === meId && m.read_at)?.id;
+  const lastMineId = [...messages].reverse().find((m) => m.sender_id === meId)?.id;
+
   return (
     // min-h-0 lets this flex column shrink inside the fixed chat shell so the
     // message list can actually scroll (UAT-017) instead of overflowing and
@@ -279,82 +376,88 @@ export function ChatThread({
         {messages.length === 0 && (
           <p className="mt-8 text-center text-sm text-fg-muted">Say hello 👋</p>
         )}
-        {messages.map((m, i) => {
+        {messages.map((m) => {
           const mine = m.sender_id === meId;
-          const isLastMine =
-            mine && i === messages.map((x) => x.sender_id).lastIndexOf(meId);
+          const deleted = Boolean(m.deleted_at);
+          const isMedia =
+            !deleted && (m.attachment_type === "image" || Boolean(m.shared_post_id));
+
           return (
             <div key={m.id}>
               <div className={cn("flex", mine ? "justify-end" : "justify-start")}>
                 <div
-                  onClick={() => !mine && setReportId(m.id)}
+                  {...(mine ? pressHandlers(m) : {})}
+                  onClick={() => !mine && !deleted && setReportId(m.id)}
                   className={cn(
                     "max-w-[78%] overflow-hidden rounded-2xl text-[15px]",
-                    m.attachment_type === "image" ? "p-1" : "px-4 py-2",
-                    mine
-                      ? "gradient-brand rounded-br-md text-white"
-                      : "glass rounded-bl-md text-fg cursor-pointer"
+                    // UAT-002: media sizes the bubble, so the bubble must not add
+                    // padding around it. Text and voice keep their inset.
+                    isMedia ? "p-1" : "px-4 py-2",
+                    deleted
+                      ? "border border-dashed border-glass-border bg-transparent text-fg-disabled"
+                      : mine
+                        ? "gradient-brand rounded-br-md text-white"
+                        : "glass rounded-bl-md cursor-pointer text-fg"
                   )}
                 >
-                  {m.shared_post_id ? (
-                    <Link
-                      href={`/post/${m.shared_post_id}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="block w-56 max-w-full"
-                    >
-                      <div
-                        className={cn(
-                          "flex items-start gap-2 rounded-xl border p-2.5",
-                          mine
-                            ? "border-white/30 bg-white/10"
-                            : "border-glass-border bg-bg-elevated/40"
-                        )}
-                      >
-                        <FileText className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-                        <div className="min-w-0">
-                          <p className="line-clamp-2 text-sm">
-                            {sharedPosts[m.shared_post_id]?.body ?? "Shared a post"}
-                          </p>
-                          <p
-                            className={cn(
-                              "mt-1 text-xs",
-                              mine ? "text-white/70" : "text-fg-muted"
-                            )}
-                          >
-                            Tap to view post →
-                          </p>
-                        </div>
-                      </div>
-                    </Link>
+                  {deleted ? (
+                    <span className="text-[13px] italic">
+                      This message was deleted
+                    </span>
+                  ) : m.shared_post_id ? (
+                    <SharedPostCard
+                      postId={m.shared_post_id}
+                      preview={sharedPosts[m.shared_post_id]}
+                      mine={mine}
+                    />
                   ) : m.attachment_type === "image" && m.attachment_url ? (
                     signedAttachments[m.id] ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={signedAttachments[m.id]}
                         alt="Shared image"
-                        className="max-h-64 rounded-xl object-cover"
+                        className="block max-h-72 w-[220px] rounded-xl object-cover"
                         loading="lazy"
                         decoding="async"
                       />
                     ) : (
-                      <div className="flex h-24 w-40 items-center justify-center text-xs text-fg-muted">
-                        Loading image…
-                      </div>
+                      <div className="flex h-40 w-[220px] animate-pulse items-center justify-center rounded-xl bg-white/10" />
                     )
                   ) : m.attachment_type === "voice" && m.attachment_url ? (
                     signedAttachments[m.id] ? (
-                      <audio controls src={signedAttachments[m.id]} className="h-10" />
+                      <VoiceNote src={signedAttachments[m.id]} mine={mine} />
                     ) : (
-                      <span className="text-xs text-fg-muted">Loading audio…</span>
+                      <div className="flex h-8 w-[180px] animate-pulse items-center rounded-full bg-white/10" />
                     )
                   ) : (
-                    m.body
+                    <span className="whitespace-pre-wrap break-words">
+                      {m.body}
+                      {m.edited_at && (
+                        <span
+                          className={cn(
+                            "ml-1.5 align-baseline text-[11px]",
+                            mine ? "text-white/60" : "text-fg-disabled"
+                          )}
+                        >
+                          edited
+                        </span>
+                      )}
+                    </span>
                   )}
                 </div>
               </div>
-              {isLastMine && (
-                <p className="mr-1 mt-0.5 text-right text-[11px] text-fg-muted">
-                  {m.read_at ? "Read" : "Sent"}
+
+              {/* UAT-004: a read receipt now says WHEN, not just "Read". */}
+              {mine && m.id === (lastReadMine ?? lastMineId) && (
+                <p className="mr-1 mt-0.5 flex items-center justify-end gap-1 text-right text-[11px] text-fg-muted">
+                  {m.read_at ? (
+                    <>
+                      <Check className="h-3 w-3" strokeWidth={3} aria-hidden />
+                      Seen {timeAgo(m.read_at)} ago
+                    </>
+                  ) : (
+                    "Sent"
+                  )}
                 </p>
               )}
             </div>
@@ -376,62 +479,142 @@ export function ChatThread({
         <div ref={bottomRef} />
       </div>
 
-      <form
-        onSubmit={onSendText}
-        className="sticky bottom-0 flex items-center gap-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2"
-      >
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          hidden
-          onChange={onPickImage}
-        />
-        <button
-          type="button"
-          aria-label="Attach image"
-          onClick={() => fileRef.current?.click()}
-          disabled={busy}
-          className="glass flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-fg-muted disabled:opacity-40"
-        >
-          <ImagePlus className="h-5 w-5" aria-hidden />
-        </button>
-        <button
-          type="button"
-          aria-label={recording ? "Stop recording" : "Record voice note"}
-          onClick={toggleRecording}
-          disabled={busy && !recording}
-          className={cn(
-            "flex h-11 w-11 shrink-0 items-center justify-center rounded-full disabled:opacity-40",
-            recording ? "bg-error text-white" : "glass text-fg-muted"
-          )}
-        >
-          {recording ? (
-            <Square className="h-4 w-4" aria-hidden />
-          ) : (
-            <Mic className="h-5 w-5" aria-hidden />
-          )}
-        </button>
-        <input
-          value={draft}
-          onChange={(e) => {
-            setDraft(e.target.value);
-            broadcastTyping();
+      {error && (
+        <p role="alert" className="pb-1 text-center text-xs text-error">
+          {error}
+        </p>
+      )}
+
+      {editing ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            submitEdit();
           }}
-          placeholder={recording ? "Recording…" : "Message…"}
-          disabled={recording}
-          className="glass h-11 flex-1 rounded-[var(--radius-pill)] px-4 text-[15px] text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
-        />
-        <GlassButton
-          type="submit"
-          size="icon"
-          className="h-11 w-11"
-          aria-label="Send"
-          disabled={busy || draft.trim().length === 0}
+          className="sticky bottom-0 space-y-1.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2"
         >
-          <Send className="h-5 w-5" aria-hidden />
-        </GlassButton>
-      </form>
+          <div className="flex items-center gap-2 px-1 text-xs text-fg-muted">
+            <Pencil className="h-3.5 w-3.5" aria-hidden />
+            Editing message
+            <button
+              type="button"
+              onClick={() => setEditing(null)}
+              className="ml-auto flex h-6 w-6 items-center justify-center rounded-full"
+              aria-label="Cancel edit"
+            >
+              <X className="h-4 w-4" aria-hidden />
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              autoFocus
+              value={editDraft}
+              onChange={(e) => setEditDraft(e.target.value)}
+              className="glass h-11 flex-1 rounded-[var(--radius-pill)] px-4 text-[15px] text-fg outline-none focus:ring-2 focus:ring-aura/40"
+            />
+            <GlassButton
+              type="submit"
+              size="icon"
+              className="h-11 w-11"
+              aria-label="Save edit"
+              disabled={editDraft.trim().length === 0}
+            >
+              <Check className="h-5 w-5" aria-hidden />
+            </GlassButton>
+          </div>
+        </form>
+      ) : (
+        <form
+          onSubmit={onSendText}
+          className="sticky bottom-0 flex items-center gap-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2"
+        >
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={onPickImage}
+          />
+          <button
+            type="button"
+            aria-label="Attach image"
+            onClick={() => fileRef.current?.click()}
+            disabled={busy}
+            className="glass flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-fg-muted disabled:opacity-40"
+          >
+            <ImagePlus className="h-5 w-5" aria-hidden />
+          </button>
+          <button
+            type="button"
+            aria-label={recording ? "Stop recording" : "Record voice note"}
+            onClick={toggleRecording}
+            disabled={busy && !recording}
+            className={cn(
+              "flex h-11 w-11 shrink-0 items-center justify-center rounded-full disabled:opacity-40",
+              recording ? "bg-error text-white" : "glass text-fg-muted"
+            )}
+          >
+            {recording ? (
+              <Square className="h-4 w-4" aria-hidden />
+            ) : (
+              <Mic className="h-5 w-5" aria-hidden />
+            )}
+          </button>
+          <input
+            value={draft}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              broadcastTyping();
+            }}
+            placeholder={recording ? "Recording…" : "Message…"}
+            disabled={recording}
+            className="glass h-11 flex-1 rounded-[var(--radius-pill)] px-4 text-[15px] text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
+          />
+          <GlassButton
+            type="submit"
+            size="icon"
+            className="h-11 w-11"
+            aria-label="Send"
+            disabled={busy || draft.trim().length === 0}
+          >
+            <Send className="h-5 w-5" aria-hidden />
+          </GlassButton>
+        </form>
+      )}
+
+      {/* UAT-009: long-press your own message to edit or delete it. */}
+      <GlassSheet
+        open={Boolean(actionsFor)}
+        onClose={() => setActionsFor(null)}
+        label="Message actions"
+      >
+        <div className="space-y-3">
+          {actionsFor &&
+            !actionsFor.attachment_url &&
+            !actionsFor.shared_post_id && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditDraft(actionsFor.body ?? "");
+                  setEditing(actionsFor);
+                  setActionsFor(null);
+                }}
+                className="glass flex w-full items-center gap-3 rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm text-fg"
+              >
+                <Pencil className="h-4 w-4" aria-hidden />
+                Edit message
+              </button>
+            )}
+          <button
+            type="button"
+            onClick={() => actionsFor && confirmDelete(actionsFor)}
+            className="glass flex w-full items-center gap-3 rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm text-error"
+          >
+            <Trash2 className="h-4 w-4" aria-hidden />
+            Delete message
+          </button>
+        </div>
+      </GlassSheet>
 
       <GlassSheet open={Boolean(reportId)} onClose={() => setReportId(null)}>
         <div className="space-y-3">

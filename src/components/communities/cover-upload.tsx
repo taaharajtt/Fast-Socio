@@ -3,12 +3,13 @@
 import { useRef, useState } from "react";
 import { ImagePlus, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { ImageCropper, type CropResult } from "@/components/ui/image-cropper";
 
 /**
- * 16:9 community cover picker (UAT-019/020). Uploads to the public `post-media`
- * bucket under the owner's folder and reports the public URL up. The preview box
- * is locked to 16:9 and the image is scaled to fill (object-cover), so covers of
- * any ratio fill the banner cleanly.
+ * 16:9 cover picker (UAT-019/020). The chosen file goes through the cropper
+ * first (UAT-008) so the user frames the banner themselves rather than trusting
+ * an object-cover centre crop; only the cropped result is uploaded, to the
+ * public `post-media` bucket under the owner's folder.
  */
 export function CoverUpload({
   value,
@@ -24,28 +25,34 @@ export function CoverUpload({
   prefix?: string;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
+  function onPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    setUploading(true);
     setError(null);
+    setPendingFile(file);
+  }
+
+  async function onCropped({ blob, extension, mimeType }: CropResult) {
+    setPendingFile(null);
+    setUploading(true);
     const supabase = createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) {
       setUploading(false);
+      setError("You are not signed in.");
       return;
     }
-    const ext = file.name.split(".").pop() ?? "jpg";
-    const path = `${user.id}/${prefix}-${crypto.randomUUID()}.${ext}`;
+    const path = `${user.id}/${prefix}-${crypto.randomUUID()}.${extension}`;
     const { error: upErr } = await supabase.storage
       .from("post-media")
-      .upload(path, file, { contentType: file.type });
+      .upload(path, blob, { contentType: mimeType });
     if (upErr) {
       setUploading(false);
       setError(upErr.message);
@@ -69,6 +76,14 @@ export function CoverUpload({
           />
           <button
             type="button"
+            aria-label="Change cover"
+            onClick={() => fileRef.current?.click()}
+            className="glass-strong absolute bottom-2 right-2 rounded-full px-3 py-1.5 text-xs font-semibold"
+          >
+            Change
+          </button>
+          <button
+            type="button"
             aria-label="Remove cover"
             onClick={() => onChange(null)}
             className="glass-strong absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full"
@@ -88,6 +103,16 @@ export function CoverUpload({
         </button>
       )}
       {error && <p className="text-sm text-error">{error}</p>}
+
+      {pendingFile && (
+        <ImageCropper
+          file={pendingFile}
+          aspect={16 / 9}
+          title="Crop cover"
+          onCancel={() => setPendingFile(null)}
+          onCropped={onCropped}
+        />
+      )}
     </div>
   );
 }

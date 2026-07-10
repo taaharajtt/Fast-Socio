@@ -110,14 +110,14 @@ export default async function ActivityPage() {
   } = await supabase.auth.getUser();
   const me = user!.id;
 
-  // Messages and message requests live in Chat, not Activity — they only fire
-  // as mobile push. Everything else (reacts, replies, matches, announcements)
-  // shows here.
+  // Messages and message requests live in Chat, not Activity — they only fire as
+  // mobile push. Admin broadcasts (type 'announcement') are delivered as a
+  // cold-open modal instead (UAT-012), so they're excluded here too.
   const { data: rows } = await supabase
     .from("notifications")
     .select("id, actor_id, type, data, read_at, created_at")
     .eq("user_id", me)
-    .not("type", "in", "(message,message_request)")
+    .not("type", "in", "(message,message_request,announcement)")
     .order("created_at", { ascending: false })
     .limit(80);
   const notifs = (rows as Notif[]) ?? [];

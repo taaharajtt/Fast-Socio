@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ImagePlus, Loader2, VenetianMask, X } from "lucide-react";
 import { GlassButton, GlassCard } from "@/components/ui";
+import { ImageCropper, type CropResult } from "@/components/ui/image-cropper";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { createPost } from "@/app/(student)/home/actions";
@@ -23,15 +24,23 @@ export function PostComposer({
   const [body, setBody] = useState("");
   const [anon, setAnon] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  async function onPickImage(e: React.ChangeEvent<HTMLInputElement>) {
+  function onPickImage(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+    setError(null);
+    setPendingFile(file);
+  }
+
+  /** Upload the cropped result (UAT-008); the original never leaves the device. */
+  async function onCropped({ blob, extension, mimeType }: CropResult) {
+    setPendingFile(null);
     setUploading(true);
     setError(null);
     const supabase = createClient();
@@ -42,14 +51,13 @@ export function PostComposer({
       setUploading(false);
       return;
     }
-    const ext = file.name.split(".").pop() ?? "jpg";
     // De-identified path (P3-01): never embed the author's uid in a post image
     // URL, otherwise anonymous posts leak their author. `shared/` is allowed by
     // the post-media INSERT policy; the object key is random.
-    const path = `shared/${crypto.randomUUID()}.${ext}`;
+    const path = `shared/${crypto.randomUUID()}.${extension}`;
     const { error: upErr } = await supabase.storage
       .from("post-media")
-      .upload(path, file, { contentType: file.type });
+      .upload(path, blob, { contentType: mimeType });
     if (upErr) {
       setUploading(false);
       setError(upErr.message);
@@ -111,10 +119,17 @@ export function PostComposer({
           <img
             src={imageUrl}
             alt="Selected"
-            className="max-h-52 w-full rounded-xl object-cover"
+            className="max-h-72 w-full rounded-xl object-cover"
             loading="lazy"
             decoding="async"
           />
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="glass-strong absolute bottom-2 right-2 rounded-full px-3 py-1.5 text-xs font-semibold"
+          >
+            Recrop
+          </button>
           <button
             type="button"
             aria-label="Remove image"
@@ -124,6 +139,16 @@ export function PostComposer({
             <X className="h-4 w-4" aria-hidden />
           </button>
         </div>
+      )}
+
+      {pendingFile && (
+        <ImageCropper
+          file={pendingFile}
+          aspect={4 / 5}
+          title="Crop photo"
+          onCancel={() => setPendingFile(null)}
+          onCropped={onCropped}
+        />
       )}
 
       <div className="mt-3 flex items-center gap-2">
@@ -143,18 +168,23 @@ export function PostComposer({
         >
           <ImagePlus className="h-5 w-5" aria-hidden />
         </button>
-        <button
-          type="button"
-          onClick={() => setAnon((a) => !a)}
-          aria-pressed={anon}
-          className={cn(
-            "flex h-9 items-center gap-1.5 rounded-full px-3 text-sm transition-colors",
-            anon ? "bg-aura text-white" : "glass text-fg-muted"
-          )}
-        >
-          <VenetianMask className="h-4 w-4" aria-hidden />
-          Anonymous
-        </button>
+        {/* UAT-005: anonymity moved out of the community Main panel — posts there
+            are moderated and attributed. It lives in the community chat room
+            instead. The main campus feed keeps it. */}
+        {!communityId && (
+          <button
+            type="button"
+            onClick={() => setAnon((a) => !a)}
+            aria-pressed={anon}
+            className={cn(
+              "flex h-9 items-center gap-1.5 rounded-full px-3 text-sm transition-colors",
+              anon ? "bg-aura text-white" : "glass text-fg-muted"
+            )}
+          >
+            <VenetianMask className="h-4 w-4" aria-hidden />
+            Anonymous
+          </button>
+        )}
         <GlassButton
           size="sm"
           className="ml-auto"

@@ -12,12 +12,22 @@ export default async function HomePage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const { data } = await supabase
-    .from("feed_posts")
-    .select("*")
-    .is("community_id", null)
-    .order("created_at", { ascending: false })
-    .limit(FEED_PAGE_SIZE);
+  const [{ data }, { count: unreadActivity }] = await Promise.all([
+    supabase
+      .from("feed_posts")
+      .select("*")
+      .is("community_id", null)
+      .order("created_at", { ascending: false })
+      .limit(FEED_PAGE_SIZE),
+    // UAT-013: the Activity icon carries an unread count. Mirrors the filter on
+    // /activity so the badge can never point at rows that page won't show.
+    supabase
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user!.id)
+      .is("read_at", null)
+      .not("type", "in", "(message,message_request,announcement)"),
+  ]);
   const posts = (data as FeedPost[]) ?? [];
 
   return (
@@ -43,10 +53,19 @@ export default async function HomePage() {
             nav's "Me" tab (UAT-005). */}
         <Link
           href="/activity"
-          aria-label="Activity"
-          className="glass flex h-9 w-9 items-center justify-center rounded-full text-fg-muted hover:text-fg"
+          aria-label={
+            unreadActivity
+              ? `Activity, ${unreadActivity} unread`
+              : "Activity"
+          }
+          className="glass relative flex h-9 w-9 items-center justify-center rounded-full text-fg-muted hover:text-fg"
         >
           <Activity className="h-5 w-5" aria-hidden />
+          {(unreadActivity ?? 0) > 0 && (
+            <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold leading-none text-white ring-2 ring-bg">
+              {unreadActivity! > 99 ? "99+" : unreadActivity}
+            </span>
+          )}
         </Link>
       </header>
 

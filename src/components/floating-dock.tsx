@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { NAV_ITEMS } from "@/lib/nav";
+import { NAV_ITEMS, activeNavHref } from "@/lib/nav";
 import { AppImage } from "@/components/ui/app-image";
 import { cn } from "@/lib/utils";
 
@@ -19,15 +19,20 @@ import { cn } from "@/lib/utils";
 export function FloatingDock({
   badges = {},
   avatarUrl,
+  viewerId,
 }: {
   /** Unread counts keyed by nav href (e.g. { "/chat": 3 }). */
   badges?: Record<string, number>;
   /** Viewer's avatar — rendered as the "Me" (/profile) tab icon (UAT-005). */
   avatarUrl?: string | null;
+  /** Distinguishes your own /profile/<id> from another student's (UAT-011). */
+  viewerId?: string;
 }) {
   const pathname = usePathname();
 
   if (/^\/chat\/.+/.test(pathname)) return null;
+
+  const activeHref = activeNavHref(pathname, viewerId);
 
   return (
     <nav
@@ -36,7 +41,7 @@ export function FloatingDock({
     >
       <div className="mx-auto flex h-14 max-w-md items-stretch">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href || pathname.startsWith(`${href}/`);
+          const active = activeHref === href;
           const badge = badges[href] ?? 0;
           return (
             <Link

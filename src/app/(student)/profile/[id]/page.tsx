@@ -5,7 +5,9 @@ import { OpenChatButton } from "@/components/chat/open-chat-button";
 import { ProfileTabs, type ProfileCommunity } from "@/components/profile/profile-tabs";
 import { createClient } from "@/lib/supabase/server";
 import { AppImage } from "@/components/ui/app-image";
+import { OnlineDot } from "@/components/ui/badges";
 import { deptMeta } from "@/lib/leaderboard/departments";
+import { isOnline, presenceLabel } from "@/lib/time";
 import type { FeedPost } from "@/lib/feed/types";
 
 /** 1 → "1st", 6 → "6th" (UISpec V3 "6th Semester"). */
@@ -30,7 +32,9 @@ export default async function PublicProfilePage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, full_name, department, semester, bio, avatar_url, aura_score, verified")
+    .select(
+      "id, full_name, department, semester, bio, avatar_url, cover_url, aura_score, verified, last_seen_at"
+    )
     .eq("id", id)
     .single();
   if (!profile) notFound();
@@ -89,9 +93,19 @@ export default async function PublicProfilePage({
 
   return (
     <div className="mx-auto w-full max-w-md">
-      {/* Cover banner (200px) + overlapping 80px avatar (UISpec V3 Screen 14). */}
+      {/* Cover banner (200px) + overlapping 80px avatar (UISpec V3 Screen 14).
+          UAT-001: a profile's own cover was rendered but never anyone else's —
+          this page simply didn't read cover_url. RLS always allowed it. */}
       <div className="relative h-[200px]">
-        <div className="h-full w-full gradient-brand opacity-80" />
+        {profile.cover_url ? (
+          <AppImage
+            src={profile.cover_url}
+            alt=""
+            sizes="(max-width: 448px) 100vw, 448px"
+          />
+        ) : (
+          <div className="h-full w-full gradient-brand opacity-80" />
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/20 to-transparent" />
         <Link
           href="/home"
@@ -106,17 +120,22 @@ export default async function PublicProfilePage({
           </span>
         )}
         <div className="absolute -bottom-10 left-4">
-          <div className="relative h-20 w-20 overflow-hidden rounded-full border-[3px] border-bg bg-card">
-            {profile.avatar_url ? (
-              <AppImage
-                src={profile.avatar_url}
-                alt={profile.full_name ?? "Avatar"}
-                sizes="80px"
-              />
-            ) : (
-              <span className="flex h-full w-full items-center justify-center text-xl font-bold">
-                {initials}
-              </span>
+          <div className="relative h-20 w-20 rounded-full">
+            <div className="relative h-full w-full overflow-hidden rounded-full border-[3px] border-bg bg-card">
+              {profile.avatar_url ? (
+                <AppImage
+                  src={profile.avatar_url}
+                  alt={profile.full_name ?? "Avatar"}
+                  sizes="80px"
+                />
+              ) : (
+                <span className="flex h-full w-full items-center justify-center text-xl font-bold">
+                  {initials}
+                </span>
+              )}
+            </div>
+            {isOnline(profile.last_seen_at) && (
+              <OnlineDot className="bottom-1 right-1 h-3.5 w-3.5" />
             )}
           </div>
         </div>
@@ -139,6 +158,9 @@ export default async function PublicProfilePage({
               {profile.full_name ?? "Student"}
             </h1>
             <p className="truncate text-sm text-fg-muted">{deptLabel}</p>
+            <p className="truncate text-xs text-fg-disabled">
+              {presenceLabel(profile.last_seen_at)}
+            </p>
           </div>
           {isSelf ? (
             <Link

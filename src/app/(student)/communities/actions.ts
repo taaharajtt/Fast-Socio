@@ -83,10 +83,16 @@ export async function updateCommunity(input: {
   redirect(`/communities/${input.id}`);
 }
 
-/** Send a message to a community's open chat room (Zone 2). RLS enforces membership. */
+/**
+ * Send a message to a community's open chat room (Zone 2). Goes through the
+ * send_community_message RPC rather than a direct insert so `is_anonymous` is
+ * set under definer rights — a plain client insert can only ever write the
+ * column's `false` default (UAT-005).
+ */
 export async function sendCommunityMessage(
   communityId: string,
-  body: string
+  body: string,
+  anonymous = false
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
   const {
@@ -101,13 +107,100 @@ export async function sendCommunityMessage(
   const allowed = await checkRateLimit("community_chat", 60, 60);
   if (!allowed) return { ok: false, error: "You're sending too fast." };
 
-  const { error } = await supabase.from("community_chat_messages").insert({
-    community_id: communityId,
-    sender_id: user.id,
-    body: text,
+  const { error } = await supabase.rpc("send_community_message", {
+    p_community_id: communityId,
+    p_body: text,
+    p_anonymous: anonymous,
   });
   if (error) return { ok: false, error: error.message };
   return { ok: true };
+}
+
+export type PollOptionResult = {
+  option_id: string;
+  label: string;
+  position: number;
+  votes: number;
+  voted_by_me: boolean;
+};
+
+/** Post a poll into a community chat room (UAT-005). 2–6 options. */
+export async function createCommunityPoll(
+  communityId: string,
+  question: string,
+  options: string[],
+  anonymous = false
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const q = question.trim();
+  const opts = options.map((o) => o.trim()).filter(Boolean);
+  if (q.length < 1 || q.length > 300)
+    return { ok: false, error: "Ask a question (1–300 characters)." };
+  if (opts.length < 2 || opts.length > 6)
+    return { ok: false, error: "A poll needs 2–6 options." };
+
+  // Polls insert a chat message, so they share the chat room's send limit.
+  const allowed = await checkRateLimit("community_chat", 60, 60);
+  if (!allowed) return { ok: false, error: "You're sending too fast." };
+
+  const { error } = await supabase.rpc("create_community_poll", {
+    p_community_id: communityId,
+    p_question: q,
+    p_options: opts,
+    p_anonymous: anonymous,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/** Cast (or move) the caller's vote. One ballot per member per poll. */
+export async function voteCommunityPoll(
+  pollId: string,
+  optionId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("vote_community_poll", {
+    p_poll_id: pollId,
+    p_option_id: optionId,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/**
+ * Tallies for a set of polls. Individual ballots are unreadable to other members
+ * by RLS; this view aggregates them under definer rights and reports only the
+ * caller's own choice.
+ */
+export async function fetchPollResults(
+  pollIds: string[]
+): Promise<Record<string, PollOptionResult[]>> {
+  if (pollIds.length === 0) return {};
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("community_poll_results")
+    .select("poll_id, option_id, label, position, votes, voted_by_me")
+    .in("poll_id", pollIds)
+    .order("position", { ascending: true });
+
+  const byPoll: Record<string, PollOptionResult[]> = {};
+  for (const row of data ?? []) {
+    const list = byPoll[row.poll_id as string] ?? [];
+    list.push({
+      option_id: row.option_id as string,
+      label: row.label as string,
+      position: row.position as number,
+      votes: Number(row.votes),
+      voted_by_me: Boolean(row.voted_by_me),
+    });
+    byPoll[row.poll_id as string] = list;
+  }
+  return byPoll;
 }
 
 /**

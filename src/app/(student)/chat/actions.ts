@@ -213,6 +213,44 @@ export async function sharePostToFriend(
   return { ok: true, conversationId: conversationId as string };
 }
 
+/**
+ * Edit one of the caller's own text messages (UAT-009). Backed by a SECURITY
+ * DEFINER RPC rather than an UPDATE policy: `messages` has no client UPDATE
+ * policy at all, so there is no path by which a sender could rewrite read_at,
+ * un-hide a moderated message, or touch a row they don't own.
+ */
+export async function editMessage(
+  messageId: string,
+  body: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const text = body.trim();
+  if (text.length < 1 || text.length > 4000)
+    return { ok: false, error: "Message must be 1–4000 characters." };
+
+  const { error } = await supabase.rpc("edit_message", {
+    p_message_id: messageId,
+    p_body: text,
+  });
+  if (error) return { ok: false, error: "Only your own text messages can be edited." };
+  return { ok: true };
+}
+
+/**
+ * Soft-delete one of the caller's own messages. The row survives (read receipts
+ * and moderation records point at it) but its body and attachment are cleared.
+ */
+export async function deleteMessage(
+  messageId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("delete_message", {
+    p_message_id: messageId,
+  });
+  if (error) return { ok: false, error: "Only your own messages can be deleted." };
+  return { ok: true };
+}
+
 /** Report a specific message for moderator review (target_type = 'message'). */
 export async function reportMessage(
   messageId: string,

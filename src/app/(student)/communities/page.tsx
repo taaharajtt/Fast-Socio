@@ -25,13 +25,20 @@ export default async function CommunitiesPage() {
   } = await supabase.auth.getUser();
   const me = user!.id;
 
-  const [{ data: rows }, { data: memberRows }] = await Promise.all([
-    supabase
-      .from("communities")
-      .select("id, name, description, avatar_url, cover_url, member_count, status, owner_id")
-      .order("member_count", { ascending: false }),
-    supabase.from("community_members").select("community_id").eq("user_id", me),
-  ]);
+  const [{ data: rows }, { data: memberRows }, { count: pendingRequests }] =
+    await Promise.all([
+      supabase
+        .from("communities")
+        .select("id, name, description, avatar_url, cover_url, member_count, status, owner_id")
+        .order("member_count", { ascending: false }),
+      supabase.from("community_members").select("community_id").eq("user_id", me),
+      // Keeps the Requests pill badge consistent across all three tab panels.
+      supabase
+        .from("message_requests")
+        .select("id", { count: "exact", head: true })
+        .eq("recipient_id", me)
+        .eq("status", "pending"),
+    ]);
   const communities = (rows ?? []) as Community[];
   const myMemberships = new Set(
     (memberRows ?? []).map((m) => m.community_id as string)
@@ -66,33 +73,33 @@ export default async function CommunitiesPage() {
         </Link>
       </div>
 
-      <ChatCommunityTabs active="community" />
-
-      {myPending.length > 0 && (
-        <section className="mt-4">
-          <h2 className="mb-2 text-sm font-medium text-fg-muted">
-            Awaiting approval
-          </h2>
-          <div className="space-y-2">
-            {myPending.map((c) => (
-              <div
-                key={c.id}
-                className="flex items-center gap-3 rounded-[14px] bg-card p-4"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold">{c.name}</p>
-                  <p className="text-xs text-fg-muted">Pending admin review</p>
+      <ChatCommunityTabs active="community" requestCount={pendingRequests ?? 0}>
+        {myPending.length > 0 && (
+          <section className="mt-4">
+            <h2 className="mb-2 text-sm font-medium text-fg-muted">
+              Awaiting approval
+            </h2>
+            <div className="space-y-2">
+              {myPending.map((c) => (
+                <div
+                  key={c.id}
+                  className="flex items-center gap-3 rounded-[14px] bg-card p-4"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold">{c.name}</p>
+                    <p className="text-xs text-fg-muted">Pending admin review</p>
+                  </div>
+                  <span className="flex items-center gap-1 rounded-full bg-warning/15 px-2.5 py-1 text-xs font-medium text-warning">
+                    <Clock className="h-3 w-3" aria-hidden /> pending
+                  </span>
                 </div>
-                <span className="flex items-center gap-1 rounded-full bg-warning/15 px-2.5 py-1 text-xs font-medium text-warning">
-                  <Clock className="h-3 w-3" aria-hidden /> pending
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+              ))}
+            </div>
+          </section>
+        )}
 
-      <CommunityBrowser communities={vms} />
+        <CommunityBrowser communities={vms} />
+      </ChatCommunityTabs>
     </main>
   );
 }

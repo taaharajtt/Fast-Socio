@@ -8,6 +8,8 @@ import {
 } from "@/components/chat/chat-thread";
 import { createClient } from "@/lib/supabase/server";
 import { AppImage } from "@/components/ui/app-image";
+import { OnlineDot } from "@/components/ui/badges";
+import { isOnline, presenceLabel } from "@/lib/time";
 import {
   chatMediaPath,
   CHAT_MEDIA_TTL_SECONDS,
@@ -38,7 +40,7 @@ export default async function ConversationPage({
   const [{ data: other }, { data: msgs }] = await Promise.all([
     supabase
       .from("profiles")
-      .select("full_name, avatar_url, department")
+      .select("full_name, avatar_url, department, last_seen_at")
       .eq("id", otherId)
       .single(),
     supabase
@@ -84,14 +86,27 @@ export default async function ConversationPage({
       messages.map((m) => m.shared_post_id).filter(Boolean) as string[]
     ),
   ];
+  // UAT-010: enough to render a real preview card in the bubble, not just a
+  // "tap to view" stub. feed_posts already masks the author of an anonymous
+  // post and hides posts from blocked users, so a share can't leak either.
   const sharedPosts: Record<string, SharedPostPreview> = {};
   if (sharedIds.length > 0) {
     const { data: preRows } = await supabase
       .from("feed_posts")
-      .select("id, body, image_url")
+      .select(
+        "id, body, image_url, is_anonymous, author_name, author_avatar, like_count, comment_count"
+      )
       .in("id", sharedIds);
     (preRows ?? []).forEach((p) => {
-      sharedPosts[p.id] = { body: p.body, image_url: p.image_url };
+      sharedPosts[p.id] = {
+        body: p.body,
+        image_url: p.image_url,
+        is_anonymous: p.is_anonymous,
+        author_name: p.author_name,
+        author_avatar: p.author_avatar,
+        like_count: p.like_count ?? 0,
+        comment_count: p.comment_count ?? 0,
+      };
     });
   }
 
@@ -115,14 +130,17 @@ export default async function ConversationPage({
               />
             ) : null}
           </div>
-          <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-bg bg-success" />
+          {/* UAT-003: the dot used to be unconditional, so every match looked
+              online. It now tracks the other user's heartbeat. */}
+          {isOnline(other?.last_seen_at) && <OnlineDot />}
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold">
             {other?.full_name ?? "Student"}
           </p>
           <p className="truncate text-[11px] text-fg-muted">
-            {other?.department ? `${other.department} · ` : ""}Active now
+            {other?.department ? `${other.department} · ` : ""}
+            {presenceLabel(other?.last_seen_at)}
           </p>
         </div>
       </header>

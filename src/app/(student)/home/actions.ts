@@ -51,12 +51,17 @@ export async function createPost(input: {
   const allowed = await checkRateLimit("post", 30, 60 * 60);
   if (!allowed) return { ok: false, error: "You're posting too fast." };
 
+  // UAT-005: community Main-panel posts are always attributed — anonymity moved
+  // to the community chat room. The composer hides the toggle, but the flag is
+  // client-supplied, so it is enforced here rather than trusted.
+  const isAnonymous = input.communityId ? false : input.isAnonymous;
+
   // No .select() — the posts table's SELECT is revoked (anonymity). return=minimal.
   const { error } = await supabase.from("posts").insert({
     author_id: user.id,
     body: body || null,
     image_url: input.imageUrl ?? null,
-    is_anonymous: input.isAnonymous,
+    is_anonymous: isAnonymous,
     community_id: input.communityId ?? null,
   });
   if (error) return { ok: false, error: error.message };

@@ -5,9 +5,18 @@ import { cn } from "@/lib/utils";
  * page-shaped shimmer appears instantly (via Suspense) while the server
  * component streams — perceived-performance only, no data or behavior.
  */
-export function Skeleton({ className }: { className?: string }) {
+export function Skeleton({
+  className,
+  style,
+}: {
+  className?: string;
+  style?: React.CSSProperties;
+}) {
   return (
-    <div className={cn("animate-pulse rounded-[var(--radius-sm)] bg-white/[0.06]", className)} />
+    <div
+      style={style}
+      className={cn("animate-pulse rounded-[var(--radius-sm)] bg-white/[0.06]", className)}
+    />
   );
 }
 
@@ -34,6 +43,48 @@ export function SkeletonRow() {
         <Skeleton className="h-4 w-28" />
         <Skeleton className="mt-2 h-3 w-40" />
       </div>
+    </div>
+  );
+}
+
+/** `count` stacked list rows — the shimmer for a tab that renders a list. */
+export function SkeletonRows({ count = 5 }: { count?: number }) {
+  return (
+    <div className="mt-4 space-y-2">
+      {Array.from({ length: count }).map((_, i) => (
+        <SkeletonRow key={i} />
+      ))}
+    </div>
+  );
+}
+
+/** `count` stacked feed cards — the shimmer for a tab that renders posts. */
+export function SkeletonCards({ count = 3 }: { count?: number }) {
+  return (
+    <div className="mt-4 space-y-4">
+      {Array.from({ length: count }).map((_, i) => (
+        <SkeletonCard key={i} />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Alternating left/right message bubbles — the shimmer for a chat panel, whose
+ * shape a generic list skeleton would misrepresent.
+ */
+export function SkeletonChat({ count = 6 }: { count?: number }) {
+  return (
+    <div className="mt-4 space-y-3">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className={i % 2 ? "flex justify-end" : "flex justify-start"}>
+          <Skeleton
+            className="h-10 rounded-2xl"
+            // Vary the width so it reads as conversation, not a loading bar.
+            style={{ width: `${45 + ((i * 17) % 35)}%` }}
+          />
+        </div>
+      ))}
     </div>
   );
 }
