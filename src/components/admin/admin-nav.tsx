@@ -12,6 +12,7 @@ import {
   MessageSquareWarning,
   Megaphone,
   Database,
+  Terminal,
   type LucideIcon,
 } from "lucide-react";
 import type { AdminRole } from "@/lib/admin/access";
@@ -35,6 +36,7 @@ const NAV: NavItem[] = [
   { href: "/admin/events", label: "Events", icon: CalendarDays, match: "/admin/events" },
   { href: "/admin/broadcast", label: "Broadcast", icon: Megaphone, match: "/admin/broadcast", super: true },
   { href: "/admin/database", label: "Database", icon: Database, match: "/admin/database", super: true },
+  { href: "/admin/sql", label: "SQL console", icon: Terminal, match: "/admin/sql", super: true },
   { href: "/admin/audit", label: "Audit log", icon: ScrollText, match: "/admin/audit" },
 ];
 
