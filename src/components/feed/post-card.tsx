@@ -11,10 +11,16 @@ import {
   Share2,
   Trash2,
   MoreHorizontal,
+  Bookmark,
 } from "lucide-react";
 import { GlassSheet, VerifiedBadge } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { toggleLike, reportPost, deletePost } from "@/app/(student)/home/actions";
+import {
+  toggleLike,
+  toggleSave,
+  reportPost,
+  deletePost,
+} from "@/app/(student)/home/actions";
 import { ShareSheet } from "@/components/feed/share-sheet";
 import { CommentsSheet } from "@/components/feed/comments-sheet";
 import { timeAgo, absoluteTime } from "@/lib/time";
@@ -43,6 +49,7 @@ function PostCardImpl({
   const router = useRouter();
   const [liked, setLiked] = useState(post.liked_by_me);
   const [likes, setLikes] = useState(post.like_count);
+  const [saved, setSaved] = useState(Boolean(post.saved_by_me));
   const [comments] = useState(post.comment_count);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -101,6 +108,13 @@ function PostCardImpl({
     } else {
       lastTap.current = now;
     }
+  }
+
+  async function onSave() {
+    const wasSaved = saved;
+    setSaved(!wasSaved); // optimistic…
+    const res = await toggleSave(post.id, wasSaved);
+    if (!res.ok) setSaved(wasSaved); // …rolled back on failure
   }
 
   async function onDelete() {
@@ -246,6 +260,22 @@ function PostCardImpl({
         >
           <Share2 className="h-5 w-5" aria-hidden />
           Share
+        </button>
+        {/* Save / bookmark (Refactor Phase 3b). Pinned to the right like IG. */}
+        <button
+          type="button"
+          onClick={onSave}
+          aria-label={saved ? "Remove bookmark" : "Save post"}
+          aria-pressed={saved}
+          className={cn(
+            "ml-auto flex items-center transition-all active:scale-90",
+            saved ? "text-accent" : "hover:text-fg"
+          )}
+        >
+          <Bookmark
+            className={cn("h-5 w-5", saved && "fill-current")}
+            aria-hidden
+          />
         </button>
       </div>
 

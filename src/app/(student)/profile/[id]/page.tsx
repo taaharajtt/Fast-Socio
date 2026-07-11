@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ChevronLeft, Zap, Heart, Check } from "lucide-react";
 import { OpenChatButton } from "@/components/chat/open-chat-button";
 import { ProfileTabs, type ProfileCommunity } from "@/components/profile/profile-tabs";
+import { ProfileActionsMenu } from "@/components/profile/profile-actions-menu";
 import { createClient } from "@/lib/supabase/server";
 import { AppImage } from "@/components/ui/app-image";
 import { OnlineDot } from "@/components/ui/badges";
@@ -33,23 +34,69 @@ export default async function PublicProfilePage({
   const { data: profile } = await supabase
     .from("profiles")
     .select(
-      "id, full_name, department, semester, bio, avatar_url, cover_url, aura_score, verified, last_seen_at"
+      "id, full_name, department, semester, bio, avatar_url, cover_url, aura_score, verified, last_seen_at, show_online, show_aura, show_department, show_semester, deactivated_at"
     )
     .eq("id", id)
     .single();
   if (!profile) notFound();
 
+  // Privacy gating (Refactor Phase 8): a viewer never sees hidden fields; the
+  // owner always sees their own. Columns are absent until mig 0058 → default to
+  // visible so nothing regresses pre-migration.
+  const showOnline = isSelf || profile.show_online !== false;
+  const showAura = isSelf || profile.show_aura !== false;
+  const showDept = isSelf || profile.show_department !== false;
+  const showSem = isSelf || profile.show_semester !== false;
+  const deactivated = !isSelf && Boolean(profile.deactivated_at);
+
   // Are we matched? Only then do we surface a Message action.
   let matched = false;
+  let iBlocked = false;
+  let iMuted = false;
   if (!isSelf) {
     const [lo, hi] = [me, id].sort();
-    const { data: match } = await supabase
-      .from("matches")
-      .select("id")
-      .eq("user_low", lo)
-      .eq("user_high", hi)
-      .maybeSingle();
+    const [{ data: match }, { data: block }, { data: mute }] = await Promise.all([
+      supabase
+        .from("matches")
+        .select("id")
+        .eq("user_low", lo)
+        .eq("user_high", hi)
+        .maybeSingle(),
+      supabase
+        .from("blocked_users")
+        .select("blocked_id")
+        .eq("blocker_id", me)
+        .eq("blocked_id", id)
+        .maybeSingle(),
+      supabase
+        .from("muted_users")
+        .select("muted_id")
+        .eq("muter_id", me)
+        .eq("muted_id", id)
+        .maybeSingle(),
+    ]);
     matched = Boolean(match);
+    iBlocked = Boolean(block);
+    iMuted = Boolean(mute);
+  }
+
+  // Deactivated accounts show a minimal placeholder to others (data preserved).
+  if (deactivated) {
+    return (
+      <main className="mx-auto flex min-h-[60vh] w-full max-w-md flex-col items-center justify-center px-5 text-center">
+        <Link
+          href="/home"
+          aria-label="Back"
+          className="glass absolute left-4 top-4 flex h-9 w-9 items-center justify-center rounded-full text-fg-muted"
+        >
+          <ChevronLeft className="h-5 w-5" aria-hidden />
+        </Link>
+        <p className="text-lg font-semibold text-fg">Account unavailable</p>
+        <p className="mt-1 text-sm text-fg-muted">
+          This account is currently deactivated.
+        </p>
+      </main>
+    );
   }
 
   const [{ data: postRows }, { count: matchCount }, { data: commRows }] =
@@ -86,10 +133,13 @@ export default async function PublicProfilePage({
       .join("")
       .toUpperCase() || "?";
 
-  const deptLabel = profile.department
-    ? deptMeta(profile.department).abbr +
-      (profile.semester ? ` · ${ordinal(profile.semester)} Semester` : "")
-    : "—";
+  const deptLabel =
+    showDept && profile.department
+      ? deptMeta(profile.department).abbr +
+        (showSem && profile.semester
+          ? ` · ${ordinal(profile.semester)} Semester`
+          : "")
+      : "—";
 
   return (
     <div className="mx-auto w-full max-w-md">
@@ -134,7 +184,7 @@ export default async function PublicProfilePage({
                 </span>
               )}
             </div>
-            {isOnline(profile.last_seen_at) && (
+            {showOnline && isOnline(profile.last_seen_at) && (
               <OnlineDot className="bottom-1 right-1 h-3.5 w-3.5" />
             )}
           </div>
@@ -158,35 +208,48 @@ export default async function PublicProfilePage({
               {profile.full_name ?? "Student"}
             </h1>
             <p className="truncate text-sm text-fg-muted">{deptLabel}</p>
-            <p className="truncate text-xs text-fg-disabled">
-              {presenceLabel(profile.last_seen_at)}
-            </p>
+            {showOnline && (
+              <p className="truncate text-xs text-fg-disabled">
+                {presenceLabel(profile.last_seen_at)}
+              </p>
+            )}
           </div>
-          {isSelf ? (
-            <Link
-              href="/profile/edit"
-              className="gradient-brand flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold text-white"
-            >
-              Edit
-            </Link>
-          ) : matched ? (
-            <OpenChatButton otherId={profile.id} />
-          ) : (
-            <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-card px-4 py-2 text-sm font-medium text-fg-muted">
-              <Check className="h-4 w-4" aria-hidden />
-              Match to chat
-            </span>
-          )}
+          <div className="flex shrink-0 items-center gap-2">
+            {isSelf ? (
+              <Link
+                href="/profile/edit"
+                className="gradient-brand flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold text-white"
+              >
+                Edit
+              </Link>
+            ) : matched ? (
+              <OpenChatButton otherId={profile.id} />
+            ) : (
+              <span className="flex items-center gap-1.5 rounded-full bg-card px-4 py-2 text-sm font-medium text-fg-muted">
+                <Check className="h-4 w-4" aria-hidden />
+                Match to chat
+              </span>
+            )}
+            {!isSelf && (
+              <ProfileActionsMenu
+                targetId={profile.id}
+                blocked={iBlocked}
+                muted={iMuted}
+              />
+            )}
+          </div>
         </div>
 
         <div className="mb-5 mt-4 flex gap-3">
-          <div className="flex-1 rounded-xl bg-card p-3 text-center">
-            <div className="flex items-center justify-center gap-1.5">
-              <Zap className="h-4 w-4 text-gold" aria-hidden />
-              <p className="text-xl font-bold">{profile.aura_score ?? 0}</p>
+          {showAura && (
+            <div className="flex-1 rounded-xl bg-card p-3 text-center">
+              <div className="flex items-center justify-center gap-1.5">
+                <Zap className="h-4 w-4 text-gold" aria-hidden />
+                <p className="text-xl font-bold">{profile.aura_score ?? 0}</p>
+              </div>
+              <p className="mt-1 text-xs text-fg-muted">Aura</p>
             </div>
-            <p className="mt-1 text-xs text-fg-muted">Aura</p>
-          </div>
+          )}
           <div className="flex-1 rounded-xl bg-card p-3 text-center">
             <div className="flex items-center justify-center gap-1.5">
               <Heart className="h-4 w-4 fill-error text-error" aria-hidden />

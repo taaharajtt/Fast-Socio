@@ -11,6 +11,7 @@ type NotifRow = {
   actor_id: string | null;
   type: string;
   data: Record<string, unknown>;
+  group_count: number;
   read_at: string | null;
   created_at: string;
 };
@@ -39,7 +40,7 @@ export async function NotificationBell() {
       .not("type", "in", "(message,message_request)"),
     supabase
       .from("notifications")
-      .select("id, actor_id, type, data, read_at, created_at")
+      .select("id, actor_id, type, data, group_count, read_at, created_at")
       .eq("user_id", user!.id)
       .not("type", "in", "(message,message_request)")
       .order("created_at", { ascending: false })
@@ -63,7 +64,12 @@ export async function NotificationBell() {
 
   const items: BellItem[] = notifs.map((n) => {
     const actor = n.actor_id ? actors.get(n.actor_id) : undefined;
-    const view = notificationView(n.type, actor?.name ?? null, n.data);
+    const view = notificationView(
+      n.type,
+      actor?.name ?? null,
+      n.data,
+      n.group_count ?? 1
+    );
     return {
       id: n.id,
       text: view.text,

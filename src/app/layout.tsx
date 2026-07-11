@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
+import { APPEARANCE_INIT_SCRIPT } from "@/lib/appearance";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -55,6 +56,11 @@ export default function RootLayout({
       className={`${inter.variable} h-full antialiased`}
       suppressHydrationWarning
     >
+      <head>
+        {/* Apply saved appearance (font size / density / motion) before first
+            paint to avoid a flash. Theme is handled separately by next-themes. */}
+        <script dangerouslySetInnerHTML={{ __html: APPEARANCE_INIT_SCRIPT }} />
+      </head>
       <body className="min-h-full flex flex-col">
         <ThemeProvider>{children}</ThemeProvider>
       </body>

@@ -15,6 +15,7 @@ export default function NewEventPage() {
   const [category, setCategory] = useState<string>("Social");
   const [location, setLocation] = useState("");
   const [startsAt, setStartsAt] = useState("");
+  const [capacity, setCapacity] = useState("");
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -30,6 +31,7 @@ export default function NewEventPage() {
         location,
         startsAt,
         coverUrl,
+        capacity: capacity.trim() === "" ? null : Number(capacity),
       });
       if (res?.error) setError(res.error);
     });
@@ -113,6 +115,25 @@ export default function NewEventPage() {
               value={location}
               onChange={(e) => setLocation(e.target.value)}
             />
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="cap" className="text-sm font-medium">
+              Capacity (optional)
+            </label>
+            <GlassInput
+              id="cap"
+              type="number"
+              min={1}
+              inputMode="numeric"
+              placeholder="Leave blank for unlimited"
+              value={capacity}
+              onChange={(e) => setCapacity(e.target.value)}
+            />
+            <p className="text-xs text-fg-muted">
+              When full, new sign-ups join a waitlist and are promoted
+              automatically as seats open.
+            </p>
           </div>
 
           <div className="space-y-2">

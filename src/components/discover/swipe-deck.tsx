@@ -273,6 +273,7 @@ function ProfileCardBody({
   children?: React.ReactNode;
 }) {
   const firstName = profile.full_name?.split(" ")[0] ?? "Student";
+  const shared = new Set(profile.shared_interests ?? []);
   return (
     <div className="relative h-full w-full overflow-hidden rounded-3xl bg-card">
       {profile.avatar_url ? (
@@ -296,10 +297,22 @@ function ProfileCardBody({
         <Zap className="h-3 w-3 text-gold-text" aria-hidden />
         <span className="text-[13px] font-semibold text-white">{firstName}</span>
       </div>
-      <div className="absolute right-4 top-4 flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-1">
-        <Zap className="h-3 w-3 text-gold-text" aria-hidden />
-        <span className="text-[13px] font-semibold text-gold-text">
-          {profile.aura_score.toLocaleString()}
+      <div className="absolute right-4 top-4 flex items-center gap-1.5">
+        {typeof profile.compatibility === "number" && (
+          // Compatibility "% match" (Refactor Phase 4) — accent pill so it reads
+          // as the headline signal, distinct from the gold Aura pill.
+          <span
+            className="flex items-center gap-1 rounded-full bg-accent/90 px-2.5 py-1 text-[13px] font-bold text-white"
+            aria-label={`${profile.compatibility}% compatibility`}
+          >
+            {profile.compatibility}% match
+          </span>
+        )}
+        <span className="flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-1">
+          <Zap className="h-3 w-3 text-gold-text" aria-hidden />
+          <span className="text-[13px] font-semibold text-gold-text">
+            {profile.aura_score.toLocaleString()}
+          </span>
         </span>
       </div>
 
@@ -318,14 +331,24 @@ function ProfileCardBody({
         )}
         {profile.interests?.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
-            {profile.interests.slice(0, 4).map((tag) => (
-              <span
-                key={tag}
-                className="rounded-full bg-white/15 px-2.5 py-0.5 text-xs text-white"
-              >
-                {tag}
-              </span>
-            ))}
+            {/* Shared interests float to the front and are accent-tinted so the
+                common ground is obvious at a glance (Refactor Phase 4). */}
+            {[...profile.interests]
+              .sort((a, b) => Number(shared.has(b)) - Number(shared.has(a)))
+              .slice(0, 4)
+              .map((tag) => (
+                <span
+                  key={tag}
+                  className={cn(
+                    "rounded-full px-2.5 py-0.5 text-xs",
+                    shared.has(tag)
+                      ? "bg-accent/80 font-semibold text-white"
+                      : "bg-white/15 text-white"
+                  )}
+                >
+                  {shared.has(tag) ? `★ ${tag}` : tag}
+                </span>
+              ))}
           </div>
         )}
       </div>
@@ -432,7 +455,12 @@ function DetailSheet({
               {profile.semester ? ` · Semester ${profile.semester}` : ""}
             </p>
           </div>
-          <GlassChip tone="aura">★ {profile.aura_score} Aura</GlassChip>
+          <div className="flex flex-wrap gap-2">
+            {typeof profile.compatibility === "number" && (
+              <GlassChip tone="cyan">{profile.compatibility}% match</GlassChip>
+            )}
+            <GlassChip tone="aura">★ {profile.aura_score} Aura</GlassChip>
+          </div>
           {profile.bio && (
             <div>
               <h4 className="mb-1 text-sm font-medium text-fg-muted">About</h4>

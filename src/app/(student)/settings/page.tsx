@@ -7,6 +7,8 @@ import { SignOutButton } from "@/components/sign-out-button";
 import { DeleteAccountButton } from "@/components/delete-account-button";
 import { NotificationPrefs } from "@/components/settings/notification-prefs";
 import { EnablePush } from "@/components/settings/enable-push";
+import { AppearanceSettings } from "@/components/settings/appearance-settings";
+import { ShieldCheck, UserCog, MonitorSmartphone, Ban, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function SettingsPage() {
@@ -17,7 +19,9 @@ export default async function SettingsPage() {
 
   const { data: prefs } = await supabase
     .from("notification_preferences")
-    .select("matches, messages, likes, events, communities, system")
+    .select(
+      "matches, messages, likes, events, communities, system, quiet_hours_enabled, quiet_start, quiet_end"
+    )
     .eq("user_id", user!.id)
     .single();
 
@@ -43,9 +47,24 @@ export default async function SettingsPage() {
       </section>
 
       <section className="mt-5 space-y-2">
+        <h2 className="text-sm font-medium text-fg-muted">Manage</h2>
+        <GlassCard className="divide-y divide-glass-border p-0">
+          <SettingsLink href="/settings/privacy" icon={ShieldCheck} label="Privacy" />
+          <SettingsLink href="/settings/account" icon={UserCog} label="Account" />
+          <SettingsLink
+            href="/settings/devices"
+            icon={MonitorSmartphone}
+            label="Devices & security"
+          />
+          <SettingsLink href="/settings/blocked" icon={Ban} label="Blocked & muted" />
+        </GlassCard>
+      </section>
+
+      <section className="mt-5 space-y-2">
         <h2 className="text-sm font-medium text-fg-muted">Appearance</h2>
-        <GlassCard className="p-5">
+        <GlassCard className="space-y-5 p-5">
           <ThemeToggle />
+          <AppearanceSettings />
         </GlassCard>
       </section>
 
@@ -63,6 +82,11 @@ export default async function SettingsPage() {
               events: prefs?.events ?? true,
               communities: prefs?.communities ?? true,
               system: prefs?.system ?? true,
+            }}
+            quiet={{
+              enabled: prefs?.quiet_hours_enabled ?? false,
+              start: prefs?.quiet_start ?? 22,
+              end: prefs?.quiet_end ?? 7,
             }}
           />
         </GlassCard>
@@ -99,5 +123,23 @@ export default async function SettingsPage() {
         </GlassCard>
       </section>
     </main>
+  );
+}
+
+function SettingsLink({
+  href,
+  icon: Icon,
+  label,
+}: {
+  href: string;
+  icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+  label: string;
+}) {
+  return (
+    <Link href={href} className="flex items-center gap-3 px-5 py-3.5">
+      <Icon className="h-5 w-5 text-fg-muted" aria-hidden />
+      <span className="flex-1 text-sm font-medium">{label}</span>
+      <ChevronRight className="h-4 w-4 text-fg-disabled" aria-hidden />
+    </Link>
   );
 }

@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { isAppStorageUrl } from "@/lib/url-safety";
 import { FEED_PAGE_SIZE, type FeedPost } from "@/lib/feed/types";
+import { scoreContent, blockMessage } from "@/lib/moderation/rules";
+import { postingBlockReason } from "@/lib/moderation/server";
 
 /**
  * Fetch a page of the main campus feed older than `cursor` (a created_at ISO
@@ -24,6 +26,54 @@ export async function fetchFeedPage(
   if (cursor) query = query.lt("created_at", cursor);
   const { data } = await query;
   return (data as FeedPost[]) ?? [];
+}
+
+/**
+ * Fetch a page of the deterministically ranked "For You" feed (Refactor Phase
+ * 3a) via the get_ranked_feed RPC. Keyset cursor is the last row's
+ * (rank_score, id); pass both to continue, or nulls for the first page. The
+ * ranking (recency, engagement, dept/semester affinity, shared interests,
+ * author Aura, report penalty) lives in SQL so it stays deterministic and cheap.
+ */
+export async function fetchRankedFeedPage(
+  cursorScore: number | null,
+  cursorId: string | null
+): Promise<FeedPost[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("get_ranked_feed", {
+    p_limit: FEED_PAGE_SIZE,
+    p_cursor_score: cursorScore,
+    p_cursor_id: cursorId,
+  });
+  return (data as FeedPost[]) ?? [];
+}
+
+/**
+ * Toggle a bookmark on a post (Refactor Phase 3b). Returns { ok } so the caller
+ * can roll back an optimistic UI change. RLS restricts saved_posts to the
+ * caller's own rows; we scope to user_id as defence in depth.
+ */
+export async function toggleSave(
+  postId: string,
+  currentlySaved: boolean
+): Promise<{ ok: boolean }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false };
+
+  const { error } = currentlySaved
+    ? await supabase
+        .from("saved_posts")
+        .delete()
+        .eq("post_id", postId)
+        .eq("user_id", user.id)
+    : await supabase
+        .from("saved_posts")
+        .insert({ post_id: postId, user_id: user.id });
+
+  return { ok: !error };
 }
 
 /** Create a post (text and/or image), optionally anonymous and/or in a community. */
@@ -51,6 +101,16 @@ export async function createPost(input: {
   const allowed = await checkRateLimit("post", 30, 60 * 60);
   if (!allowed) return { ok: false, error: "You're posting too fast." };
 
+  // Moderation restriction gate (Phase 9).
+  const restricted = await postingBlockReason();
+  if (restricted) return { ok: false, error: restricted };
+
+  // Rule engine (Phase 9): block severe content; a risky score (≥41) is written
+  // to risk_score and the create trigger holds the post as pending for review.
+  const risk = scoreContent(body);
+  if (risk.action === "block")
+    return { ok: false, error: blockMessage(risk) };
+
   // UAT-005: community Main-panel posts are always attributed — anonymity moved
   // to the community chat room. The composer hides the toggle, but the flag is
   // client-supplied, so it is enforced here rather than trusted.
@@ -63,6 +123,7 @@ export async function createPost(input: {
     image_url: input.imageUrl ?? null,
     is_anonymous: isAnonymous,
     community_id: input.communityId ?? null,
+    risk_score: risk.score,
   });
   if (error) return { ok: false, error: error.message };
 
@@ -208,9 +269,22 @@ export async function addComment(
   const allowed = await checkRateLimit("comment", 60, 60 * 60);
   if (!allowed) return { ok: false, error: "You're commenting too fast." };
 
-  const { error } = await supabase
-    .from("post_comments")
-    .insert({ post_id: postId, author_id: user.id, body: text });
+  const restricted = await postingBlockReason();
+  if (restricted) return { ok: false, error: restricted };
+
+  // Rule engine (Phase 9): block severe content; hold a risky comment (hidden
+  // until a moderator restores it).
+  const risk = scoreContent(text);
+  if (risk.action === "block")
+    return { ok: false, error: blockMessage(risk) };
+
+  const { error } = await supabase.from("post_comments").insert({
+    post_id: postId,
+    author_id: user.id,
+    body: text,
+    risk_score: risk.score,
+    hidden: risk.action === "hold",
+  });
   if (error) return { ok: false, error: error.message };
 
   revalidatePath(`/post/${postId}`);

@@ -26,6 +26,7 @@ type Notif = {
   actor_id: string | null;
   type: string;
   data: Record<string, unknown>;
+  group_count: number;
   read_at: string | null;
   created_at: string;
 };
@@ -94,7 +95,12 @@ function summarize(item: FeedItem, actorName: string | null): string {
   const who = actorName ?? "Someone";
   const actions = item.actions; // newest-first (source list is desc)
   if (actions.length === 1) {
-    return notificationView(actions[0].type, actorName, actions[0].data).text;
+    return notificationView(
+      actions[0].type,
+      actorName,
+      actions[0].data,
+      actions[0].group_count ?? 1
+    ).text;
   }
   const first = notificationActionPhrase(actions[0].type);
   if (actions.length === 2) {
@@ -115,7 +121,7 @@ export default async function ActivityPage() {
   // cold-open modal instead (UAT-012), so they're excluded here too.
   const { data: rows } = await supabase
     .from("notifications")
-    .select("id, actor_id, type, data, read_at, created_at")
+    .select("id, actor_id, type, data, group_count, read_at, created_at")
     .eq("user_id", me)
     .not("type", "in", "(message,message_request,announcement)")
     .order("created_at", { ascending: false })

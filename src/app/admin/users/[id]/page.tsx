@@ -4,6 +4,7 @@ import { SectionLabel, Table, Th, Td, rowClass } from "@/components/admin/kit";
 import { AuraAdjustForm } from "@/components/admin/aura-adjust-form";
 import { BanUserButton } from "@/components/admin/ban-user-button";
 import { UserAdminControls } from "@/components/admin/user-admin-controls";
+import { ModerationControls } from "@/components/admin/moderation-controls";
 import { createClient } from "@/lib/supabase/server";
 import { getAdminContext } from "@/lib/admin/access";
 import { auraReasonLabel } from "@/lib/aura/labels";
@@ -62,6 +63,22 @@ export default async function AdminUserPage({
 
   const rows = txns ?? [];
   const role = (profile.admin_role ?? null) as GrantableRole;
+
+  // Moderation state fetched separately so the page still works before the
+  // Phase 9 migrations are applied (columns/tables absent → graceful defaults).
+  const [{ data: modProfile }, { count: strikeCount }] = await Promise.all([
+    supabase.from("profiles").select("shadow_banned").eq("id", id).maybeSingle(),
+    supabase
+      .from("user_strikes")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", id),
+  ]);
+  const mod = {
+    shadowBanned: Boolean(
+      (modProfile as { shadow_banned?: boolean } | null)?.shadow_banned
+    ),
+    strikeCount: strikeCount ?? 0,
+  };
 
   return (
     <>
@@ -148,6 +165,17 @@ export default async function AdminUserPage({
         <SectionLabel>{profile.is_banned ? "Restore access" : "Ban user"} · audited</SectionLabel>
         <div className="mt-2 rounded-[4px] border border-glass-border p-3">
           <BanUserButton userId={profile.id} isBanned={profile.is_banned} />
+        </div>
+      </section>
+
+      <section className="mt-6">
+        <SectionLabel>Moderation · strikes & shadow ban · audited</SectionLabel>
+        <div className="mt-2 rounded-[4px] border border-glass-border p-3">
+          <ModerationControls
+            userId={profile.id}
+            shadowBanned={mod.shadowBanned}
+            strikeCount={mod.strikeCount}
+          />
         </div>
       </section>
 

@@ -6,6 +6,12 @@ export const SYSTEM_NOTIFICATION_TYPES = new Set([
   "match",
   "community_approved",
   "event_approved",
+  "level_up",
+  "achievement",
+  "waitlist_promoted",
+  "event_reminder",
+  "moderation_warning",
+  "appeal_result",
 ]);
 
 /** Short verb phrase for a groupable actor action, e.g. "liked your post". */
@@ -69,18 +75,38 @@ export function notificationCategory(type: string): ActivityCategory {
     case "community_post_approved":
     case "community_post_rejected":
       return "announcements";
+    case "waitlist_promoted":
+    case "event_reminder":
+    case "moderation_warning":
+    case "appeal_result":
+      return "announcements";
+    case "level_up":
+    case "achievement":
+      return "other";
     default:
       return "other";
   }
 }
 
-/** Maps a notification (type + actor + data) to display text and a link. */
+/** "Alice", "Alice and 1 other", "Alice and 4 others" for a grouped count. */
+function actorSummary(actorName: string | null, count: number): string {
+  const who = actorName ?? "Someone";
+  if (count <= 1) return who;
+  const others = count - 1;
+  return `${who} and ${others} other${others === 1 ? "" : "s"}`;
+}
+
+/**
+ * Maps a notification (type + actor + data) to display text and a link. `count`
+ * is the collapsed group_count (Phase 7) — 1 for ungrouped notifications.
+ */
 export function notificationView(
   type: string,
   actorName: string | null,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
+  count = 1
 ): { text: string; href: string } {
-  const who = actorName ?? "Someone";
+  const who = actorSummary(actorName, count);
   switch (type) {
     case "match":
       return { text: `You matched with ${who}!`, href: "/chat" };
@@ -126,6 +152,43 @@ export function notificationView(
         href: data.community_id
           ? `/communities/${data.community_id}`
           : "/communities",
+      };
+    case "level_up":
+      return {
+        text: `You reached level ${data.level ?? ""}! 🎉`.replace("  ", " "),
+        href: "/profile/aura",
+      };
+    case "achievement":
+      return {
+        text: `Achievement unlocked: ${data.title ?? "a new badge"} 🏆`,
+        href: "/profile/achievements",
+      };
+    case "waitlist_promoted":
+      return {
+        text: "A seat opened up — you're in! 🎟️",
+        href: data.event_id ? `/events/${data.event_id}` : "/events",
+      };
+    case "event_reminder":
+      return {
+        text:
+          data.kind === "1h"
+            ? "An event you're attending starts within the hour ⏰"
+            : "An event you're attending is coming up tomorrow ⏰",
+        href: data.event_id ? `/events/${data.event_id}` : "/events",
+      };
+    case "moderation_warning":
+      return {
+        text: `You received a moderation warning${
+          data.level ? ` (strike ${data.level})` : ""
+        }. Tap to appeal.`,
+        href: "/appeals",
+      };
+    case "appeal_result":
+      return {
+        text: data.approved
+          ? "Your appeal was approved ✅"
+          : "Your appeal was reviewed and declined.",
+        href: "/appeals",
       };
     default:
       return { text: "New notification", href: "/home" };

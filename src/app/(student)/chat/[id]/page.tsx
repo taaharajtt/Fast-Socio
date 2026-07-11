@@ -40,7 +40,7 @@ export default async function ConversationPage({
   const [{ data: other }, { data: msgs }] = await Promise.all([
     supabase
       .from("profiles")
-      .select("full_name, avatar_url, department, last_seen_at")
+      .select("full_name, avatar_url, department, last_seen_at, read_receipts")
       .eq("id", otherId)
       .single(),
     supabase
@@ -167,6 +167,9 @@ export default async function ConversationPage({
         hasMore={hasMore}
         initialSignedAttachments={signedAttachments}
         initialReactions={reactions}
+        showReadReceipts={
+          (other as { read_receipts?: boolean } | null)?.read_receipts !== false
+        }
       />
     </div>
   );

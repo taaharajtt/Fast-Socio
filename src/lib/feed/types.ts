@@ -22,4 +22,13 @@ export type FeedPost = {
   /** Whether the author is a verified account (UISpec V3 §2.7). Masked to false
    *  for anonymous posts by the view. Optional/back-compatible. */
   author_verified?: boolean | null;
+  /** Deterministic visibility score from get_ranked_feed (Refactor Phase 3a).
+   *  Present only in the "For You" ranked feed; used as the keyset cursor.
+   *  Absent in the chronological "Latest" feed. */
+  rank_score?: number;
+  /** Whether the viewer has bookmarked this post (Refactor Phase 3b). */
+  saved_by_me?: boolean;
 };
+
+/** Which feed ordering the Home list is showing (Refactor Phase 3a). */
+export type FeedMode = "ranked" | "latest";

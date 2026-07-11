@@ -7,6 +7,7 @@ export const AURA_REASON_LABELS: Record<string, string> = {
   community_join: "Communities joined",
   daily_login: "Daily logins",
   profile_completed: "Profile completed",
+  achievement: "Achievements",
   admin_adjust: "Admin adjustments",
 };
 

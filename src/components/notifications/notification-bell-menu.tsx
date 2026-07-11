@@ -10,6 +10,12 @@ import {
   Zap,
   Megaphone,
   UserPlus,
+  TrendingUp,
+  Trophy,
+  Ticket,
+  Clock,
+  ShieldAlert,
+  Gavel,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -36,6 +42,12 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   community_post_rejected: Megaphone,
   community_approved: Megaphone,
   event_approved: Megaphone,
+  level_up: TrendingUp,
+  achievement: Trophy,
+  waitlist_promoted: Ticket,
+  event_reminder: Clock,
+  moderation_warning: ShieldAlert,
+  appeal_result: Gavel,
 };
 
 /**
