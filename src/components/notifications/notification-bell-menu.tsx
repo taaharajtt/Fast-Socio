@@ -14,6 +14,8 @@ import {
   Trophy,
   Ticket,
   Clock,
+  ShieldAlert,
+  Gavel,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -44,6 +46,8 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   achievement: Trophy,
   waitlist_promoted: Ticket,
   event_reminder: Clock,
+  moderation_warning: ShieldAlert,
+  appeal_result: Gavel,
 };
 
 /**

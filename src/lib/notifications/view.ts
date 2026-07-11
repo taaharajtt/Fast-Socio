@@ -10,6 +10,8 @@ export const SYSTEM_NOTIFICATION_TYPES = new Set([
   "achievement",
   "waitlist_promoted",
   "event_reminder",
+  "moderation_warning",
+  "appeal_result",
 ]);
 
 /** Short verb phrase for a groupable actor action, e.g. "liked your post". */
@@ -75,6 +77,8 @@ export function notificationCategory(type: string): ActivityCategory {
       return "announcements";
     case "waitlist_promoted":
     case "event_reminder":
+    case "moderation_warning":
+    case "appeal_result":
       return "announcements";
     case "level_up":
     case "achievement":
@@ -171,6 +175,20 @@ export function notificationView(
             ? "An event you're attending starts within the hour ⏰"
             : "An event you're attending is coming up tomorrow ⏰",
         href: data.event_id ? `/events/${data.event_id}` : "/events",
+      };
+    case "moderation_warning":
+      return {
+        text: `You received a moderation warning${
+          data.level ? ` (strike ${data.level})` : ""
+        }. Tap to appeal.`,
+        href: "/appeals",
+      };
+    case "appeal_result":
+      return {
+        text: data.approved
+          ? "Your appeal was approved ✅"
+          : "Your appeal was reviewed and declined.",
+        href: "/appeals",
       };
     default:
       return { text: "New notification", href: "/home" };

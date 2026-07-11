@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { isAppStorageUrl } from "@/lib/url-safety";
 import { FEED_PAGE_SIZE, type FeedPost } from "@/lib/feed/types";
+import { scoreContent, blockMessage } from "@/lib/moderation/rules";
+import { postingBlockReason } from "@/lib/moderation/server";
 
 /**
  * Fetch a page of the main campus feed older than `cursor` (a created_at ISO
@@ -99,6 +101,16 @@ export async function createPost(input: {
   const allowed = await checkRateLimit("post", 30, 60 * 60);
   if (!allowed) return { ok: false, error: "You're posting too fast." };
 
+  // Moderation restriction gate (Phase 9).
+  const restricted = await postingBlockReason();
+  if (restricted) return { ok: false, error: restricted };
+
+  // Rule engine (Phase 9): block severe content; a risky score (≥41) is written
+  // to risk_score and the create trigger holds the post as pending for review.
+  const risk = scoreContent(body);
+  if (risk.action === "block")
+    return { ok: false, error: blockMessage(risk) };
+
   // UAT-005: community Main-panel posts are always attributed — anonymity moved
   // to the community chat room. The composer hides the toggle, but the flag is
   // client-supplied, so it is enforced here rather than trusted.
@@ -111,6 +123,7 @@ export async function createPost(input: {
     image_url: input.imageUrl ?? null,
     is_anonymous: isAnonymous,
     community_id: input.communityId ?? null,
+    risk_score: risk.score,
   });
   if (error) return { ok: false, error: error.message };
 
@@ -256,9 +269,22 @@ export async function addComment(
   const allowed = await checkRateLimit("comment", 60, 60 * 60);
   if (!allowed) return { ok: false, error: "You're commenting too fast." };
 
-  const { error } = await supabase
-    .from("post_comments")
-    .insert({ post_id: postId, author_id: user.id, body: text });
+  const restricted = await postingBlockReason();
+  if (restricted) return { ok: false, error: restricted };
+
+  // Rule engine (Phase 9): block severe content; hold a risky comment (hidden
+  // until a moderator restores it).
+  const risk = scoreContent(text);
+  if (risk.action === "block")
+    return { ok: false, error: blockMessage(risk) };
+
+  const { error } = await supabase.from("post_comments").insert({
+    post_id: postId,
+    author_id: user.id,
+    body: text,
+    risk_score: risk.score,
+    hidden: risk.action === "hold",
+  });
   if (error) return { ok: false, error: error.message };
 
   revalidatePath(`/post/${postId}`);
