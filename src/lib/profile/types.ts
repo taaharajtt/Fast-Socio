@@ -13,4 +13,9 @@ export type DiscoverProfile = {
   /** True when this candidate is a previously-liked profile being recycled
    *  because fresh candidates ran low (Discover never runs empty, P4-05). */
   is_recycled?: boolean;
+  /** Deterministic compatibility score 0–100 (Refactor Phase 4). */
+  compatibility?: number;
+  /** Interests this candidate shares with the viewer (Refactor Phase 4).
+   *  Rendered as highlighted chips on the card. */
+  shared_interests?: string[];
 };
