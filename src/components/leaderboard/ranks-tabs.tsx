@@ -1,12 +1,22 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { ArrowUp, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AppImage } from "@/components/ui/app-image";
 import { SkeletonRow } from "@/components/ui/skeleton";
 import { LEADERBOARD_TITLES } from "@/lib/leaderboard/titles";
 import { deptMeta } from "@/lib/leaderboard/departments";
+import {
+  fetchLeaderboard,
+  type LeaderboardPeriod,
+} from "@/app/(student)/leaderboard/actions";
+
+const PERIODS: { key: LeaderboardPeriod; label: string }[] = [
+  { key: "weekly", label: "Weekly" },
+  { key: "monthly", label: "Monthly" },
+  { key: "alltime", label: "All-Time" },
+];
 
 /**
  * Shows a shimmer for a short beat after a tab change so switching feels smooth
@@ -86,7 +96,7 @@ export function RanksTabs({
           ))}
         </div>
       ) : tab === "students" ? (
-        <StudentBoard rows={students} meId={meId} />
+        <StudentSection initial={students} meId={meId} />
       ) : (
         <DepartmentBoard rows={depts} />
       )}
@@ -120,18 +130,96 @@ function Pill({
   );
 }
 
-function StudentBoard({ rows, meId }: { rows: StudentRow[]; meId: string }) {
+/**
+ * Student leaderboard with a Weekly / Monthly / All-Time period switch
+ * (Refactor Phase 5). Weekly is the SSR default; the other periods lazily fetch
+ * via a server action and are cached so re-selecting a period is instant.
+ */
+function StudentSection({
+  initial,
+  meId,
+}: {
+  initial: StudentRow[];
+  meId: string;
+}) {
+  const [period, setPeriod] = useState<LeaderboardPeriod>("weekly");
+  const [cache, setCache] = useState<
+    Partial<Record<LeaderboardPeriod, StudentRow[]>>
+  >({ weekly: initial });
+  const [pending, startTransition] = useTransition();
+
+  function select(next: LeaderboardPeriod) {
+    setPeriod(next);
+    if (cache[next]) return;
+    startTransition(async () => {
+      const rows = await fetchLeaderboard(next);
+      setCache((c) => ({ ...c, [next]: rows }));
+    });
+  }
+
+  const rows = cache[period];
+  const loading = pending && !rows;
+
+  return (
+    <>
+      <div className="mb-4 flex gap-1.5">
+        {PERIODS.map((p) => (
+          <button
+            key={p.key}
+            type="button"
+            onClick={() => select(p.key)}
+            aria-pressed={period === p.key}
+            className={cn(
+              "rounded-full px-3 py-1.5 text-[13px] font-semibold transition-all active:scale-95",
+              period === p.key
+                ? "bg-accent/[0.12] text-accent ring-1 ring-accent/40"
+                : "bg-card text-fg-muted hover:text-fg"
+            )}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <SkeletonRow key={i} />
+          ))}
+        </div>
+      ) : (
+        <StudentBoard rows={rows ?? []} meId={meId} period={period} />
+      )}
+    </>
+  );
+}
+
+function StudentBoard({
+  rows,
+  meId,
+  period,
+}: {
+  rows: StudentRow[];
+  meId: string;
+  period: LeaderboardPeriod;
+}) {
+  const span =
+    period === "monthly"
+      ? "this month"
+      : period === "alltime"
+        ? "all time"
+        : "this week";
   if (rows.length === 0) {
     return (
       <p className="rounded-[14px] bg-card p-6 text-center text-sm text-fg-muted">
-        No Aura earned yet this week. Match, post, and attend events to climb.
+        No Aura earned yet {span}. Match, post, and attend events to climb.
       </p>
     );
   }
   return (
     <>
       <p className="mb-3 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-disabled">
-        Top {rows.length} this week
+        Top {rows.length} {span}
       </p>
       <div className="space-y-2">
         {rows.map((r) => {

@@ -6,6 +6,8 @@ export const SYSTEM_NOTIFICATION_TYPES = new Set([
   "match",
   "community_approved",
   "event_approved",
+  "level_up",
+  "achievement",
 ]);
 
 /** Short verb phrase for a groupable actor action, e.g. "liked your post". */
@@ -69,6 +71,9 @@ export function notificationCategory(type: string): ActivityCategory {
     case "community_post_approved":
     case "community_post_rejected":
       return "announcements";
+    case "level_up":
+    case "achievement":
+      return "other";
     default:
       return "other";
   }
@@ -126,6 +131,16 @@ export function notificationView(
         href: data.community_id
           ? `/communities/${data.community_id}`
           : "/communities",
+      };
+    case "level_up":
+      return {
+        text: `You reached level ${data.level ?? ""}! 🎉`.replace("  ", " "),
+        href: "/profile/aura",
+      };
+    case "achievement":
+      return {
+        text: `Achievement unlocked: ${data.title ?? "a new badge"} 🏆`,
+        href: "/profile/achievements",
       };
     default:
       return { text: "New notification", href: "/home" };
