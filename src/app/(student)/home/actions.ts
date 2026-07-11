@@ -46,6 +46,34 @@ export async function fetchRankedFeedPage(
   return (data as FeedPost[]) ?? [];
 }
 
+/**
+ * Toggle a bookmark on a post (Refactor Phase 3b). Returns { ok } so the caller
+ * can roll back an optimistic UI change. RLS restricts saved_posts to the
+ * caller's own rows; we scope to user_id as defence in depth.
+ */
+export async function toggleSave(
+  postId: string,
+  currentlySaved: boolean
+): Promise<{ ok: boolean }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false };
+
+  const { error } = currentlySaved
+    ? await supabase
+        .from("saved_posts")
+        .delete()
+        .eq("post_id", postId)
+        .eq("user_id", user.id)
+    : await supabase
+        .from("saved_posts")
+        .insert({ post_id: postId, user_id: user.id });
+
+  return { ok: !error };
+}
+
 /** Create a post (text and/or image), optionally anonymous and/or in a community. */
 export async function createPost(input: {
   body: string;

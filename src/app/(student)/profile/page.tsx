@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Settings, Pencil, Plus, Zap, Heart } from "lucide-react";
+import { Settings, Pencil, Plus, Zap, Heart, Bookmark } from "lucide-react";
 import { ProfileTabs, type ProfileCommunity } from "@/components/profile/profile-tabs";
 import { ShareProfileButton } from "@/components/profile/share-profile-button";
 import { createClient } from "@/lib/supabase/server";
@@ -133,6 +133,13 @@ export default async function ProfilePage() {
               >
                 <Pencil className="h-4 w-4" aria-hidden />
                 Edit
+              </Link>
+              <Link
+                href="/profile/saved"
+                aria-label="Saved posts"
+                className="glass flex h-9 w-9 items-center justify-center rounded-full text-fg-muted hover:text-fg"
+              >
+                <Bookmark className="h-4 w-4" aria-hidden />
               </Link>
               <Link
                 href="/home"

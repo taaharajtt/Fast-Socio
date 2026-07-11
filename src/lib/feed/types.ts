@@ -26,6 +26,8 @@ export type FeedPost = {
    *  Present only in the "For You" ranked feed; used as the keyset cursor.
    *  Absent in the chronological "Latest" feed. */
   rank_score?: number;
+  /** Whether the viewer has bookmarked this post (Refactor Phase 3b). */
+  saved_by_me?: boolean;
 };
 
 /** Which feed ordering the Home list is showing (Refactor Phase 3a). */
