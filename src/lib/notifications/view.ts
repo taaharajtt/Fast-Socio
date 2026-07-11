@@ -84,13 +84,25 @@ export function notificationCategory(type: string): ActivityCategory {
   }
 }
 
-/** Maps a notification (type + actor + data) to display text and a link. */
+/** "Alice", "Alice and 1 other", "Alice and 4 others" for a grouped count. */
+function actorSummary(actorName: string | null, count: number): string {
+  const who = actorName ?? "Someone";
+  if (count <= 1) return who;
+  const others = count - 1;
+  return `${who} and ${others} other${others === 1 ? "" : "s"}`;
+}
+
+/**
+ * Maps a notification (type + actor + data) to display text and a link. `count`
+ * is the collapsed group_count (Phase 7) — 1 for ungrouped notifications.
+ */
 export function notificationView(
   type: string,
   actorName: string | null,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
+  count = 1
 ): { text: string; href: string } {
-  const who = actorName ?? "Someone";
+  const who = actorSummary(actorName, count);
   switch (type) {
     case "match":
       return { text: `You matched with ${who}!`, href: "/chat" };

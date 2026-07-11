@@ -17,7 +17,9 @@ export default async function SettingsPage() {
 
   const { data: prefs } = await supabase
     .from("notification_preferences")
-    .select("matches, messages, likes, events, communities, system")
+    .select(
+      "matches, messages, likes, events, communities, system, quiet_hours_enabled, quiet_start, quiet_end"
+    )
     .eq("user_id", user!.id)
     .single();
 
@@ -63,6 +65,11 @@ export default async function SettingsPage() {
               events: prefs?.events ?? true,
               communities: prefs?.communities ?? true,
               system: prefs?.system ?? true,
+            }}
+            quiet={{
+              enabled: prefs?.quiet_hours_enabled ?? false,
+              start: prefs?.quiet_start ?? 22,
+              end: prefs?.quiet_end ?? 7,
             }}
           />
         </GlassCard>
