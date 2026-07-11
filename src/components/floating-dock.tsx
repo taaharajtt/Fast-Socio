@@ -20,6 +20,7 @@ export function FloatingDock({
   badges = {},
   avatarUrl,
   viewerId,
+  hiddenHrefs = [],
 }: {
   /** Unread counts keyed by nav href (e.g. { "/chat": 3 }). */
   badges?: Record<string, number>;
@@ -27,8 +28,14 @@ export function FloatingDock({
   avatarUrl?: string | null;
   /** Distinguishes your own /profile/<id> from another student's (UAT-011). */
   viewerId?: string;
+  /** Nav hrefs to omit when their feature flag is off (Refactor Phase 1). */
+  hiddenHrefs?: string[];
 }) {
   const pathname = usePathname();
+
+  // Feature-flagged destinations are dropped from the dock entirely so a
+  // disabled feature is neither shown nor reachable via the primary nav.
+  const items = NAV_ITEMS.filter((n) => !hiddenHrefs.includes(n.href));
 
   // Immersive conversation screens hide the dock: 1:1 threads and community
   // chat rooms (UAT-007).
@@ -43,7 +50,7 @@ export function FloatingDock({
       className="fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.08] bg-bg pb-[env(safe-area-inset-bottom)]"
     >
       <div className="mx-auto flex h-14 max-w-md items-stretch">
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+        {items.map(({ href, label, icon: Icon }) => {
           const active = activeHref === href;
           const badge = badges[href] ?? 0;
           return (

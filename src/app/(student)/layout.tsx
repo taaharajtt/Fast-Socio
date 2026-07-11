@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { FloatingDock } from "@/components/floating-dock";
 import { PushAutoEnable } from "@/components/push/push-auto-enable";
 import { PresenceHeartbeat } from "@/components/presence/heartbeat";
 import { AnnouncementModal } from "@/components/notifications/announcement-modal";
 import { createClient } from "@/lib/supabase/server";
+import { getMaintenanceState, resolveFlags } from "@/lib/flags";
 
 /**
  * Shell for the logged-in student experience. Hosts the floating glass dock and
@@ -24,11 +26,44 @@ export default async function StudentLayout({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("onboarding_completed, avatar_url, events_seen_at")
+    .select("onboarding_completed, avatar_url, events_seen_at, admin_role")
     .eq("id", user.id)
     .single();
 
   if (!profile?.onboarding_completed) redirect("/onboarding");
+
+  const isAdmin = Boolean(profile.admin_role);
+
+  // Maintenance gate (Refactor Phase 1). Admins keep operating during a window;
+  // everyone else is parked on the interstitial until the flag is cleared.
+  if (!isAdmin) {
+    const { enabled: maintenance } = await getMaintenanceState();
+    if (maintenance) redirect("/maintenance");
+  }
+
+  // Record/refresh this device's session row for Settings → Security (P8).
+  // Fire-and-forget: a failure here must never block rendering the app.
+  const hdrs = await headers();
+  await supabase
+    .rpc("record_session", {
+      p_user_agent: hdrs.get("user-agent"),
+      p_ip:
+        hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+        hdrs.get("x-real-ip") ??
+        null,
+    })
+    .then(
+      () => {},
+      () => {}
+    );
+
+  // Feature flags gate the primary destinations without a redeploy.
+  const flags = await resolveFlags(["discover", "events", "leaderboard"]);
+  const hiddenTabs = [
+    !flags.discover && "/discover",
+    !flags.events && "/events",
+    !flags.leaderboard && "/leaderboard",
+  ].filter((h): h is string => Boolean(h));
 
   const nowIso = new Date().toISOString();
 
@@ -102,6 +137,7 @@ export default async function StudentLayout({
         badges={{ "/chat": chatBadge, "/events": newEvents ?? 0 }}
         avatarUrl={profile?.avatar_url}
         viewerId={user.id}
+        hiddenHrefs={hiddenTabs}
       />
     </div>
   );
