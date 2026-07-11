@@ -8,6 +8,9 @@ import {
   ImagePlus,
   Mic,
   Pencil,
+  Pin,
+  PinOff,
+  Search,
   Send,
   Square,
   Trash2,
@@ -33,8 +36,11 @@ import {
   deleteMessage,
   toggleMessageReaction,
   forwardMessage,
+  togglePinMessage,
+  searchMessages,
   listMatchedFriends,
   type MatchedFriend,
+  type MessageSearchHit,
 } from "@/app/(student)/chat/actions";
 
 type Reaction = { emoji: string; user_id: string };
@@ -51,6 +57,7 @@ export type ChatMessage = {
   read_at: string | null;
   edited_at: string | null;
   deleted_at: string | null;
+  pinned_at: string | null;
 };
 
 export type { SharedPostPreview };
@@ -102,6 +109,11 @@ export function ChatThread({
   const [error, setError] = useState<string | null>(null);
   const [canLoadOlder, setCanLoadOlder] = useState(hasMore);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  // Pinned messages + in-thread search (Refactor Phase 10).
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchHits, setSearchHits] = useState<MessageSearchHit[]>([]);
+  const [searching, setSearching] = useState(false);
 
   // Resolve a signed URL for a private chat-media attachment (P5-01). Images get
   // a 1080px transform; voice notes are signed as-is.
@@ -151,6 +163,39 @@ export function ChatThread({
       setError(res.error);
       refreshReactions(messageId);
     }
+  }
+
+  async function togglePin(m: ChatMessage) {
+    setActionsFor(null);
+    const wasPinned = Boolean(m.pinned_at);
+    // Optimistic; the realtime UPDATE reconciles the authoritative pinned_at.
+    setMessages((prev) =>
+      prev.map((x) =>
+        x.id === m.id
+          ? { ...x, pinned_at: wasPinned ? null : new Date().toISOString() }
+          : x
+      )
+    );
+    const res = await togglePinMessage(m.id);
+    if (!res.ok) {
+      setError(res.error);
+      setMessages((prev) =>
+        prev.map((x) =>
+          x.id === m.id ? { ...x, pinned_at: wasPinned ? m.pinned_at : null } : x
+        )
+      );
+    }
+  }
+
+  async function runSearch(q: string) {
+    setSearchQuery(q);
+    if (q.trim().length < 2) {
+      setSearchHits([]);
+      return;
+    }
+    setSearching(true);
+    setSearchHits(await searchMessages(conversationId, q));
+    setSearching(false);
   }
 
   async function loadOlder() {
@@ -414,11 +459,98 @@ export function ChatThread({
     .find((m) => m.sender_id === meId && m.read_at)?.id;
   const lastMineId = [...messages].reverse().find((m) => m.sender_id === meId)?.id;
 
+  // Pinned messages currently loaded in the thread (Phase 10).
+  const pinnedMessages = messages.filter((m) => m.pinned_at && !m.deleted_at);
+  const latestPinned = pinnedMessages[pinnedMessages.length - 1];
+
   return (
     // min-h-0 lets this flex column shrink inside the fixed chat shell so the
     // message list can actually scroll (UAT-017) instead of overflowing and
     // pushing the composer off-screen.
     <div className="flex min-h-0 flex-1 flex-col">
+      {/* Search + pinned bar (Refactor Phase 10). */}
+      <div className="shrink-0">
+        <div className="flex items-center gap-2 py-1">
+          {searchOpen ? (
+            <>
+              <div className="glass flex flex-1 items-center gap-2 rounded-[var(--radius-pill)] px-3 py-1.5">
+                <Search className="h-4 w-4 text-fg-muted" aria-hidden />
+                <input
+                  autoFocus
+                  value={searchQuery}
+                  onChange={(e) => runSearch(e.target.value)}
+                  placeholder="Search this chat…"
+                  className="flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-fg-muted"
+                />
+              </div>
+              <button
+                type="button"
+                aria-label="Close search"
+                onClick={() => {
+                  setSearchOpen(false);
+                  setSearchQuery("");
+                  setSearchHits([]);
+                }}
+                className="glass flex h-8 w-8 items-center justify-center rounded-full text-fg-muted"
+              >
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              aria-label="Search messages"
+              onClick={() => setSearchOpen(true)}
+              className="glass ml-auto flex h-8 w-8 items-center justify-center rounded-full text-fg-muted hover:text-fg"
+            >
+              <Search className="h-4 w-4" aria-hidden />
+            </button>
+          )}
+        </div>
+
+        {searchOpen && searchQuery.trim().length >= 2 && (
+          <div className="mb-1 max-h-56 space-y-1 overflow-y-auto rounded-[var(--radius-md)] border border-glass-border bg-card p-2">
+            {searching ? (
+              <p className="px-2 py-3 text-center text-xs text-fg-muted">Searching…</p>
+            ) : searchHits.length === 0 ? (
+              <p className="px-2 py-3 text-center text-xs text-fg-muted">No matches.</p>
+            ) : (
+              searchHits.map((h) => (
+                <div key={h.id} className="rounded-[var(--radius-sm)] px-2 py-1.5">
+                  <p className="line-clamp-2 text-sm text-fg">{h.body}</p>
+                  <p className="text-[11px] text-fg-muted">
+                    {timeAgo(h.created_at)} ago
+                    {h.sender_id === meId ? " · you" : ""}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {!searchOpen && latestPinned && (
+          <div className="mb-1 flex items-start gap-2 rounded-[var(--radius-md)] border border-glass-border bg-card px-3 py-2">
+            <Pin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" aria-hidden />
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-semibold text-fg-muted">
+                Pinned{pinnedMessages.length > 1 ? ` · ${pinnedMessages.length}` : ""}
+              </p>
+              <p className="line-clamp-1 text-sm text-fg">
+                {latestPinned.body ?? "📎 Attachment"}
+              </p>
+            </div>
+            <button
+              type="button"
+              aria-label="Unpin message"
+              onClick={() => togglePin(latestPinned)}
+              className="shrink-0 text-fg-muted hover:text-fg"
+            >
+              <PinOff className="h-4 w-4" aria-hidden />
+            </button>
+          </div>
+        )}
+      </div>
+
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto py-4">
         {canLoadOlder && (
           <div className="flex justify-center pb-2">
@@ -712,6 +844,25 @@ export function ChatThread({
                     Forward
                   </button>
                 )}
+
+                {/* Pin/unpin — either participant, any non-deleted message (Phase 10). */}
+                <button
+                  type="button"
+                  onClick={() => togglePin(a)}
+                  className="glass flex w-full items-center gap-3 rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm text-fg"
+                >
+                  {a.pinned_at ? (
+                    <>
+                      <PinOff className="h-4 w-4" aria-hidden />
+                      Unpin message
+                    </>
+                  ) : (
+                    <>
+                      <Pin className="h-4 w-4" aria-hidden />
+                      Pin message
+                    </>
+                  )}
+                </button>
 
                 {mine && isText && (
                   <button

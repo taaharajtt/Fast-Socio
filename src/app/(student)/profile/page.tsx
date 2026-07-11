@@ -21,28 +21,46 @@ export default async function ProfilePage() {
   } = await supabase.auth.getUser();
   const me = user!.id;
 
-  const [{ data: profile }, { data: postRows }, { count: matchCount }, { data: commRows }] =
-    await Promise.all([
-      supabase
-        .from("profiles")
-        .select("full_name, department, semester, bio, avatar_url, cover_url, aura_score, verified")
-        .eq("id", me)
-        .single(),
-      supabase
-        .from("feed_posts")
-        .select("*")
-        .eq("author_id", me)
-        .order("created_at", { ascending: false })
-        .limit(30),
-      supabase
-        .from("matches")
-        .select("id", { count: "exact", head: true })
-        .or(`user_low.eq.${me},user_high.eq.${me}`),
-      supabase
-        .from("community_members")
-        .select("community:communities(id, name, member_count, status)")
-        .eq("user_id", me),
-    ]);
+  const [
+    { data: profile },
+    { data: postRows },
+    { count: matchCount },
+    { data: commRows },
+    { count: postCount },
+    { count: eventCount },
+  ] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select(
+        "full_name, department, semester, bio, avatar_url, cover_url, aura_score, verified, level, xp, completeness"
+      )
+      .eq("id", me)
+      .single(),
+    supabase
+      .from("feed_posts")
+      .select("*")
+      .eq("author_id", me)
+      .order("created_at", { ascending: false })
+      .limit(30),
+    supabase
+      .from("matches")
+      .select("id", { count: "exact", head: true })
+      .or(`user_low.eq.${me},user_high.eq.${me}`),
+    supabase
+      .from("community_members")
+      .select("community:communities(id, name, member_count, status)")
+      .eq("user_id", me),
+    // Stats tab counts (Refactor Phase 10).
+    supabase
+      .from("posts")
+      .select("id", { count: "exact", head: true })
+      .eq("author_id", me)
+      .eq("is_anonymous", false),
+    supabase
+      .from("event_attendees")
+      .select("event_id", { count: "exact", head: true })
+      .eq("user_id", me),
+  ]);
 
   const posts = (postRows as FeedPost[]) ?? [];
   const communities = ((commRows ?? [])
@@ -174,7 +192,39 @@ export default async function ProfilePage() {
           <p className="mb-5 text-sm leading-relaxed text-fg">{profile.bio}</p>
         )}
 
-        <ProfileTabs posts={posts} communities={communities} currentUserId={me} />
+        {/* Profile completeness meter (Refactor Phase 10). Nudges toward the 90%
+            bonus while staying quiet once complete. */}
+        {typeof profile?.completeness === "number" && profile.completeness < 100 && (
+          <div className="mb-5">
+            <div className="mb-1 flex items-center justify-between text-xs text-fg-muted">
+              <span>Profile {profile.completeness}% complete</span>
+              <Link href="/profile/edit" className="font-medium text-accent">
+                Complete it
+              </Link>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-glass">
+              <div
+                className="h-full rounded-full bg-aura transition-all duration-500"
+                style={{ width: `${profile.completeness}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        <ProfileTabs
+          posts={posts}
+          communities={communities}
+          currentUserId={me}
+          stats={{
+            posts: postCount ?? 0,
+            communities: communities.length,
+            matches: matchCount ?? 0,
+            events: eventCount ?? 0,
+            aura: profile?.aura_score ?? 0,
+            level: profile?.level ?? 1,
+            xp: profile?.xp ?? 0,
+          }}
+        />
       </main>
     </div>
   );
