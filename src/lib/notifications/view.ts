@@ -8,6 +8,8 @@ export const SYSTEM_NOTIFICATION_TYPES = new Set([
   "event_approved",
   "level_up",
   "achievement",
+  "waitlist_promoted",
+  "event_reminder",
 ]);
 
 /** Short verb phrase for a groupable actor action, e.g. "liked your post". */
@@ -70,6 +72,9 @@ export function notificationCategory(type: string): ActivityCategory {
     case "event_approved":
     case "community_post_approved":
     case "community_post_rejected":
+      return "announcements";
+    case "waitlist_promoted":
+    case "event_reminder":
       return "announcements";
     case "level_up":
     case "achievement":
@@ -141,6 +146,19 @@ export function notificationView(
       return {
         text: `Achievement unlocked: ${data.title ?? "a new badge"} 🏆`,
         href: "/profile/achievements",
+      };
+    case "waitlist_promoted":
+      return {
+        text: "A seat opened up — you're in! 🎟️",
+        href: data.event_id ? `/events/${data.event_id}` : "/events",
+      };
+    case "event_reminder":
+      return {
+        text:
+          data.kind === "1h"
+            ? "An event you're attending starts within the hour ⏰"
+            : "An event you're attending is coming up tomorrow ⏰",
+        href: data.event_id ? `/events/${data.event_id}` : "/events",
       };
     default:
       return { text: "New notification", href: "/home" };

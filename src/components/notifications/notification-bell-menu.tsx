@@ -12,6 +12,8 @@ import {
   UserPlus,
   TrendingUp,
   Trophy,
+  Ticket,
+  Clock,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -40,6 +42,8 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   event_approved: Megaphone,
   level_up: TrendingUp,
   achievement: Trophy,
+  waitlist_promoted: Ticket,
+  event_reminder: Clock,
 };
 
 /**
