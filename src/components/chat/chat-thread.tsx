@@ -70,6 +70,7 @@ export function ChatThread({
   hasMore = false,
   initialSignedAttachments = {},
   initialReactions = {},
+  showReadReceipts = true,
 }: {
   conversationId: string;
   meId: string;
@@ -80,6 +81,8 @@ export function ChatThread({
   initialSignedAttachments?: Record<string, string>;
   /** messageId -> reactions (UAT-005). */
   initialReactions?: Record<string, Reaction[]>;
+  /** Whether the other participant reveals read receipts (privacy, Phase 8). */
+  showReadReceipts?: boolean;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [signedAttachments, setSignedAttachments] = useState<
@@ -535,7 +538,7 @@ export function ChatThread({
               {/* UAT-004: a read receipt now says WHEN, not just "Read". */}
               {mine && m.id === (lastReadMine ?? lastMineId) && (
                 <p className="mr-1 mt-0.5 flex items-center justify-end gap-1 text-right text-[11px] text-fg-muted">
-                  {m.read_at ? (
+                  {m.read_at && showReadReceipts ? (
                     <>
                       <Check className="h-3 w-3" strokeWidth={3} aria-hidden />
                       Seen {timeAgo(m.read_at)} ago

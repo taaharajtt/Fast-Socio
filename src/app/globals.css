@@ -230,3 +230,22 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* Appearance settings (Refactor Phase 8): user-chosen density + motion applied
+   as data-attributes on <html> by an early inline script (no FOUC). Font size
+   is applied directly as an html font-size so rem-based sizing scales. */
+html[data-motion="reduced"] *,
+html[data-motion="reduced"] *::before,
+html[data-motion="reduced"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+html[data-density="compact"] {
+  --density-gap: 0.85;
+}
+html[data-density="compact"] main {
+  font-size: 0.96em;
+}
