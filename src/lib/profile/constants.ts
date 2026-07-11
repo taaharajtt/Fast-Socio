@@ -51,3 +51,61 @@ export const INTERESTS = [
 export const MIN_INTERESTS = 3;
 export const MAX_INTERESTS = 8;
 export const BIO_MAX = 300;
+
+/**
+ * Identity-vector options (Refactor Phase 2). These feed the Discover
+ * compatibility engine and profile completeness. All are optional at the field
+ * level; the wizard nudges but never blocks on them.
+ */
+
+/** Personality descriptors (multi-select). */
+export const PERSONALITY_TRAITS = [
+  "Introvert",
+  "Extrovert",
+  "Competitive",
+  "Creative",
+  "Calm",
+  "Funny",
+  "Leader",
+  "Night Owl",
+  "Morning Person",
+  "Book Lover",
+  "Gym Enthusiast",
+  "Coffee Lover",
+  "Adventurous",
+  "Ambitious",
+] as const;
+export const MAX_PERSONALITY = 6;
+
+/** Languages spoken (multi-select). */
+export const LANGUAGES = [
+  "English",
+  "Urdu",
+  "Punjabi",
+  "Pashto",
+  "Sindhi",
+  "Balochi",
+  "Saraiki",
+  "Arabic",
+] as const;
+export const MAX_LANGUAGES = 5;
+
+/** Hostel vs day-scholar status. */
+export const HOSTEL_STATUS = [
+  { value: "hostelite", label: "Hostelite" },
+  { value: "day_scholar", label: "Day Scholar" },
+] as const;
+
+/** What the user is on the platform for — steers Discover. */
+export const RELATIONSHIP_PREFS = [
+  { value: "friends", label: "Friends" },
+  { value: "dating", label: "Dating" },
+  { value: "networking", label: "Networking" },
+  { value: "study", label: "Study partners" },
+] as const;
+
+/** Plausible graduation years, derived at render time from the current year. */
+export function graduationYears(span = 6): number[] {
+  const start = new Date().getFullYear();
+  return Array.from({ length: span }, (_, i) => start + i);
+}
