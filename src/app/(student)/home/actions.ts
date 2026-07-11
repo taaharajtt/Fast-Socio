@@ -26,6 +26,26 @@ export async function fetchFeedPage(
   return (data as FeedPost[]) ?? [];
 }
 
+/**
+ * Fetch a page of the deterministically ranked "For You" feed (Refactor Phase
+ * 3a) via the get_ranked_feed RPC. Keyset cursor is the last row's
+ * (rank_score, id); pass both to continue, or nulls for the first page. The
+ * ranking (recency, engagement, dept/semester affinity, shared interests,
+ * author Aura, report penalty) lives in SQL so it stays deterministic and cheap.
+ */
+export async function fetchRankedFeedPage(
+  cursorScore: number | null,
+  cursorId: string | null
+): Promise<FeedPost[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("get_ranked_feed", {
+    p_limit: FEED_PAGE_SIZE,
+    p_cursor_score: cursorScore,
+    p_cursor_id: cursorId,
+  });
+  return (data as FeedPost[]) ?? [];
+}
+
 /** Create a post (text and/or image), optionally anonymous and/or in a community. */
 export async function createPost(input: {
   body: string;
