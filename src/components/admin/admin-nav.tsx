@@ -14,7 +14,6 @@ import {
   Zap,
   Heart,
   Database,
-  Terminal,
   Server,
   type LucideIcon,
 } from "lucide-react";
@@ -41,7 +40,6 @@ const NAV: NavItem[] = [
   { href: "/admin/matching", label: "Matching", icon: Heart, match: "/admin/matching", super: true },
   { href: "/admin/broadcast", label: "Broadcast", icon: Megaphone, match: "/admin/broadcast", super: true },
   { href: "/admin/database", label: "Database", icon: Database, match: "/admin/database", super: true },
-  { href: "/admin/sql", label: "SQL console", icon: Terminal, match: "/admin/sql", super: true },
   { href: "/admin/infra", label: "Infra", icon: Server, match: "/admin/infra", super: true },
   { href: "/admin/audit", label: "Audit log", icon: ScrollText, match: "/admin/audit" },
 ];

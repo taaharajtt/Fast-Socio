@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # Dummy values so `next build` succeeds without real secrets. The
+      # Supabase clients no-op / fail lazily at runtime, never at build time.
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: dummy-anon-key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Lint is a signal, not a gate yet: there is a known React Compiler lint
+      # baseline (a handful of pre-existing errors) to clean up separately, so a
+      # lint failure must not block merges today. test + build are the hard gates
+      # that protect what actually ships. Flip to blocking once the baseline is 0.
+      - run: npm run lint
+        continue-on-error: true
+      - run: npm run test
+      - run: npm run build

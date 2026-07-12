@@ -61,3 +61,8 @@ next-env.d.ts
 
 # Internal audit report — kept locally, never deployed (contained a credential string that failed the Vercel deploy security scan).
 SECURITY.md
+
+# Local-only launch/security audit docs — never publish to the public repo
+AUDIT_REPORT.md
+IMPLEMENTATION_PLAN.md
+FAST-SOCIO-LaunchReadiness.md

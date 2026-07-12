@@ -18,7 +18,10 @@ export async function GET(request: Request) {
   const { origin } = new URL(request.url);
 
   // Never expose an unauthenticated session-minting endpoint in production.
-  if (!isDemoLoginEnabled()) {
+  // Hard NODE_ENV gate first (launch audit Phase 0.2, matching /auth/dev-login)
+  // so a forgotten ALLOW_DEMO_LOGIN env var alone can never open this in prod;
+  // the env-var gate still applies outside production.
+  if (process.env.NODE_ENV === "production" || !isDemoLoginEnabled()) {
     return NextResponse.redirect(`${origin}/login`);
   }
 
