@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClientForRedirect } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isDemoLoginEnabled } from "@/lib/auth/gates";
 
@@ -33,7 +33,8 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}/login?error=demo_unavailable`);
   }
 
-  const supabase = await createClient();
+  const response = NextResponse.redirect(`${origin}/home`);
+  const supabase = await createClientForRedirect(response);
   const { error: verifyError } = await supabase.auth.verifyOtp({
     type: "magiclink",
     token_hash: tokenHash,
@@ -44,5 +45,5 @@ export async function GET(request: Request) {
     );
   }
 
-  return NextResponse.redirect(`${origin}/home`);
+  return response;
 }
