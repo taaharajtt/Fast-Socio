@@ -13,13 +13,13 @@ export default async function HomePage() {
     data: { user },
   } = await supabase.auth.getUser();
   const [{ data }, { count: unreadActivity }] = await Promise.all([
-    // "For You" ranked feed is the default (Refactor Phase 3a). The RPC applies
-    // the deterministic visibility score; the client can switch to "Latest".
-    supabase.rpc("get_ranked_feed", {
-      p_limit: FEED_PAGE_SIZE,
-      p_cursor_score: null,
-      p_cursor_id: null,
-    }),
+    // Single chronological campus feed (newest first).
+    supabase
+      .from("feed_posts")
+      .select("*")
+      .is("community_id", null)
+      .order("created_at", { ascending: false })
+      .limit(FEED_PAGE_SIZE),
     // UAT-013: the Activity icon carries an unread count. Mirrors the filter on
     // /activity so the badge can never point at rows that page won't show.
     supabase

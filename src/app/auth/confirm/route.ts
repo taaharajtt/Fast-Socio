@@ -24,11 +24,7 @@ export async function GET(request: Request) {
       token_hash: tokenHash,
     });
     if (!error) {
-      // Password-recovery links must land on the set-new-password screen, not
-      // the app home (the token_hash counterpart to the PKCE flow, which uses
-      // /auth/callback?next=/reset-password).
-      const dest = type === "recovery" ? "/reset-password" : next;
-      return NextResponse.redirect(`${origin}${dest}`);
+      return NextResponse.redirect(`${origin}${next}`);
     }
     return NextResponse.redirect(
       `${origin}/login?error=${encodeURIComponent(error.message)}`

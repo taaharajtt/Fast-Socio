@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Settings, Pencil, Plus, Zap, Heart, Bookmark } from "lucide-react";
+import { Settings, Pencil, Plus, Zap, Heart } from "lucide-react";
 import { ProfileTabs, type ProfileCommunity } from "@/components/profile/profile-tabs";
 import { ShareProfileButton } from "@/components/profile/share-profile-button";
 import { createClient } from "@/lib/supabase/server";
@@ -32,7 +32,7 @@ export default async function ProfilePage() {
     supabase
       .from("profiles")
       .select(
-        "full_name, department, semester, bio, avatar_url, cover_url, aura_score, verified, level, xp, completeness"
+        "full_name, department, semester, bio, avatar_url, cover_url, aura_score, verified, level, xp"
       )
       .eq("id", me)
       .single(),
@@ -153,13 +153,6 @@ export default async function ProfilePage() {
                 Edit
               </Link>
               <Link
-                href="/profile/saved"
-                aria-label="Saved posts"
-                className="glass flex h-9 w-9 items-center justify-center rounded-full text-fg-muted hover:text-fg"
-              >
-                <Bookmark className="h-4 w-4" aria-hidden />
-              </Link>
-              <Link
                 href="/home"
                 aria-label="Create post"
                 className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white"
@@ -190,25 +183,6 @@ export default async function ProfilePage() {
 
         {profile?.bio && (
           <p className="mb-5 text-sm leading-relaxed text-fg">{profile.bio}</p>
-        )}
-
-        {/* Profile completeness meter (Refactor Phase 10). Nudges toward the 90%
-            bonus while staying quiet once complete. */}
-        {typeof profile?.completeness === "number" && profile.completeness < 100 && (
-          <div className="mb-5">
-            <div className="mb-1 flex items-center justify-between text-xs text-fg-muted">
-              <span>Profile {profile.completeness}% complete</span>
-              <Link href="/profile/edit" className="font-medium text-accent">
-                Complete it
-              </Link>
-            </div>
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-glass">
-              <div
-                className="h-full rounded-full bg-aura transition-all duration-500"
-                style={{ width: `${profile.completeness}%` }}
-              />
-            </div>
-          </div>
         )}
 
         <ProfileTabs
