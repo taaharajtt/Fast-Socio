@@ -142,9 +142,8 @@ export async function saveOnboardingStep(
 /**
  * Finalize onboarding. Applies the same required-field validation as before
  * (name, department, semester, interests, bio), writes the full identity
- * vector, marks onboarding complete, then recomputes completeness and awards
- * the one-time completion Aura bonus via the definer RPC. RLS + the eq(id)
- * scope guarantee the user only writes their own row.
+ * vector, and marks onboarding complete. RLS + the eq(id) scope guarantee the
+ * user only writes their own row.
  */
 export async function saveProfile(
   draft: OnboardingDraft
@@ -177,13 +176,6 @@ export async function saveProfile(
     .update(patch)
     .eq("id", user.id);
   if (error) return { error: error.message };
-
-  // Recompute completeness + award the one-time bonus. Non-fatal: a failure
-  // here must not strand the user on the wizard after their profile is saved.
-  await supabase.rpc("award_completion_bonus").then(
-    () => {},
-    () => {}
-  );
 
   redirect("/home");
 }
