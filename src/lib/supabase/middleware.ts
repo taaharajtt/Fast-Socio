@@ -49,12 +49,20 @@ export async function updateSession(request: NextRequest) {
   const userId = claimsData?.claims?.sub ?? null;
 
   const { pathname } = request.nextUrl;
-  // The magic-link login is the only logged-out auth screen; an authenticated
-  // user has no reason to be here, so they get bounced to /home.
-  const isLoggedOutRoute = pathname === "/login";
+  // Logged-out auth screens: an authenticated user has no reason to be on these,
+  // so they get bounced to /home. NOTE: /set-password is deliberately NOT here —
+  // it is reached WITH a session (from a signup magic link or a recovery link)
+  // and must stay accessible to authenticated users.
+  const isLoggedOutRoute =
+    pathname === "/login" ||
+    pathname === "/signup" ||
+    pathname === "/forgot-password";
   const isBannedRoute = pathname.startsWith("/banned");
   const isPublicRoute =
     isLoggedOutRoute ||
+    // Public so an expired link shows the "request a new one" state instead of
+    // bouncing to /login; authenticated link-holders see the set-password form.
+    pathname === "/set-password" ||
     isBannedRoute ||
     pathname.startsWith("/auth/") ||
     pathname.startsWith("/styleguide");
