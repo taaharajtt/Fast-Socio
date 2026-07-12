@@ -43,7 +43,7 @@ function PostCardImpl({
   const router = useRouter();
   const [liked, setLiked] = useState(post.liked_by_me);
   const [likes, setLikes] = useState(post.like_count);
-  const [comments] = useState(post.comment_count);
+  const [comments, setComments] = useState(post.comment_count);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [commenting, setCommenting] = useState(false);
@@ -179,7 +179,7 @@ function PostCardImpl({
             setConfirmDelete(false);
             setOptionsOpen(true);
           }}
-          className="shrink-0 text-fg-muted hover:text-fg"
+          className="-m-2 shrink-0 p-2 text-fg-muted hover:text-fg"
         >
           <MoreHorizontal className="h-6 w-6" aria-hidden />
         </button>
@@ -213,11 +213,12 @@ function PostCardImpl({
       )}
 
       <div className="mt-3 flex items-center gap-5 text-sm text-fg-muted">
+        {/* -m-2 p-2 grows each hit area to ~44px without moving a pixel. */}
         <button
           type="button"
           onClick={onLike}
           className={cn(
-            "flex items-center gap-1.5 transition-all active:scale-90",
+            "-m-2 flex items-center gap-1.5 p-2 transition-all active:scale-90",
             liked ? "text-error" : "hover:text-fg"
           )}
           aria-pressed={liked}
@@ -233,7 +234,7 @@ function PostCardImpl({
           type="button"
           onClick={() => setCommenting(true)}
           aria-label="Comments"
-          className="flex items-center gap-1.5 transition-all hover:text-fg active:scale-90"
+          className="-m-2 flex items-center gap-1.5 p-2 transition-all hover:text-fg active:scale-90"
         >
           <MessageCircle className="h-5 w-5" aria-hidden />
           {comments}
@@ -242,7 +243,7 @@ function PostCardImpl({
           type="button"
           onClick={() => setSharing(true)}
           aria-label="Share post"
-          className="flex items-center gap-1.5 transition-all hover:text-fg active:scale-90"
+          className="-m-2 flex items-center gap-1.5 p-2 transition-all hover:text-fg active:scale-90"
         >
           <Share2 className="h-5 w-5" aria-hidden />
           Share
@@ -258,13 +259,11 @@ function PostCardImpl({
       <CommentsSheet
         postId={post.id}
         open={commenting}
-        onClose={() => {
-          setCommenting(false);
-          // Refresh the count from server-truth next paint isn't cheap; bump
-          // optimistically handled inside the sheet is overkill — reflect that
-          // new comments may exist by nudging the router cache.
-          router.refresh();
-        }}
+        onClose={() => setCommenting(false)}
+        // Bump the visible count in place. The old close handler called
+        // router.refresh(), which re-ran the entire layout + page on the server
+        // (seconds of work) without even updating this card's frozen count.
+        onCommentAdded={() => setComments((c) => c + 1)}
       />
 
       <GlassSheet

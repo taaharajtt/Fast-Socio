@@ -147,12 +147,12 @@ export function AddComment({
           onChange={(e) => setBody(e.target.value)}
           placeholder="Add a comment…"
           disabled={pending}
-          className="glass h-11 flex-1 rounded-[var(--radius-pill)] px-4 text-[15px] text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
+          className="glass h-11 flex-1 rounded-[var(--radius-pill)] px-4 text-base text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
         />
         <GlassButton
           type="submit"
           size="icon"
-          className="h-11 w-11"
+          className="h-11 w-11 shrink-0"
           aria-label="Send comment"
           disabled={pending || body.trim().length === 0}
         >

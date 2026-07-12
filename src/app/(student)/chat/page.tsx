@@ -3,6 +3,7 @@ import { RequestRow, type IncomingRequest } from "@/components/chat/request-row"
 import { OpenChatButton } from "@/components/chat/open-chat-button";
 import { ChatCommunityTabs } from "@/components/chat/chat-community-tabs";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import { AppImage } from "@/components/ui/app-image";
 import { OnlineDot } from "@/components/ui/badges";
 import { isOnline, timeAgo } from "@/lib/time";
@@ -24,10 +25,8 @@ export default async function ChatPage({
   const showRequests = view === "requests";
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const me = user!.id;
+  // Verified locally from the JWT — no Auth API round trip; RLS is authoritative.
+  const me = (await getAuthUserId())!;
 
   const [
     { data: convRows },

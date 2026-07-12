@@ -25,12 +25,15 @@ export function CommentsSection({
   initialAuthors,
   viewerAvatar,
   variant,
+  onCommentAdded,
 }: {
   postId: string;
   initialComments: FeedComment[];
   initialAuthors: Record<string, Author>;
   viewerAvatar?: string | null;
   variant: "sheet" | "page";
+  /** Fired after any comment or reply posts — lets the card bump its count. */
+  onCommentAdded?: () => void;
 }) {
   const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null);
   const threadRef = useRef<CommentThreadHandle>(null);
@@ -68,6 +71,7 @@ export function CommentsSection({
           onSubmitted={(parentId) => {
             setReplyTo(null);
             if (parentId) threadRef.current?.expandReplies(parentId);
+            onCommentAdded?.();
           }}
         />
       </div>

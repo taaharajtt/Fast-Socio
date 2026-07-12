@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { isChatMediaPathFor, MESSAGE_PAGE_SIZE } from "@/lib/chat-media";
 
@@ -37,16 +38,15 @@ async function setRequestStatus(
   status: "accepted" | "declined"
 ): Promise<{ error: string } | void> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in." };
+  // Local JWT verification — no Auth API round trip on this hot path.
+  const userId = await getAuthUserId();
+  if (!userId) return { error: "Not signed in." };
 
   const { error } = await supabase
     .from("message_requests")
     .update({ status })
     .eq("id", requestId)
-    .eq("recipient_id", user.id);
+    .eq("recipient_id", userId);
   if (error) return { error: error.message };
 
   revalidatePath("/chat");
@@ -54,17 +54,16 @@ async function setRequestStatus(
 
 export async function acceptMessageRequest(id: string) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in." };
+  // Local JWT verification — no Auth API round trip on this hot path.
+  const userId = await getAuthUserId();
+  if (!userId) return { error: "Not signed in." };
 
   // Look up the sender before flipping status so we can open the conversation.
   const { data: req } = await supabase
     .from("message_requests")
     .select("sender_id")
     .eq("id", id)
-    .eq("recipient_id", user.id)
+    .eq("recipient_id", userId)
     .single();
 
   const result = await setRequestStatus(id, "accepted");
@@ -107,10 +106,9 @@ export async function sendMessage(
   attachment?: Attachment
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  // Local JWT verification — no Auth API round trip on this hot path.
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
 
   const text = body.trim();
   if (!attachment && (text.length < 1 || text.length > 4000))
@@ -130,7 +128,7 @@ export async function sendMessage(
 
   const { error } = await supabase.from("messages").insert({
     conversation_id: conversationId,
-    sender_id: user.id,
+    sender_id: userId,
     body: text || null,
     attachment_url: attachment?.url ?? null,
     attachment_type: attachment?.type ?? null,
@@ -148,11 +146,10 @@ export type MatchedFriend = {
 /** List the current user's matched friends (for the share sheet, CR-010). */
 export async function listMatchedFriends(): Promise<MatchedFriend[]> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return [];
-  const me = user.id;
+  // Local JWT verification — no Auth API round trip on this hot path.
+  const userId = await getAuthUserId();
+  if (!userId) return [];
+  const me = userId;
 
   const { data: matchRows } = await supabase
     .from("matches")
@@ -181,10 +178,9 @@ export async function sharePostToFriend(
   postId: string
 ): Promise<{ ok: true; conversationId: string } | { ok: false; error: string }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  // Local JWT verification — no Auth API round trip on this hot path.
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
 
   // Share-to-DM inserts a chat message, so it must share the chat send limit
   // (P5-05) — otherwise it's an unthrottled message-spam path.
@@ -204,7 +200,7 @@ export async function sharePostToFriend(
 
   const { error } = await supabase.from("messages").insert({
     conversation_id: conversationId,
-    sender_id: user.id,
+    sender_id: userId,
     body: "📎 Shared a post",
     shared_post_id: postId,
   });
@@ -275,10 +271,9 @@ export async function forwardMessage(
   payload: { body?: string | null; sharedPostId?: string | null }
 ): Promise<{ ok: true; conversationId: string } | { ok: false; error: string }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  // Local JWT verification — no Auth API round trip on this hot path.
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
 
   if (!payload.body && !payload.sharedPostId)
     return { ok: false, error: "Nothing to forward." };
@@ -299,7 +294,7 @@ export async function forwardMessage(
 
   const { error } = await supabase.from("messages").insert({
     conversation_id: conversationId,
-    sender_id: user.id,
+    sender_id: userId,
     body: payload.sharedPostId ? (payload.body ?? "Forwarded a post") : payload.body,
     shared_post_id: payload.sharedPostId ?? null,
   });
@@ -313,10 +308,9 @@ export async function reportMessage(
   reason: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  // Local JWT verification — no Auth API round trip on this hot path.
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
 
   const allowed = await checkRateLimit(
     "report",
@@ -326,7 +320,7 @@ export async function reportMessage(
   if (!allowed) return { ok: false, error: "Too many reports for now." };
 
   const { error } = await supabase.from("reports").insert({
-    reporter_id: user.id,
+    reporter_id: userId,
     target_type: "message",
     target_id: messageId,
     reason,

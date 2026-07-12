@@ -15,11 +15,14 @@ export function PostComposer({
   communityId,
   placeholder = "Share something with campus…",
   reviewNotice,
+  onPosted,
 }: {
   communityId?: string;
   placeholder?: string;
   /** Shown after a successful post when submissions require approval. */
   reviewNotice?: string;
+  /** Preferred over router.refresh(): lets the host pull just the new post. */
+  onPosted?: () => void;
 }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -88,7 +91,8 @@ export function PostComposer({
       setImageUrl(null);
       if (reviewNotice) setNotice(reviewNotice);
       // UAT-007: pull the freshly-created post into the feed automatically.
-      router.refresh();
+      if (onPosted) onPosted();
+      else router.refresh();
     });
   }
 
@@ -110,7 +114,7 @@ export function PostComposer({
         onChange={(e) => setBody(e.target.value.slice(0, 2000))}
         placeholder={placeholder}
         rows={3}
-        className="w-full resize-none bg-transparent text-[15px] text-fg outline-none placeholder:text-fg-muted"
+        className="w-full resize-none bg-transparent text-base text-fg outline-none placeholder:text-fg-muted"
       />
 
       {uploading && (

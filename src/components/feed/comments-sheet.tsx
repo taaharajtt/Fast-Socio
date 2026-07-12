@@ -18,10 +18,13 @@ export function CommentsSheet({
   postId,
   open,
   onClose,
+  onCommentAdded,
 }: {
   postId: string;
   open: boolean;
   onClose: () => void;
+  /** Lets the post card bump its visible count without a router refresh. */
+  onCommentAdded?: () => void;
 }) {
   return (
     <GlassSheet
@@ -30,12 +33,20 @@ export function CommentsSheet({
       label="Comments"
       className="flex h-[75vh] flex-col"
     >
-      {open && <CommentsSheetContent postId={postId} />}
+      {open && (
+        <CommentsSheetContent postId={postId} onCommentAdded={onCommentAdded} />
+      )}
     </GlassSheet>
   );
 }
 
-function CommentsSheetContent({ postId }: { postId: string }) {
+function CommentsSheetContent({
+  postId,
+  onCommentAdded,
+}: {
+  postId: string;
+  onCommentAdded?: () => void;
+}) {
   const [data, setData] = useState<{
     comments: FeedComment[];
     authors: Record<string, Author>;
@@ -72,6 +83,7 @@ function CommentsSheetContent({ postId }: { postId: string }) {
           initialComments={data.comments}
           initialAuthors={data.authors}
           viewerAvatar={data.viewerAvatar}
+          onCommentAdded={onCommentAdded}
         />
       )}
     </div>

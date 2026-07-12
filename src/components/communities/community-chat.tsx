@@ -5,6 +5,7 @@ import { BarChart3, Plus, Send, VenetianMask, X } from "lucide-react";
 import { GlassButton } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
 import { cn } from "@/lib/utils";
+import { useKeyboardInset } from "@/lib/use-keyboard-inset";
 import { createClient } from "@/lib/supabase/client";
 import { PollCard } from "@/components/communities/poll-card";
 import {
@@ -51,7 +52,12 @@ export function CommunityChat({
   const [error, setError] = useState<string | null>(null);
   const [composingPoll, setComposingPoll] = useState(false);
 
+  // iOS keyboard: exposes the keyboard overlap as --kb so the fixed chat shell
+  // shrinks and the sticky composer stays visible (Phase 2 keyboard fix).
+  useKeyboardInset();
+
   const bottomRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<ReturnType<
     ReturnType<typeof createClient>["channel"]
   > | null>(null);
@@ -129,8 +135,19 @@ export function CommunityChat({
     };
   }, [communityId, refreshPoll]);
 
+  // Scroll the list container directly (not scrollIntoView, which also scrolls
+  // ancestors and jumped the page when the keyboard opened). First paint jumps
+  // instantly; new messages scroll smoothly.
+  const didInitialScroll = useRef(false);
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = listRef.current;
+    if (!el) return;
+    if (!didInitialScroll.current) {
+      el.scrollTop = el.scrollHeight;
+      didInitialScroll.current = true;
+      return;
+    }
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages.length]);
 
   async function onSend(e: React.FormEvent) {
@@ -174,7 +191,7 @@ export function CommunityChat({
 
   return (
     <div className="flex min-h-[60vh] flex-1 flex-col">
-      <div className="flex-1 space-y-3 overflow-y-auto py-4">
+      <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto py-4">
         {messages.length === 0 && (
           <p className="mt-8 text-center text-sm text-fg-muted">
             No messages yet — say hello 👋
@@ -266,12 +283,12 @@ export function CommunityChat({
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder={anon ? "Message anonymously…" : "Message the community…"}
-            className="glass h-11 flex-1 rounded-[var(--radius-pill)] px-4 text-[15px] text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
+            className="glass h-11 flex-1 rounded-[var(--radius-pill)] px-4 text-base text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
           />
           <GlassButton
             type="submit"
             size="icon"
-            className="h-11 w-11"
+            className="h-11 w-11 shrink-0"
             aria-label="Send"
             disabled={busy || draft.trim().length === 0}
           >
@@ -344,7 +361,7 @@ function PollComposer({
         value={question}
         onChange={(e) => setQuestion(e.target.value.slice(0, 300))}
         placeholder="Ask a question…"
-        className="h-10 w-full rounded-[var(--radius-sm)] bg-input-bg px-3 text-sm text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
+        className="h-10 w-full rounded-[var(--radius-sm)] bg-input-bg px-3 text-base text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
       />
 
       {options.map((value, i) => (
@@ -357,7 +374,7 @@ function PollComposer({
               )
             }
             placeholder={`Option ${i + 1}`}
-            className="h-10 flex-1 rounded-[var(--radius-sm)] bg-input-bg px-3 text-sm text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
+            className="h-10 flex-1 rounded-[var(--radius-sm)] bg-input-bg px-3 text-base text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
           />
           {options.length > 2 && (
             <button

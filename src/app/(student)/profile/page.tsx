@@ -3,6 +3,7 @@ import { Settings, Pencil, Plus, Zap, Heart } from "lucide-react";
 import { ProfileTabs, type ProfileCommunity } from "@/components/profile/profile-tabs";
 import { ShareProfileButton } from "@/components/profile/share-profile-button";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import { AppImage } from "@/components/ui/app-image";
 import { deptMeta } from "@/lib/leaderboard/departments";
 import type { FeedPost } from "@/lib/feed/types";
@@ -16,10 +17,8 @@ function ordinal(n: number): string {
 
 export default async function ProfilePage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const me = user!.id;
+  // Verified locally from the JWT — no Auth API round trip; RLS is authoritative.
+  const me = (await getAuthUserId())!;
 
   const [
     { data: profile },

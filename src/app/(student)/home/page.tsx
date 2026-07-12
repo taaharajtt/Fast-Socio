@@ -1,17 +1,17 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Activity } from "lucide-react";
-import { PostComposer } from "@/components/feed/post-composer";
-import { FeedList } from "@/components/feed/feed-list";
+import { HomeFeed } from "@/components/feed/home-feed";
 import { EventsStrip } from "@/components/feed/events-strip";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import { FEED_PAGE_SIZE, type FeedPost } from "@/lib/feed/types";
 
 export default async function HomePage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Verified locally from the JWT — no Auth API round trip (the layout has
+  // already gated this route; RLS scopes every query below).
+  const userId = (await getAuthUserId())!;
   const [{ data }, { count: unreadActivity }] = await Promise.all([
     // Single chronological campus feed (newest first).
     supabase
@@ -25,7 +25,7 @@ export default async function HomePage() {
     supabase
       .from("notifications")
       .select("id", { count: "exact", head: true })
-      .eq("user_id", user!.id)
+      .eq("user_id", userId)
       .is("read_at", null)
       .not("type", "in", "(message,message_request,announcement)"),
   ]);
@@ -81,14 +81,13 @@ export default async function HomePage() {
         </Link>
       </header>
 
-      <div className="px-4">
-        <PostComposer />
-        <EventsStrip />
-      </div>
-
-      <div className="mt-2">
-        <FeedList initial={posts} currentUserId={user?.id} />
-      </div>
+      {/* Same DOM as before, but a client shell ties composer → feed so a new
+          post appears via one targeted fetch instead of a full RSC refresh. */}
+      <HomeFeed
+        initialPosts={posts}
+        currentUserId={userId}
+        eventsStrip={<EventsStrip />}
+      />
     </main>
   );
 }

@@ -13,14 +13,34 @@ import { FEED_PAGE_SIZE, type FeedPost } from "@/lib/feed/types";
 export function FeedList({
   initial,
   currentUserId,
+  refreshToken = 0,
 }: {
   initial: FeedPost[];
   currentUserId?: string | null;
+  /** Bump to pull the newest page and prepend unseen posts (after composing). */
+  refreshToken?: number;
 }) {
   const [posts, setPosts] = useState<FeedPost[]>(initial);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(initial.length < FEED_PAGE_SIZE);
   const sentinel = useRef<HTMLDivElement>(null);
+
+  // Targeted refresh: fetch page 1 and prepend what we haven't seen. Far
+  // cheaper than router.refresh(), which re-runs the layout + page as RSC.
+  useEffect(() => {
+    if (!refreshToken) return;
+    let active = true;
+    fetchFeedPage(null).then((fresh) => {
+      if (!active) return;
+      setPosts((prev) => {
+        const seen = new Set(prev.map((p) => p.id));
+        return [...fresh.filter((p) => !seen.has(p.id)), ...prev];
+      });
+    });
+    return () => {
+      active = false;
+    };
+  }, [refreshToken]);
 
   const removePost = useCallback((id: string) => {
     setPosts((prev) => prev.filter((p) => p.id !== id));

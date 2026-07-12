@@ -8,6 +8,7 @@ import {
   type CommunityMessage,
 } from "@/components/communities/community-chat";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import {
   fetchPollResults,
   type PollOptionResult,
@@ -27,10 +28,8 @@ export default async function CommunityChatPage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const me = user!.id;
+  // Verified locally from the JWT — no Auth API round trip; RLS is authoritative.
+  const me = (await getAuthUserId())!;
 
   const { data: community } = await supabase
     .from("communities")
@@ -61,8 +60,10 @@ export default async function CommunityChatPage({
     [...new Set(chatMessages.map((m) => m.poll_id).filter(Boolean) as string[])]
   );
 
+  // The shell height shrinks by --kb when the iOS keyboard overlays the
+  // viewport (Phase 2 keyboard fix — see use-keyboard-inset.ts); 0 elsewhere.
   return (
-    <div className="fixed inset-0 z-40 mx-auto flex h-[100dvh] max-w-md flex-col overflow-hidden bg-bg px-4">
+    <div className="fixed inset-0 z-40 mx-auto flex h-[calc(100dvh-var(--kb,0px))] max-w-md flex-col overflow-hidden bg-bg px-4">
       <header className="flex shrink-0 items-center gap-3 border-b border-glass-border py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <Link
           href="/chat"

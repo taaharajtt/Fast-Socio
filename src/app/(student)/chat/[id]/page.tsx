@@ -7,6 +7,7 @@ import {
   type SharedPostPreview,
 } from "@/components/chat/chat-thread";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import { AppImage } from "@/components/ui/app-image";
 import { OnlineDot } from "@/components/ui/badges";
 import { isOnline, presenceLabel } from "@/lib/time";
@@ -23,10 +24,8 @@ export default async function ConversationPage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const me = user!.id;
+  // Verified locally from the JWT — no Auth API round trip; RLS is authoritative.
+  const me = (await getAuthUserId())!;
 
   // RLS ensures the caller is a participant; otherwise no row is returned.
   const { data: conv } = await supabase
@@ -124,8 +123,10 @@ export default async function ConversationPage({
     });
   }
 
+  // The shell height shrinks by --kb when the iOS keyboard overlays the
+  // viewport (Phase 2 keyboard fix — see use-keyboard-inset.ts); 0 elsewhere.
   return (
-    <div className="fixed inset-0 z-40 mx-auto flex h-[100dvh] max-w-md flex-col overflow-hidden bg-bg px-4">
+    <div className="fixed inset-0 z-40 mx-auto flex h-[calc(100dvh-var(--kb,0px))] max-w-md flex-col overflow-hidden bg-bg px-4">
       <header className="flex shrink-0 items-center gap-3 border-b border-glass-border py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <Link
           href="/chat"

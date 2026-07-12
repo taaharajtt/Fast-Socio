@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { isAppStorageUrl } from "@/lib/url-safety";
 import { FEED_PAGE_SIZE, type FeedPost } from "@/lib/feed/types";
@@ -36,10 +37,9 @@ export async function createPost(input: {
   communityId?: string | null;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  // Local JWT verification — no Auth API round trip on this hot path.
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
 
   const body = input.body.trim();
   if (!body && !input.imageUrl)
@@ -70,7 +70,7 @@ export async function createPost(input: {
 
   // No .select() — the posts table's SELECT is revoked (anonymity). return=minimal.
   const { error } = await supabase.from("posts").insert({
-    author_id: user.id,
+    author_id: userId,
     body: body || null,
     image_url: input.imageUrl ?? null,
     is_anonymous: isAnonymous,
@@ -93,10 +93,9 @@ export async function toggleLike(
   currentlyLiked: boolean
 ): Promise<{ ok: boolean }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false };
+  // Local JWT verification — no Auth API round trip on this hot path.
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false };
 
   // Throttle like/unlike loops so a target can't be flooded with like
   // notifications + Web Push (P5-04).
@@ -112,10 +111,10 @@ export async function toggleLike(
         .from("post_likes")
         .delete()
         .eq("post_id", postId)
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
     : await supabase
         .from("post_likes")
-        .insert({ post_id: postId, user_id: user.id });
+        .insert({ post_id: postId, user_id: userId });
 
   return { ok: !error };
 }
@@ -129,16 +128,15 @@ export async function deletePost(
   postId: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  // Local JWT verification — no Auth API round trip on this hot path.
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
 
   const { error } = await supabase
     .from("posts")
     .delete()
     .eq("id", postId)
-    .eq("author_id", user.id);
+    .eq("author_id", userId);
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/home");
@@ -222,10 +220,9 @@ export async function fetchComments(postId: string): Promise<{
   viewerId: string | null;
 }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const viewerId = user?.id ?? null;
+  // Local JWT verification — no Auth API round trip on this hot path.
+  const userId = await getAuthUserId();
+  const viewerId = userId;
 
   const { data: rows } = await supabase
     .from("post_comments")
@@ -242,11 +239,11 @@ export async function fetchComments(postId: string): Promise<{
   );
 
   let viewerAvatar: string | null = null;
-  if (user) {
+  if (userId) {
     const { data: me } = await supabase
       .from("profiles")
       .select("avatar_url")
-      .eq("id", user.id)
+      .eq("id", userId)
       .single();
     viewerAvatar = me?.avatar_url ?? null;
   }
@@ -264,9 +261,8 @@ export async function fetchReplies(commentId: string): Promise<{
   authors: Record<string, CommentAuthor>;
 }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Local JWT verification — no Auth API round trip on this hot path.
+  const userId = await getAuthUserId();
 
   const { data: rows } = await supabase
     .from("post_comments")
@@ -278,7 +274,7 @@ export async function fetchReplies(commentId: string): Promise<{
   const { comments, authors } = await hydrateComments(
     supabase,
     (rows as Omit<FeedComment, "liked_by_me">[]) ?? [],
-    user?.id ?? null
+    userId
   );
   return { replies: comments, authors };
 }
@@ -294,10 +290,9 @@ export async function addComment(
   parentId?: string | null
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  // Local JWT verification — no Auth API round trip on this hot path.
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
 
   const text = body.trim();
   if (text.length < 1 || text.length > 1000)
@@ -317,7 +312,7 @@ export async function addComment(
 
   const { error } = await supabase.from("post_comments").insert({
     post_id: postId,
-    author_id: user.id,
+    author_id: userId,
     body: text,
     parent_id: parentId ?? null,
     risk_score: risk.score,
@@ -339,10 +334,9 @@ export async function toggleCommentLike(
   currentlyLiked: boolean
 ): Promise<{ ok: boolean }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false };
+  // Local JWT verification — no Auth API round trip on this hot path.
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false };
 
   // Throttle like/unlike loops (parity with post likes).
   const allowed = await checkRateLimit("commentLike", 120, 60 * 60);
@@ -353,10 +347,10 @@ export async function toggleCommentLike(
         .from("comment_likes")
         .delete()
         .eq("comment_id", commentId)
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
     : await supabase
         .from("comment_likes")
-        .insert({ comment_id: commentId, user_id: user.id });
+        .insert({ comment_id: commentId, user_id: userId });
 
   return { ok: !error };
 }
@@ -367,10 +361,9 @@ export async function reportPost(
   reason: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  // Local JWT verification — no Auth API round trip on this hot path.
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
 
   const allowed = await checkRateLimit(
     "report",
@@ -380,7 +373,7 @@ export async function reportPost(
   if (!allowed) return { ok: false, error: "Too many reports for now." };
 
   const { error } = await supabase.from("reports").insert({
-    reporter_id: user.id,
+    reporter_id: userId,
     target_type: "post",
     target_id: postId,
     reason,

@@ -19,6 +19,7 @@ import {
 import { GlassButton, GlassSheet } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
 import { cn } from "@/lib/utils";
+import { useKeyboardInset } from "@/lib/use-keyboard-inset";
 import { createClient } from "@/lib/supabase/client";
 import { chatMediaPath, CHAT_MEDIA_TTL_SECONDS } from "@/lib/chat-media";
 import { timeAgo } from "@/lib/time";
@@ -115,6 +116,10 @@ export function ChatThread({
   const [searchHits, setSearchHits] = useState<MessageSearchHit[]>([]);
   const [searching, setSearching] = useState(false);
 
+  // iOS keyboard: exposes the keyboard overlap as --kb so the fixed chat shell
+  // shrinks and this sticky composer stays visible (Phase 2 keyboard fix).
+  useKeyboardInset();
+
   // Resolve a signed URL for a private chat-media attachment (P5-01). Images get
   // a 1080px transform; voice notes are signed as-is.
   const signAttachment = useCallback(async (m: ChatMessage) => {
@@ -146,6 +151,7 @@ export function ChatThread({
 
   async function react(messageId: string, emoji: string) {
     setActionsFor(null);
+    if (messageId.startsWith("temp-")) return; // still sending — no server row yet
     // Optimistic: reflect my toggle immediately, reconcile on the realtime event.
     setReactions((prev) => {
       const list = prev[messageId] ?? [];
@@ -187,15 +193,21 @@ export function ChatThread({
     }
   }
 
-  async function runSearch(q: string) {
+  // Debounced: one server action per pause in typing, not one per keystroke.
+  const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function runSearch(q: string) {
     setSearchQuery(q);
+    if (searchDebounce.current) clearTimeout(searchDebounce.current);
     if (q.trim().length < 2) {
       setSearchHits([]);
+      setSearching(false);
       return;
     }
     setSearching(true);
-    setSearchHits(await searchMessages(conversationId, q));
-    setSearching(false);
+    searchDebounce.current = setTimeout(async () => {
+      setSearchHits(await searchMessages(conversationId, q));
+      setSearching(false);
+    }, 300);
   }
 
   async function loadOlder() {
@@ -215,6 +227,7 @@ export function ChatThread({
   }
 
   const bottomRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const channelRef = useRef<ReturnType<
     ReturnType<typeof createClient>["channel"]
@@ -247,9 +260,22 @@ export function ChatThread({
           },
           (payload) => {
             const m = payload.new as ChatMessage;
-            setMessages((prev) =>
-              prev.some((x) => x.id === m.id) ? prev : [...prev, m]
-            );
+            setMessages((prev) => {
+              if (prev.some((x) => x.id === m.id)) return prev;
+              // Reconcile my optimistic bubble: the authoritative row replaces
+              // the first matching temp message instead of duplicating it.
+              if (m.sender_id === meId) {
+                const tempIdx = prev.findIndex(
+                  (x) => x.id.startsWith("temp-") && x.body === m.body
+                );
+                if (tempIdx >= 0) {
+                  const next = [...prev];
+                  next[tempIdx] = m;
+                  return next;
+                }
+              }
+              return [...prev, m];
+            });
             if (m.attachment_url) signAttachment(m);
             if (m.sender_id !== meId) markConversationRead(conversationId);
           }
@@ -298,11 +324,29 @@ export function ChatThread({
     };
   }, [conversationId, meId, signAttachment, refreshReactions]);
 
+  // Scroll the MESSAGE LIST container directly instead of scrollIntoView —
+  // scrollIntoView walks every scrollable ancestor (including the page behind
+  // the fixed shell on iOS), which caused visible jumps when the keyboard
+  // opened. First paint jumps instantly; new messages scroll smoothly.
+  const didInitialScroll = useRef(false);
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = listRef.current;
+    if (!el) return;
+    if (!didInitialScroll.current) {
+      el.scrollTop = el.scrollHeight;
+      didInitialScroll.current = true;
+      return;
+    }
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages.length, otherTyping]);
 
+  // Throttled: one broadcast per 1.2s of continuous typing is enough for a
+  // typing indicator; per-keystroke sends flooded the realtime socket.
+  const lastTypingSent = useRef(0);
   const broadcastTyping = useCallback(() => {
+    const now = Date.now();
+    if (now - lastTypingSent.current < 1200) return;
+    lastTypingSent.current = now;
     channelRef.current?.send({
       type: "broadcast",
       event: "typing",
@@ -330,11 +374,30 @@ export function ChatThread({
     e.preventDefault();
     const text = draft.trim();
     if (!text || busy) return;
-    setBusy(true);
+    // Optimistic: the bubble renders NOW; the realtime INSERT swaps in the
+    // authoritative row (see the INSERT handler). On failure it is removed and
+    // the draft restored. `busy` is not set, so rapid sends each get a bubble.
+    const temp: ChatMessage = {
+      id: `temp-${crypto.randomUUID()}`,
+      sender_id: meId,
+      body: text,
+      attachment_url: null,
+      attachment_type: null,
+      shared_post_id: null,
+      created_at: new Date().toISOString(),
+      read_at: null,
+      edited_at: null,
+      deleted_at: null,
+      pinned_at: null,
+    };
+    setMessages((prev) => [...prev, temp]);
     setDraft("");
     const res = await sendMessage(conversationId, text);
-    setBusy(false);
-    if (!res.ok) setDraft(text);
+    if (!res.ok) {
+      setMessages((prev) => prev.filter((m) => m.id !== temp.id));
+      setDraft(text);
+      setError(res.error);
+    }
   }
 
   async function onPickImage(e: React.ChangeEvent<HTMLInputElement>) {
@@ -433,7 +496,8 @@ export function ChatThread({
 
   /** Long-press (touch) or right-click opens the per-message action sheet. */
   function pressHandlers(m: ChatMessage) {
-    if (m.deleted_at) return {};
+    // No actions on deleted or still-sending (optimistic) messages.
+    if (m.deleted_at || m.id.startsWith("temp-")) return {};
     const open = () => setActionsFor(m);
     return {
       onPointerDown: () => {
@@ -480,7 +544,7 @@ export function ChatThread({
                   value={searchQuery}
                   onChange={(e) => runSearch(e.target.value)}
                   placeholder="Search this chat…"
-                  className="flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-fg-muted"
+                  className="flex-1 bg-transparent text-base text-fg outline-none placeholder:text-fg-muted"
                 />
               </div>
               <button
@@ -551,7 +615,7 @@ export function ChatThread({
         )}
       </div>
 
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto py-4">
+      <div ref={listRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto py-4">
         {canLoadOlder && (
           <div className="flex justify-center pb-2">
             <button
@@ -730,12 +794,12 @@ export function ChatThread({
               autoFocus
               value={editDraft}
               onChange={(e) => setEditDraft(e.target.value)}
-              className="glass h-11 flex-1 rounded-[var(--radius-pill)] px-4 text-[15px] text-fg outline-none focus:ring-2 focus:ring-aura/40"
+              className="glass h-11 flex-1 rounded-[var(--radius-pill)] px-4 text-base text-fg outline-none focus:ring-2 focus:ring-aura/40"
             />
             <GlassButton
               type="submit"
               size="icon"
-              className="h-11 w-11"
+              className="h-11 w-11 shrink-0"
               aria-label="Save edit"
               disabled={editDraft.trim().length === 0}
             >
@@ -780,6 +844,8 @@ export function ChatThread({
               <Mic className="h-5 w-5" aria-hidden />
             )}
           </button>
+          {/* text-base (16px): anything smaller triggers iOS Safari's auto-zoom
+              on focus — the root cause of the chat "jump" on iPhones. */}
           <input
             value={draft}
             onChange={(e) => {
@@ -788,12 +854,12 @@ export function ChatThread({
             }}
             placeholder={recording ? "Recording…" : "Message…"}
             disabled={recording}
-            className="glass h-11 flex-1 rounded-[var(--radius-pill)] px-4 text-[15px] text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
+            className="glass h-11 flex-1 rounded-[var(--radius-pill)] px-4 text-base text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
           />
           <GlassButton
             type="submit"
             size="icon"
-            className="h-11 w-11"
+            className="h-11 w-11 shrink-0"
             aria-label="Send"
             disabled={busy || draft.trim().length === 0}
           >
