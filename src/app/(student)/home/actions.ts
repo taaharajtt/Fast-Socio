@@ -146,36 +146,101 @@ export async function deletePost(
   return { ok: true };
 }
 
+export type CommentAuthor = { full_name: string | null; avatar_url: string | null };
+
+/** A comment or reply row, enriched for the Instagram-style thread UI. */
 export type FeedComment = {
   id: string;
   author_id: string;
   body: string;
   created_at: string;
+  /** null for a top-level comment; the parent comment's id for a reply. */
+  parent_id: string | null;
+  /** Likes on this comment (denormalized; maintained by trigger). */
+  like_count: number;
+  /** Direct replies to this comment (always 0 for a reply — one level deep). */
+  reply_count: number;
+  /** Whether the signed-in viewer has liked this comment. */
+  liked_by_me: boolean;
 };
 
 /**
- * Load a post's visible comments plus a lookup of their authors, for the
- * in-feed comment sheet (UAT-004). Mirrors the post-detail page's server load
- * so the sheet and the full page render identical data.
+ * Attach author profiles and the viewer's like state to a set of comment rows.
+ * Shared by the top-level thread load and the lazy reply load so both render
+ * identical, fully-hydrated rows.
+ */
+async function hydrateComments(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  rows: Omit<FeedComment, "liked_by_me">[],
+  viewerId: string | null
+): Promise<{ comments: FeedComment[]; authors: Record<string, CommentAuthor> }> {
+  const authorIds = [...new Set(rows.map((c) => c.author_id))];
+  const authors: Record<string, CommentAuthor> = {};
+  if (authorIds.length > 0) {
+    const { data: profs } = await supabase
+      .from("profiles")
+      .select("id, full_name, avatar_url")
+      .in("id", authorIds);
+    (profs ?? []).forEach((p: { id: string } & CommentAuthor) => {
+      authors[p.id] = { full_name: p.full_name, avatar_url: p.avatar_url };
+    });
+  }
+
+  // One query for every comment the viewer has liked among this batch.
+  const likedIds = new Set<string>();
+  if (viewerId && rows.length > 0) {
+    const { data: likes } = await supabase
+      .from("comment_likes")
+      .select("comment_id")
+      .eq("user_id", viewerId)
+      .in(
+        "comment_id",
+        rows.map((c) => c.id)
+      );
+    (likes ?? []).forEach((l: { comment_id: string }) => likedIds.add(l.comment_id));
+  }
+
+  const comments: FeedComment[] = rows.map((c) => ({
+    ...c,
+    liked_by_me: likedIds.has(c.id),
+  }));
+  return { comments, authors };
+}
+
+/**
+ * Load a post's top-level comments (parent_id is null) plus a lookup of their
+ * authors and the viewer's like state, for the in-feed comment sheet (UAT-004).
+ * Replies are lazy-loaded per comment via fetchReplies. Mirrors the post-detail
+ * page's server load so the sheet and the full page render identical data.
  */
 export async function fetchComments(postId: string): Promise<{
   comments: FeedComment[];
-  authors: Record<string, { full_name: string | null; avatar_url: string | null }>;
+  authors: Record<string, CommentAuthor>;
   /** The signed-in viewer's avatar — rendered beside the composer (IG format). */
   viewerAvatar: string | null;
+  /** The signed-in viewer's id — used to attribute their own replies. */
+  viewerId: string | null;
 }> {
   const supabase = await createClient();
-  const { data: rows } = await supabase
-    .from("post_comments")
-    .select("id, author_id, body, created_at")
-    .eq("post_id", postId)
-    .eq("hidden", false)
-    .order("created_at", { ascending: true });
-  const comments = (rows as FeedComment[]) ?? [];
-
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  const viewerId = user?.id ?? null;
+
+  const { data: rows } = await supabase
+    .from("post_comments")
+    .select("id, author_id, body, created_at, parent_id, like_count, reply_count")
+    .eq("post_id", postId)
+    .is("parent_id", null)
+    .eq("hidden", false)
+    .order("created_at", { ascending: true });
+
+  const { comments, authors } = await hydrateComments(
+    supabase,
+    (rows as Omit<FeedComment, "liked_by_me">[]) ?? [],
+    viewerId
+  );
+
   let viewerAvatar: string | null = null;
   if (user) {
     const { data: me } = await supabase
@@ -186,27 +251,47 @@ export async function fetchComments(postId: string): Promise<{
     viewerAvatar = me?.avatar_url ?? null;
   }
 
-  const ids = [...new Set(comments.map((c) => c.author_id))];
-  const authors: Record<
-    string,
-    { full_name: string | null; avatar_url: string | null }
-  > = {};
-  if (ids.length > 0) {
-    const { data: profs } = await supabase
-      .from("profiles")
-      .select("id, full_name, avatar_url")
-      .in("id", ids);
-    (profs ?? []).forEach((p: { id: string; full_name: string | null; avatar_url: string | null }) => {
-      authors[p.id] = { full_name: p.full_name, avatar_url: p.avatar_url };
-    });
-  }
-  return { comments, authors, viewerAvatar };
+  return { comments, authors, viewerAvatar, viewerId };
 }
 
-/** Add a comment to a post. */
+/**
+ * Lazy-load the replies for a single top-level comment (the "View replies"
+ * toggle). Returns the same enriched shape as fetchComments so a reply renders
+ * exactly like a comment.
+ */
+export async function fetchReplies(commentId: string): Promise<{
+  replies: FeedComment[];
+  authors: Record<string, CommentAuthor>;
+}> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { data: rows } = await supabase
+    .from("post_comments")
+    .select("id, author_id, body, created_at, parent_id, like_count, reply_count")
+    .eq("parent_id", commentId)
+    .eq("hidden", false)
+    .order("created_at", { ascending: true });
+
+  const { comments, authors } = await hydrateComments(
+    supabase,
+    (rows as Omit<FeedComment, "liked_by_me">[]) ?? [],
+    user?.id ?? null
+  );
+  return { replies: comments, authors };
+}
+
+/**
+ * Add a comment to a post, or a reply when parentId is set. One level of
+ * nesting only — a reply's parent must itself be a top-level comment, enforced
+ * by the enforce_comment_depth trigger (0065) in addition to this check.
+ */
 export async function addComment(
   postId: string,
-  body: string
+  body: string,
+  parentId?: string | null
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
   const {
@@ -234,6 +319,7 @@ export async function addComment(
     post_id: postId,
     author_id: user.id,
     body: text,
+    parent_id: parentId ?? null,
     risk_score: risk.score,
     hidden: risk.action === "hold",
   });
@@ -241,6 +327,38 @@ export async function addComment(
 
   revalidatePath(`/post/${postId}`);
   return { ok: true };
+}
+
+/**
+ * Toggle a like on a comment or reply. Returns { ok } so the caller can roll
+ * back an optimistic UI update when it doesn't persist (rate-limited, blocked,
+ * or a DB error) — mirrors toggleLike for posts.
+ */
+export async function toggleCommentLike(
+  commentId: string,
+  currentlyLiked: boolean
+): Promise<{ ok: boolean }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false };
+
+  // Throttle like/unlike loops (parity with post likes).
+  const allowed = await checkRateLimit("commentLike", 120, 60 * 60);
+  if (!allowed) return { ok: false };
+
+  const { error } = currentlyLiked
+    ? await supabase
+        .from("comment_likes")
+        .delete()
+        .eq("comment_id", commentId)
+        .eq("user_id", user.id)
+    : await supabase
+        .from("comment_likes")
+        .insert({ comment_id: commentId, user_id: user.id });
+
+  return { ok: !error };
 }
 
 /** Report a post (target_type = 'post'), feeding /admin/reports?type=post. */

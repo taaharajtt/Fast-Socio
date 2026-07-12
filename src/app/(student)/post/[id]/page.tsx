@@ -2,12 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { PostCard } from "@/components/feed/post-card";
-import { AddComment } from "@/components/feed/add-comment";
-import { CommentThread } from "@/components/feed/comment-thread";
+import { CommentsSection } from "@/components/feed/comments-section";
 import { createClient } from "@/lib/supabase/server";
+import { fetchComments } from "@/app/(student)/home/actions";
 import type { FeedPost } from "@/lib/feed/types";
-
-type ProfileLite = { id: string; full_name: string | null; avatar_url: string | null };
 
 export default async function PostDetailPage({
   params,
@@ -28,25 +26,9 @@ export default async function PostDetailPage({
   if (!postRow) notFound();
   const post = postRow as FeedPost;
 
-  const { data: commentRows } = await supabase
-    .from("post_comments")
-    .select("id, author_id, body, created_at")
-    .eq("post_id", id)
-    .eq("hidden", false) // moderated-away comments are not shown (P3-03)
-    .order("created_at", { ascending: true });
-  const comments = commentRows ?? [];
-
-  const authorIds = [...new Set(comments.map((c) => c.author_id))];
-  const authors: Record<string, { full_name: string | null; avatar_url: string | null }> = {};
-  if (authorIds.length > 0) {
-    const { data: profs } = await supabase
-      .from("profiles")
-      .select("id, full_name, avatar_url")
-      .in("id", authorIds);
-    (profs ?? []).forEach((p: ProfileLite) => {
-      authors[p.id] = { full_name: p.full_name, avatar_url: p.avatar_url };
-    });
-  }
+  // Same enriched load as the in-feed sheet (top-level comments + authors +
+  // the viewer's like state); replies are lazy-loaded client-side.
+  const { comments, authors } = await fetchComments(id);
 
   return (
     <main className="mx-auto flex min-h-full w-full max-w-md flex-col px-5 py-4">
@@ -63,15 +45,14 @@ export default async function PostDetailPage({
 
       <PostCard post={post} currentUserId={user?.id} />
 
-      <section className="mt-4 flex-1 space-y-3">
-        <CommentThread
+      <div className="mt-4 flex min-h-0 flex-1 flex-col">
+        <CommentsSection
+          variant="page"
           postId={id}
           initialComments={comments}
           initialAuthors={authors}
         />
-      </section>
-
-      <AddComment postId={id} />
+      </div>
     </main>
   );
 }

@@ -2,18 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { GlassSheet } from "@/components/ui";
-import { CommentThread, type Comment } from "@/components/feed/comment-thread";
-import { AddComment } from "@/components/feed/add-comment";
-import { fetchComments } from "@/app/(student)/home/actions";
-
-type Authors = Record<string, { full_name: string | null; avatar_url: string | null }>;
+import { CommentsSection } from "@/components/feed/comments-section";
+import type { Author } from "@/components/feed/comment-thread";
+import { fetchComments, type FeedComment } from "@/app/(student)/home/actions";
 
 /**
  * Half-screen, scrollable comment sheet (UAT-004) styled to match Instagram:
  * slides up from the bottom over everything, stops around mid-screen, with a
- * centered "Comments" header, an edge-to-edge scrollable thread, a quick-emoji
- * reaction strip, and an avatar + pill composer pinned to the bottom. Opens in
- * place over the feed instead of navigating to /post/[id].
+ * centered "Comments" header, an edge-to-edge scrollable thread (with one-level
+ * replies + per-comment likes), a quick-emoji reaction strip, and an avatar +
+ * pill composer pinned to the bottom. Opens in place over the feed instead of
+ * navigating to /post/[id].
  */
 export function CommentsSheet({
   postId,
@@ -38,8 +37,8 @@ export function CommentsSheet({
 
 function CommentsSheetContent({ postId }: { postId: string }) {
   const [data, setData] = useState<{
-    comments: Comment[];
-    authors: Authors;
+    comments: FeedComment[];
+    authors: Record<string, Author>;
     viewerAvatar: string | null;
   } | null>(null);
 
@@ -60,31 +59,21 @@ function CommentsSheetContent({ postId }: { postId: string }) {
         Comments
       </h2>
 
-      {/* Scrollable thread — edge to edge, scrolls independently of the sheet. */}
-      <div className="-mx-5 min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
-        {data === null ? (
-          <p className="py-6 text-center text-sm text-fg-muted">Loading comments…</p>
-        ) : data.comments.length === 0 ? (
-          <p className="py-10 text-center text-sm text-fg-muted">
-            No comments yet. Be the first.
+      {data === null ? (
+        <div className="-mx-5 min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          <p className="py-6 text-center text-sm text-fg-muted">
+            Loading comments…
           </p>
-        ) : (
-          <CommentThread
-            postId={postId}
-            initialComments={data.comments}
-            initialAuthors={data.authors}
-          />
-        )}
-      </div>
-
-      {/* Composer pinned to the bottom, above a full-width divider. */}
-      <div className="-mx-5 shrink-0 border-t border-glass-border px-5">
-        <AddComment
+        </div>
+      ) : (
+        <CommentsSection
+          variant="sheet"
           postId={postId}
-          avatarUrl={data?.viewerAvatar ?? null}
-          showQuickEmojis
+          initialComments={data.comments}
+          initialAuthors={data.authors}
+          viewerAvatar={data.viewerAvatar}
         />
-      </div>
+      )}
     </div>
   );
 }
