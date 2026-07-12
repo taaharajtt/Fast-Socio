@@ -101,10 +101,15 @@ export default async function PublicProfilePage({
 
   const [{ data: postRows }, { count: matchCount }, { data: commRows }] =
     await Promise.all([
+      // Anonymous posts must NEVER appear on a profile — listing them here would
+      // attribute the post to this account and defeat anonymity (the feed_posts
+      // view only masks the author for non-admins, so filtering on the surface is
+      // the real guard). A profile's Posts tab shows attributed posts only.
       supabase
         .from("feed_posts")
         .select("*")
         .eq("author_id", id)
+        .eq("is_anonymous", false)
         .order("created_at", { ascending: false })
         .limit(30),
       supabase

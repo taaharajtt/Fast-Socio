@@ -36,10 +36,14 @@ export default async function ProfilePage() {
       )
       .eq("id", me)
       .single(),
+    // Your Posts tab shows attributed posts only — anonymous posts are kept off
+    // every profile so the tab can never reveal that this account authored one
+    // (matches the is_anonymous=false stats count below).
     supabase
       .from("feed_posts")
       .select("*")
       .eq("author_id", me)
+      .eq("is_anonymous", false)
       .order("created_at", { ascending: false })
       .limit(30),
     supabase
