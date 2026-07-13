@@ -43,6 +43,7 @@ yarn-error.log*
 /public/workbox-*.js
 /public/workbox-*.js.map
 /public/swe-worker-*.js
+/public/swe-worker-*.js.map
 /public/fallback-*.js
 
 # typescript
@@ -61,6 +62,10 @@ next-env.d.ts
 
 # Internal audit report — kept locally, never deployed (contained a credential string that failed the Vercel deploy security scan).
 SECURITY.md
+
+# Sentry
+.sentryclirc
+.env.sentry-build-plugin
 
 # Local-only launch/security audit docs — never publish to the public repo
 AUDIT_REPORT.md

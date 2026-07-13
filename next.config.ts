@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import withPWAInit from "@ducanh2912/next-pwa";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const withPWA = withPWAInit({
   dest: "public",
@@ -71,4 +72,24 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withPWA(nextConfig);
+// Wrap with Sentry LAST (outermost) so its build-time source-map upload and the
+// `/monitoring` tunnel rewrite compose over the PWA-augmented config.
+//
+// The tunnel routes browser error events through our own origin, so (a) the
+// strict CSP above needs no sentry.io entry and (b) student ad-blockers that
+// block sentry.io can't silently drop error reports. Source-map upload only
+// runs when SENTRY_AUTH_TOKEN is present (CI/prod); otherwise it's skipped and
+// the build still succeeds.
+export default withSentryConfig(withPWA(nextConfig), {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  // Quiet the plugin unless we're in CI where the log is useful.
+  silent: !process.env.CI,
+  // Same-origin tunnel for browser events (see note above).
+  tunnelRoute: "/monitoring",
+  // Tree-shake the SDK's debug logging out of the client bundle.
+  webpack: { treeshake: { removeDebugLogging: true } },
+  // Upload source maps for the client bundle's dynamic imports too.
+  widenClientFileUpload: true,
+});
