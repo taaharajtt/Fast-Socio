@@ -35,38 +35,64 @@ export function SwipeDeck({
   const [detailFor, setDetailFor] = useState<DiscoverProfile | null>(null);
   const [lastSwiped, setLastSwiped] = useState<DiscoverProfile | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Ids whose swipe is optimistically applied but not yet persisted. Excluded
+  // from top-ups so a card can't be re-added by a fetch that races its write.
+  const inFlight = useRef<Set<string>>(new Set());
+  const loadingMore = useRef(false);
 
   const top = deck[0];
+
+  // Pull more candidates and append the ones we don't already have. While fresh
+  // (never-swiped) people remain the RPC returns only those; once they're
+  // exhausted it starts returning passed/previously-seen people, so this doubles
+  // as the "show passed people again after you're caught up" refill.
+  const topUp = useCallback(async () => {
+    if (loadingMore.current) return;
+    loadingMore.current = true;
+    try {
+      const more = await fetchCandidates(20);
+      if (more.length) {
+        setDeck((cur) => {
+          const have = new Set(cur.map((c) => c.id));
+          const add = more.filter(
+            (m) => !have.has(m.id) && !inFlight.current.has(m.id)
+          );
+          return add.length ? [...cur, ...add] : cur;
+        });
+      }
+    } finally {
+      loadingMore.current = false;
+    }
+  }, []);
 
   const advance = useCallback(() => {
     setDeck((d) => {
       const next = d.slice(1);
-      if (next.length <= 2) {
-        // Top up in the background when the deck runs low.
-        fetchCandidates(20).then((more) => {
-          if (more.length) {
-            setDeck((cur) => {
-              const seen = new Set(cur.map((c) => c.id));
-              return [...cur, ...more.filter((m) => !seen.has(m.id))];
-            });
-          }
-        });
-      }
+      if (next.length <= 2) void topUp();
       return next;
     });
-  }, []);
+  }, [topUp]);
 
   const act = useCallback(
     async (profile: DiscoverProfile, direction: "like" | "pass") => {
       // Optimistic: advance immediately, then persist. Offer a 3s undo window.
+      inFlight.current.add(profile.id);
       advance();
       setLastSwiped(profile);
       if (undoTimer.current) clearTimeout(undoTimer.current);
       undoTimer.current = setTimeout(() => setLastSwiped(null), 3000);
       const res = await recordSwipe(profile.id, direction);
+      inFlight.current.delete(profile.id);
       if (res.ok && res.matched) setMatchName(profile.full_name ?? "Someone");
+      // Now that the decision is persisted, if that was the last card, refill.
+      // With fresh candidates gone the RPC yields the passed people, so the
+      // "all caught up" state repopulates into a fresh round of them.
+      setDeck((d) => {
+        if (d.length === 0) void topUp();
+        return d;
+      });
     },
-    [advance]
+    [advance, topUp]
   );
 
   // Clear any pending undo timer if the deck unmounts mid-window.

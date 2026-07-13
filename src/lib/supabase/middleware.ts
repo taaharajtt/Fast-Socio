@@ -65,6 +65,10 @@ export async function updateSession(request: NextRequest) {
     pathname === "/set-password" ||
     isBannedRoute ||
     pathname.startsWith("/auth/") ||
+    // Sentry verification endpoint — throws a test error, hard-gated off in
+    // production (see the route). Public so the capture check works on a
+    // preview deploy without needing to authenticate first.
+    pathname === "/api/sentry-check" ||
     pathname.startsWith("/styleguide");
 
   // Unauthenticated users may only see public routes.
