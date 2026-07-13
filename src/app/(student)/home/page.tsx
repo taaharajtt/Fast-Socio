@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Activity } from "lucide-react";
 import { HomeFeed } from "@/components/feed/home-feed";
+import { FirstRunTour } from "@/components/tour/first-run-tour";
 import { EventsStrip } from "@/components/feed/events-strip";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
@@ -12,7 +13,8 @@ export default async function HomePage() {
   // Verified locally from the JWT — no Auth API round trip (the layout has
   // already gated this route; RLS scopes every query below).
   const userId = (await getAuthUserId())!;
-  const [{ data }, { count: unreadActivity }] = await Promise.all([
+  const [{ data }, { count: unreadActivity }, { data: viewer }] =
+    await Promise.all([
     // Single chronological campus feed (newest first).
     supabase
       .from("feed_posts")
@@ -28,6 +30,8 @@ export default async function HomePage() {
       .eq("user_id", userId)
       .is("read_at", null)
       .not("type", "in", "(message,message_request,announcement)"),
+    // First-run tour gate: null tour_seen_at = this account hasn't seen it.
+    supabase.from("profiles").select("tour_seen_at").eq("id", userId).single(),
   ]);
   const posts = (data as FeedPost[]) ?? [];
 
@@ -65,6 +69,7 @@ export default async function HomePage() {
             nav's "Me" tab (UAT-005). */}
         <Link
           href="/activity"
+          data-tour="activity"
           aria-label={
             unreadActivity
               ? `Activity, ${unreadActivity} unread`
@@ -88,6 +93,8 @@ export default async function HomePage() {
         currentUserId={userId}
         eventsStrip={<EventsStrip />}
       />
+      {/* One-time guided tour, gated per account via profiles.tour_seen_at. */}
+      {!viewer?.tour_seen_at && <FirstRunTour />}
     </main>
   );
 }

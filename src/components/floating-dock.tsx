@@ -57,6 +57,7 @@ export function FloatingDock({
             <Link
               key={href}
               href={href}
+              data-tour={`nav:${href}`}
               aria-label={badge ? `${label}, ${badge} unread` : label}
               aria-current={active ? "page" : undefined}
               className="flex flex-1 flex-col items-center justify-center gap-1 transition-transform duration-150 active:scale-90 focus-visible:outline-none"

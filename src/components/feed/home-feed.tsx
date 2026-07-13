@@ -26,7 +26,10 @@ export function HomeFeed({
   return (
     <>
       <div className="px-4">
-        <PostComposer onPosted={() => setRefreshToken((t) => t + 1)} />
+        {/* data-tour anchors the first-run tour's spotlight on the composer. */}
+        <div data-tour="composer">
+          <PostComposer onPosted={() => setRefreshToken((t) => t + 1)} />
+        </div>
         {eventsStrip}
       </div>
       <div className="mt-2">

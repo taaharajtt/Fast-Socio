@@ -381,3 +381,18 @@ export async function reportPost(
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
+
+/**
+ * Stamp profiles.tour_seen_at so the first-run guided tour never re-appears
+ * for this ACCOUNT (any device). Called when the tour is finished or skipped.
+ * Best-effort: on failure the tour simply offers itself again next visit.
+ */
+export async function markTourSeen(): Promise<void> {
+  const supabase = await createClient();
+  const userId = await getAuthUserId();
+  if (!userId) return;
+  await supabase
+    .from("profiles")
+    .update({ tour_seen_at: new Date().toISOString() })
+    .eq("id", userId);
+}
