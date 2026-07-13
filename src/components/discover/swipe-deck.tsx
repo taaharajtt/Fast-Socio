@@ -39,13 +39,22 @@ export function SwipeDeck({
   // from top-ups so a card can't be re-added by a fetch that races its write.
   const inFlight = useRef<Set<string>>(new Set());
   const loadingMore = useRef(false);
+  // Every profile shown this session (seeded from the initial server load). The
+  // RPC recycles passed profiles indefinitely, so without this a session would
+  // loop them forever. Filtering top-ups against it means the recycle round
+  // runs ONCE: after fresh + one pass over the passed people, top-ups return
+  // nothing new and "You're all caught up" sticks. A reload builds a fresh
+  // component (empty set), so the passed people surface again next session.
+  const seenThisSession = useRef<Set<string>>(
+    new Set(initial.map((p) => p.id))
+  );
 
   const top = deck[0];
 
-  // Pull more candidates and append the ones we don't already have. While fresh
-  // (never-swiped) people remain the RPC returns only those; once they're
-  // exhausted it starts returning passed/previously-seen people, so this doubles
-  // as the "show passed people again after you're caught up" refill.
+  // Pull more candidates and append the ones we haven't already shown this
+  // session. While fresh (never-swiped) people remain the RPC returns only
+  // those; once they're exhausted it returns passed people, so this doubles as
+  // the "show passed people again after you're caught up" refill.
   const topUp = useCallback(async () => {
     if (loadingMore.current) return;
     loadingMore.current = true;
@@ -55,8 +64,12 @@ export function SwipeDeck({
         setDeck((cur) => {
           const have = new Set(cur.map((c) => c.id));
           const add = more.filter(
-            (m) => !have.has(m.id) && !inFlight.current.has(m.id)
+            (m) =>
+              !have.has(m.id) &&
+              !inFlight.current.has(m.id) &&
+              !seenThisSession.current.has(m.id)
           );
+          for (const m of add) seenThisSession.current.add(m.id);
           return add.length ? [...cur, ...add] : cur;
         });
       }
