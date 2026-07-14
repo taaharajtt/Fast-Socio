@@ -1,6 +1,14 @@
 @import "tailwindcss";
 
 /*
+  Make Tailwind's `dark:` variant follow next-themes' `.dark` CLASS instead of
+  the OS `prefers-color-scheme` media query (its v4 default). Without this the
+  theme toggle and `dark:` utilities disagree — e.g. the theme-aware logo showed
+  the dark asset whenever the OS was dark, even in the app's light theme.
+*/
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
   FAST SOCIO design tokens (UI Spec v2 §2).
   Dark is the primary identity; .light is the required secondary theme.
   Theme is class-based (html.dark / html.light) for next-themes (Task #001g).
