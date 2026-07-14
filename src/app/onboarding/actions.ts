@@ -131,10 +131,14 @@ export async function saveOnboardingStep(
   if (draft.avatarUrl !== undefined) patch.avatar_url = draft.avatarUrl;
   patch.onboarding_step = Math.max(0, Math.min(step, 20));
 
+  // Upsert, not update: a user whose profiles row is missing (handle_new_user
+  // never landed one — see mig 0075) would otherwise UPDATE zero rows, "succeed"
+  // silently, and bounce back to /onboarding forever. Insert self-heals it.
+  // RLS ("users can insert their own profile", with_check id = auth.uid()) plus
+  // the explicit id keep this scoped to the caller's own row.
   const { error } = await supabase
     .from("profiles")
-    .update(patch)
-    .eq("id", user.id);
+    .upsert({ ...patch, id: user.id }, { onConflict: "id" });
   if (error) return { error: error.message };
   return undefined;
 }
@@ -171,10 +175,12 @@ export async function saveProfile(
   patch.avatar_url = draft.avatarUrl ?? null;
   patch.onboarding_completed = true;
 
+  // Upsert for the same reason as saveProfileStep: without a profiles row an
+  // UPDATE matches nothing, so onboarding_completed never sticks and the user
+  // is redirected back to /onboarding on every visit.
   const { error } = await supabase
     .from("profiles")
-    .update(patch)
-    .eq("id", user.id);
+    .upsert({ ...patch, id: user.id }, { onConflict: "id" });
   if (error) return { error: error.message };
 
   redirect("/home");
