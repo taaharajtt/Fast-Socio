@@ -101,7 +101,7 @@ export default async function AuraPage() {
         </p>
       </GlassCard>
 
-      <Link href="/profile/achievements" className="mt-3 block">
+      <Link href="/profile/badges" className="mt-3 block">
         <GlassCard
           radius="card"
           className="flex items-center gap-3 p-4 transition-transform active:scale-[0.99]"
@@ -110,11 +110,11 @@ export default async function AuraPage() {
             <Trophy className="h-5 w-5 text-white" aria-hidden />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-fg">Achievements</p>
+            <p className="text-sm font-semibold text-fg">Badges</p>
             <p className="text-xs text-fg-muted">
               {(earnedCount ?? 0) > 0
-                ? `${earnedCount} unlocked`
-                : "None unlocked yet"}
+                ? `${earnedCount} earned`
+                : "None earned yet"}
             </p>
           </div>
           <ChevronRight className="h-5 w-5 shrink-0 text-fg-muted" aria-hidden />

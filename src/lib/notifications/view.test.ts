@@ -14,7 +14,7 @@ const ALL_TYPES: { type: string; data: Record<string, unknown> }[] = [
   { type: "community_post_approved", data: { community_id: "c" } },
   { type: "community_post_rejected", data: { community_id: "c" } },
   { type: "level_up", data: { level: 5 } },
-  { type: "achievement", data: { title: "First Post" } },
+  { type: "achievement", data: { title: "The Rookie" } },
   { type: "waitlist_promoted", data: { event_id: "e" } },
   { type: "event_reminder", data: { event_id: "e", kind: "1h" } },
 ];

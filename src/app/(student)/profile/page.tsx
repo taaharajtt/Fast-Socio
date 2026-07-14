@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Settings, Pencil, Plus, Zap, Heart } from "lucide-react";
 import { ProfileTabs, type ProfileCommunity } from "@/components/profile/profile-tabs";
 import { ShareProfileButton } from "@/components/profile/share-profile-button";
+import { BadgeStrip } from "@/components/profile/badge-strip";
+import { getEarnedBadges } from "@/lib/badges";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { AppImage } from "@/components/ui/app-image";
@@ -27,6 +29,7 @@ export default async function ProfilePage() {
     { data: commRows },
     { count: postCount },
     { count: eventCount },
+    badges,
   ] = await Promise.all([
     supabase
       .from("profiles")
@@ -63,6 +66,7 @@ export default async function ProfilePage() {
       .from("event_attendees")
       .select("event_id", { count: "exact", head: true })
       .eq("user_id", me),
+    getEarnedBadges(supabase, me),
   ]);
 
   const posts = (postRows as FeedPost[]) ?? [];
@@ -121,10 +125,14 @@ export default async function ProfilePage() {
       </div>
 
       <main className="px-4 pb-28">
+        {/* Earned badges sit in the band right of the avatar (per design) and
+            double as the spacer that clears the avatar overhang. */}
+        <BadgeStrip badges={badges} href="/profile/badges" />
+
         {profile?.verified && (
           <span
             aria-label="Verified"
-            className="mt-12 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-white"
+            className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-white"
           >
             <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" aria-hidden>
               <path
@@ -138,7 +146,7 @@ export default async function ProfilePage() {
           </span>
         )}
 
-        <div className={profile?.verified ? "mt-1" : "mt-12"}>
+        <div className="mt-1">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <h1 className="truncate text-[22px] font-bold tracking-tight">

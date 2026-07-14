@@ -109,7 +109,7 @@ export function ProfileTabs({
 }
 
 /** Stats tab (Refactor Phase 10): level/XP progress, activity counts, and a
- *  shortcut to the achievements grid. */
+ *  shortcut to the badges grid. */
 function StatsPanel({ stats }: { stats: ProfileStats }) {
   const prog = levelProgress(stats.xp);
   const cells: { label: string; value: number }[] = [
@@ -152,14 +152,14 @@ function StatsPanel({ stats }: { stats: ProfileStats }) {
       </div>
 
       <Link
-        href="/profile/achievements"
+        href="/profile/badges"
         className="glass flex items-center gap-3 rounded-[var(--radius-md)] p-3"
       >
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
           <Award className="h-5 w-5" aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold">Achievements</p>
+          <p className="text-sm font-semibold">Badges</p>
           <p className="text-xs text-fg-muted">View earned badges</p>
         </div>
         <ChevronRight className="h-4 w-4 text-fg-muted" aria-hidden />

@@ -60,6 +60,34 @@ export async function adjustAura(
   revalidatePath(`/admin/users/${userId}`);
 }
 
+/** Grant a badge (e.g. The Socio) to a user — rewards + notifies (audited). */
+export async function grantBadge(
+  userId: string,
+  code: string
+): Promise<{ error: string } | void> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_grant_badge", {
+    p_user: userId,
+    p_code: code,
+  });
+  if (error) return { error: error.message };
+  revalidatePath(`/admin/users/${userId}`);
+}
+
+/** Revoke a badge from a user (audited; already-paid Aura is not clawed back). */
+export async function revokeBadge(
+  userId: string,
+  code: string
+): Promise<{ error: string } | void> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_revoke_badge", {
+    p_user: userId,
+    p_code: code,
+  });
+  if (error) return { error: error.message };
+  revalidatePath(`/admin/users/${userId}`);
+}
+
 /** Ban or restore a user (audited). Banned users are blocked at the middleware. */
 export async function setUserBan(
   userId: string,

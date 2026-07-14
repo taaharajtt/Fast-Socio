@@ -5,6 +5,7 @@ import { AuraAdjustForm } from "@/components/admin/aura-adjust-form";
 import { BanUserButton } from "@/components/admin/ban-user-button";
 import { UserAdminControls } from "@/components/admin/user-admin-controls";
 import { ModerationControls } from "@/components/admin/moderation-controls";
+import { BadgeControls, type AdminBadgeRow } from "@/components/admin/badge-controls";
 import { createClient } from "@/lib/supabase/server";
 import { getAdminContext } from "@/lib/admin/access";
 import { auraReasonLabel } from "@/lib/aura/labels";
@@ -63,6 +64,20 @@ export default async function AdminUserPage({
 
   const rows = txns ?? [];
   const role = (profile.admin_role ?? null) as GrantableRole;
+
+  // Badge catalog + this user's earned set (grant/revoke controls below).
+  const [{ data: badgeCatalog }, { data: earnedBadges }] = await Promise.all([
+    supabase
+      .from("achievements")
+      .select("code, title, description, image_url")
+      .order("sort_order", { ascending: true }),
+    supabase.from("user_achievements").select("code").eq("user_id", id),
+  ]);
+  const earnedSet = new Set((earnedBadges ?? []).map((r) => r.code));
+  const badges: AdminBadgeRow[] = (badgeCatalog ?? []).map((b) => ({
+    ...b,
+    earned: earnedSet.has(b.code),
+  }));
 
   // Moderation state fetched separately so the page still works before the
   // Phase 9 migrations are applied (columns/tables absent → graceful defaults).
@@ -153,6 +168,13 @@ export default async function AdminUserPage({
           </div>
         </section>
       )}
+
+      <section className="mt-6">
+        <SectionLabel>Badges · audited</SectionLabel>
+        <div className="mt-2 rounded-[4px] border border-glass-border p-3">
+          <BadgeControls userId={profile.id} badges={badges} />
+        </div>
+      </section>
 
       <section className="mt-6">
         <SectionLabel>Adjust aura · audited</SectionLabel>

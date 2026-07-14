@@ -160,8 +160,8 @@ export function notificationView(
       };
     case "achievement":
       return {
-        text: `Achievement unlocked: ${data.title ?? "a new badge"} 🏆`,
-        href: "/profile/achievements",
+        text: `Badge earned: ${data.title ?? "a new badge"} 🏅`,
+        href: "/profile/badges",
       };
     case "waitlist_promoted":
       return {

@@ -4,6 +4,8 @@ import { ChevronLeft, Zap, Heart, Check } from "lucide-react";
 import { OpenChatButton } from "@/components/chat/open-chat-button";
 import { ProfileTabs, type ProfileCommunity } from "@/components/profile/profile-tabs";
 import { ProfileActionsMenu } from "@/components/profile/profile-actions-menu";
+import { BadgeStrip } from "@/components/profile/badge-strip";
+import { getEarnedBadges } from "@/lib/badges";
 import { createClient } from "@/lib/supabase/server";
 import { AppImage } from "@/components/ui/app-image";
 import { OnlineDot } from "@/components/ui/badges";
@@ -99,7 +101,7 @@ export default async function PublicProfilePage({
     );
   }
 
-  const [{ data: postRows }, { count: matchCount }, { data: commRows }] =
+  const [{ data: postRows }, { count: matchCount }, { data: commRows }, badges] =
     await Promise.all([
       // Anonymous posts must NEVER appear on a profile — listing them here would
       // attribute the post to this account and defeat anonymity (the feed_posts
@@ -120,6 +122,7 @@ export default async function PublicProfilePage({
         .from("community_members")
         .select("community:communities(id, name, member_count, status)")
         .eq("user_id", id),
+      getEarnedBadges(supabase, id),
     ]);
 
   const posts = (postRows as FeedPost[]) ?? [];
@@ -197,17 +200,19 @@ export default async function PublicProfilePage({
       </div>
 
       <main className="px-4 pb-28">
+        {/* Earned badges sit in the band right of the avatar (per design) and
+            double as the spacer that clears the avatar overhang. */}
+        <BadgeStrip badges={badges} />
+
         {profile.verified && (
           <span
             aria-label="Verified"
-            className="mt-12 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-white"
+            className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-white"
           >
             <Check className="h-3 w-3" strokeWidth={3} aria-hidden />
           </span>
         )}
-        <div
-          className={`flex items-start justify-between gap-3 ${profile.verified ? "mt-1" : "mt-12"}`}
-        >
+        <div className="mt-1 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h1 className="truncate text-[22px] font-bold tracking-tight">
               {profile.full_name ?? "Student"}
