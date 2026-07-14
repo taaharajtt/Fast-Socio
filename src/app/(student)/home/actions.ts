@@ -191,9 +191,11 @@ export async function toggleLike(
 }
 
 /**
- * Delete one of the caller's own posts (UAT-003). RLS ("authors delete their
- * own posts") is the real guard; we scope the delete to author_id as well so a
- * mistargeted id can never touch someone else's row. Likes/comments cascade.
+ * Delete one of the caller's own posts (UAT-003). Goes through the delete_post
+ * SECURITY DEFINER RPC (mig 0072): the client can't DELETE from `posts` directly
+ * because table SELECT is revoked for anonymity, and a DELETE's WHERE clause
+ * needs SELECT on the columns it reads. The RPC enforces ownership via auth.uid()
+ * and cleans up any attached poll. Likes/comments cascade.
  */
 export async function deletePost(
   postId: string
@@ -203,11 +205,7 @@ export async function deletePost(
   const userId = await getAuthUserId();
   if (!userId) return { ok: false, error: "Not signed in." };
 
-  const { error } = await supabase
-    .from("posts")
-    .delete()
-    .eq("id", postId)
-    .eq("author_id", userId);
+  const { error } = await supabase.rpc("delete_post", { p_post_id: postId });
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/home");
