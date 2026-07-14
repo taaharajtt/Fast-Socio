@@ -5,6 +5,7 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { APPEARANCE_INIT_SCRIPT } from "@/lib/appearance";
+import { AppleSplashScreens } from "./apple-splash-screens";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -68,6 +69,8 @@ export default function RootLayout({
         {/* Apply saved appearance (font size / density / motion) before first
             paint to avoid a flash. Theme is handled separately by next-themes. */}
         <script dangerouslySetInnerHTML={{ __html: APPEARANCE_INIT_SCRIPT }} />
+        {/* iOS PWA launch (splash) screens — Android uses the manifest. */}
+        <AppleSplashScreens />
       </head>
       <body className="min-h-full flex flex-col">
         <ThemeProvider>{children}</ThemeProvider>
