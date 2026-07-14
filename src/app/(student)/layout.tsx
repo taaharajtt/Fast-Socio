@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { after } from "next/server";
 import { FloatingDock } from "@/components/floating-dock";
 import { PushAutoEnable } from "@/components/push/push-auto-enable";
+import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { PresenceHeartbeat } from "@/components/presence/heartbeat";
 import { AnnouncementModal } from "@/components/notifications/announcement-modal";
 import { createClient } from "@/lib/supabase/server";
@@ -87,6 +88,9 @@ export default async function StudentLayout({
       <div className="flex-1 pb-20">{children}</div>
       {/* Enable push notifications by default for signed-in students. */}
       <PushAutoEnable />
+      {/* Browser-tab users: invite them to install. On iOS this is the only way
+          they can ever receive push at all. Renders nothing once installed. */}
+      <InstallPrompt />
       {/* Stamps last_seen_at while the tab is visible, so presence is real. */}
       <PresenceHeartbeat />
       {/* Badges + announcements stream in after the shell; the fallback dock is
