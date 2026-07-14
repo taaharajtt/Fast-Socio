@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { toggleLike, reportPost, deletePost } from "@/app/(student)/home/actions";
 import { ShareSheet } from "@/components/feed/share-sheet";
 import { CommentsSheet } from "@/components/feed/comments-sheet";
+import { PostPoll } from "@/components/feed/post-poll";
 import { timeAgo, absoluteTime } from "@/lib/time";
 import { AppImage } from "@/components/ui/app-image";
 import type { FeedPost } from "@/lib/feed/types";
@@ -200,6 +201,7 @@ function PostCardImpl({
           />
         </div>
       )}
+      {post.poll_id && <PostPoll pollId={post.poll_id} />}
 
       {/* Double-tap heart burst, centered over the card. */}
       {burstKey > 0 && (

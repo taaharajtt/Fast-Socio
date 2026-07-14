@@ -51,6 +51,7 @@ function CommentsSheetContent({
     comments: FeedComment[];
     authors: Record<string, Author>;
     viewerAvatar: string | null;
+    viewerId: string | null;
   } | null>(null);
 
   useEffect(() => {
@@ -83,6 +84,7 @@ function CommentsSheetContent({
           initialComments={data.comments}
           initialAuthors={data.authors}
           viewerAvatar={data.viewerAvatar}
+          viewerId={data.viewerId}
           onCommentAdded={onCommentAdded}
         />
       )}

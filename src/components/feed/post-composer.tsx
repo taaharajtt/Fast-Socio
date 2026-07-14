@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ImagePlus, Loader2, VenetianMask, X } from "lucide-react";
+import { BarChart3, ImagePlus, Loader2, Plus, VenetianMask, X } from "lucide-react";
 import { GlassButton, GlassCard } from "@/components/ui";
 import { ImageCropper, type CropResult } from "@/components/ui/image-cropper";
 import { UploadProgressBar } from "@/components/ui/upload-progress";
@@ -30,6 +30,9 @@ export function PostComposer({
   const [anon, setAnon] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  // Poll builder: when non-null, this post carries a poll and the textarea is
+  // the question. Starts with two blank options; up to six.
+  const [pollOptions, setPollOptions] = useState<string[] | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +45,31 @@ export function PostComposer({
     if (!file) return;
     setError(null);
     setPendingFile(file);
+  }
+
+  // A poll and an image are mutually exclusive, so toggling one clears the other.
+  function togglePoll() {
+    setError(null);
+    setPollOptions((prev) => {
+      if (prev) return null;
+      setImageUrl(null);
+      setPendingFile(null);
+      return ["", ""];
+    });
+  }
+
+  function setOption(i: number, value: string) {
+    setPollOptions((prev) =>
+      prev ? prev.map((o, idx) => (idx === i ? value.slice(0, 80) : o)) : prev
+    );
+  }
+  function addOption() {
+    setPollOptions((prev) => (prev && prev.length < 6 ? [...prev, ""] : prev));
+  }
+  function removeOption(i: number) {
+    setPollOptions((prev) =>
+      prev && prev.length > 2 ? prev.filter((_, idx) => idx !== i) : prev
+    );
   }
 
   /** Upload the cropped result (UAT-008); the original never leaves the device. */
@@ -81,6 +109,7 @@ export function PostComposer({
         imageUrl,
         isAnonymous: anon,
         communityId,
+        pollOptions,
       });
       if (!res.ok) {
         setError(res.error);
@@ -89,6 +118,7 @@ export function PostComposer({
       setBody("");
       setAnon(false);
       setImageUrl(null);
+      setPollOptions(null);
       if (reviewNotice) setNotice(reviewNotice);
       // UAT-007: pull the freshly-created post into the feed automatically.
       if (onPosted) onPosted();
@@ -96,8 +126,16 @@ export function PostComposer({
     });
   }
 
+  // A poll needs a question plus at least two filled options; a normal post
+  // needs text or an image.
+  const pollReady =
+    !!pollOptions &&
+    body.trim().length > 0 &&
+    pollOptions.map((o) => o.trim()).filter(Boolean).length >= 2;
   const disabled =
-    pending || uploading || (body.trim().length === 0 && !imageUrl);
+    pending ||
+    uploading ||
+    (pollOptions ? !pollReady : body.trim().length === 0 && !imageUrl);
 
   return (
     <GlassCard className="relative overflow-hidden p-4">
@@ -112,10 +150,45 @@ export function PostComposer({
       <textarea
         value={body}
         onChange={(e) => setBody(e.target.value.slice(0, 2000))}
-        placeholder={placeholder}
+        placeholder={pollOptions ? "Ask a question…" : placeholder}
         rows={3}
         className="w-full resize-none bg-transparent text-base text-fg outline-none placeholder:text-fg-muted"
       />
+
+      {pollOptions && (
+        <div className="mt-1 space-y-2">
+          {pollOptions.map((opt, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input
+                value={opt}
+                onChange={(e) => setOption(i, e.target.value)}
+                placeholder={`Option ${i + 1}`}
+                className="glass min-w-0 flex-1 rounded-full bg-transparent px-3.5 py-2 text-sm text-fg outline-none placeholder:text-fg-muted"
+              />
+              {pollOptions.length > 2 && (
+                <button
+                  type="button"
+                  aria-label={`Remove option ${i + 1}`}
+                  onClick={() => removeOption(i)}
+                  className="shrink-0 p-1 text-fg-muted hover:text-fg"
+                >
+                  <X className="h-4 w-4" aria-hidden />
+                </button>
+              )}
+            </div>
+          ))}
+          {pollOptions.length < 6 && (
+            <button
+              type="button"
+              onClick={addOption}
+              className="flex items-center gap-1.5 px-1 text-sm font-medium text-aura"
+            >
+              <Plus className="h-4 w-4" aria-hidden />
+              Add option
+            </button>
+          )}
+        </div>
+      )}
 
       {uploading && (
         <div className="mt-2 rounded-xl bg-bg-elevated px-4 py-3">
@@ -169,14 +242,29 @@ export function PostComposer({
           hidden
           onChange={onPickImage}
         />
+        {!pollOptions && (
+          <button
+            type="button"
+            aria-label="Add image"
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            className="glass flex h-9 w-9 items-center justify-center rounded-full text-fg-muted disabled:opacity-40"
+          >
+            <ImagePlus className="h-5 w-5" aria-hidden />
+          </button>
+        )}
         <button
           type="button"
-          aria-label="Add image"
-          onClick={() => fileRef.current?.click()}
+          aria-label={pollOptions ? "Remove poll" : "Add poll"}
+          aria-pressed={!!pollOptions}
+          onClick={togglePoll}
           disabled={uploading}
-          className="glass flex h-9 w-9 items-center justify-center rounded-full text-fg-muted disabled:opacity-40"
+          className={cn(
+            "flex h-9 w-9 items-center justify-center rounded-full transition-colors disabled:opacity-40",
+            pollOptions ? "bg-aura text-white" : "glass text-fg-muted"
+          )}
         >
-          <ImagePlus className="h-5 w-5" aria-hidden />
+          <BarChart3 className="h-5 w-5" aria-hidden />
         </button>
         {/* UAT-005: anonymity moved out of the community Main panel — posts there
             are moderated and attributed. It lives in the community chat room

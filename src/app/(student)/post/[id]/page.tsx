@@ -51,6 +51,7 @@ export default async function PostDetailPage({
           postId={id}
           initialComments={comments}
           initialAuthors={authors}
+          viewerId={user?.id}
         />
       </div>
     </main>

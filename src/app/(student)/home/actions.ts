@@ -29,12 +29,16 @@ export async function fetchFeedPage(
   return (data as FeedPost[]) ?? [];
 }
 
-/** Create a post (text and/or image), optionally anonymous and/or in a community. */
+/** Create a post (text and/or image, or a poll), optionally anonymous and/or in
+ *  a community. When `pollOptions` is present the post carries a poll: `body` is
+ *  the question and no image is attached. */
 export async function createPost(input: {
   body: string;
   imageUrl?: string | null;
   isAnonymous: boolean;
   communityId?: string | null;
+  /** 2–6 option labels. Present ⇒ this is a poll post (body is the question). */
+  pollOptions?: string[] | null;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
   // Local JWT verification — no Auth API round trip on this hot path.
@@ -42,8 +46,21 @@ export async function createPost(input: {
   if (!userId) return { ok: false, error: "Not signed in." };
 
   const body = input.body.trim();
-  if (!body && !input.imageUrl)
+  // A poll needs its question; the options carry the rest of the meaning.
+  const pollOptions = (input.pollOptions ?? [])
+    .map((o) => o.trim())
+    .filter(Boolean);
+  const isPoll = (input.pollOptions?.length ?? 0) > 0;
+
+  if (isPoll) {
+    if (!body) return { ok: false, error: "Ask a poll question." };
+    if (pollOptions.length < 2 || pollOptions.length > 6)
+      return { ok: false, error: "A poll needs 2–6 options." };
+    if (pollOptions.some((o) => o.length > 80))
+      return { ok: false, error: "Poll options are limited to 80 characters." };
+  } else if (!body && !input.imageUrl) {
     return { ok: false, error: "Write something or add an image." };
+  }
   if (body.length > 2000)
     return { ok: false, error: "Posts are limited to 2000 characters." };
   // Only accept images we host (P2-04): the client supplies this URL.
@@ -68,19 +85,73 @@ export async function createPost(input: {
   // client-supplied, so it is enforced here rather than trusted.
   const isAnonymous = input.communityId ? false : input.isAnonymous;
 
+  // A poll post: create the poll + options first (definer RPC), then attach it.
+  // Done after the moderation gate so a blocked question never mints a poll.
+  let pollId: string | null = null;
+  if (isPoll) {
+    const { data, error } = await supabase.rpc("create_post_poll", {
+      p_question: body,
+      p_options: pollOptions,
+    });
+    if (error) return { ok: false, error: error.message };
+    pollId = data as string;
+  }
+
   // No .select() — the posts table's SELECT is revoked (anonymity). return=minimal.
   const { error } = await supabase.from("posts").insert({
     author_id: userId,
     body: body || null,
-    image_url: input.imageUrl ?? null,
+    image_url: isPoll ? null : (input.imageUrl ?? null),
     is_anonymous: isAnonymous,
     community_id: input.communityId ?? null,
+    poll_id: pollId,
     risk_score: risk.score,
   });
   if (error) return { ok: false, error: error.message };
 
   revalidatePath(input.communityId ? `/communities/${input.communityId}` : "/home");
   return { ok: true };
+}
+
+export type PostPollOption = {
+  option_id: string;
+  label: string;
+  position: number;
+  votes: number;
+  voted_by_me: boolean;
+};
+
+/**
+ * Tallies for a single post poll plus the caller's own choice. Individual
+ * ballots are private (RLS); post_poll_results aggregates under definer rights.
+ */
+export async function fetchPostPoll(pollId: string): Promise<PostPollOption[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("post_poll_results")
+    .select("option_id, label, position, votes, voted_by_me")
+    .eq("poll_id", pollId)
+    .order("position", { ascending: true });
+  return (data ?? []).map((row) => ({
+    option_id: row.option_id as string,
+    label: row.label as string,
+    position: row.position as number,
+    votes: Number(row.votes),
+    voted_by_me: Boolean(row.voted_by_me),
+  }));
+}
+
+/** Cast (or move) the caller's vote on a post poll. One ballot per poll. */
+export async function votePostPoll(
+  pollId: string,
+  optionId: string
+): Promise<{ ok: boolean }> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("vote_post_poll", {
+    p_poll_id: pollId,
+    p_option_id: optionId,
+  });
+  return { ok: !error };
 }
 
 /**
@@ -353,6 +424,29 @@ export async function toggleCommentLike(
         .insert({ comment_id: commentId, user_id: userId });
 
   return { ok: !error };
+}
+
+/**
+ * Delete one of the caller's own comments or replies. RLS ("authors delete their
+ * own comments") is the real guard; we scope by author_id too so a mistargeted
+ * id can never touch someone else's row. Replies cascade (parent_id FK), likes
+ * cascade, and the count trigger keeps the post's comment_count accurate.
+ */
+export async function deleteComment(
+  commentId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  // Local JWT verification — no Auth API round trip on this hot path.
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
+
+  const { error } = await supabase
+    .from("post_comments")
+    .delete()
+    .eq("id", commentId)
+    .eq("author_id", userId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
 }
 
 /** Report a post (target_type = 'post'), feeding /admin/reports?type=post. */

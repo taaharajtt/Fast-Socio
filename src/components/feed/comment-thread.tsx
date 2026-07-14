@@ -7,12 +7,13 @@ import {
   useRef,
   useState,
 } from "react";
-import { Heart, Loader2 } from "lucide-react";
+import { Heart, Loader2, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { AppImage } from "@/components/ui/app-image";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/time";
 import {
+  deleteComment,
   fetchReplies,
   toggleCommentLike,
   type CommentAuthor,
@@ -49,10 +50,15 @@ export const CommentThread = forwardRef<
     postId: string;
     initialComments: FeedComment[];
     initialAuthors: Record<string, Author>;
+    /** Signed-in viewer's id — a comment's own author gets a delete option. */
+    viewerId?: string | null;
     /** Start a reply — bubbled up so the shared composer can address it. */
     onReply: (target: ReplyTarget) => void;
   }
->(function CommentThread({ postId, initialComments, initialAuthors, onReply }, ref) {
+>(function CommentThread(
+  { postId, initialComments, initialAuthors, viewerId, onReply },
+  ref
+) {
   const [comments, setComments] = useState<FeedComment[]>(initialComments);
   const [authors, setAuthors] =
     useState<Record<string, Author>>(initialAuthors);
@@ -117,6 +123,37 @@ export const CommentThread = forwardRef<
     } else {
       loadReplies(parentId);
     }
+  }
+
+  // Drop a deleted top-level comment (its replies cascade in the DB, so drop its
+  // loaded reply state too).
+  function removeTopLevel(id: string) {
+    setComments((prev) => prev.filter((c) => c.id !== id));
+    setReplies((prev) => {
+      if (!prev[id]) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  }
+
+  // Drop a deleted reply and decrement its parent's visible reply count.
+  function removeReply(parentId: string, id: string) {
+    setReplies((prev) => {
+      const st = prev[parentId];
+      if (!st) return prev;
+      return {
+        ...prev,
+        [parentId]: { ...st, items: st.items.filter((r) => r.id !== id) },
+      };
+    });
+    setComments((prev) =>
+      prev.map((c) =>
+        c.id === parentId
+          ? { ...c, reply_count: Math.max(0, c.reply_count - 1) }
+          : c
+      )
+    );
   }
 
   // Expand a thread after the viewer posts a reply into it (their row arrives
@@ -209,6 +246,8 @@ export const CommentThread = forwardRef<
             <CommentRow
               comment={c}
               author={authors[c.author_id]}
+              isMine={!!viewerId && c.author_id === viewerId}
+              onDeleted={() => removeTopLevel(c.id)}
               onReply={() =>
                 onReply({
                   parentId: c.id,
@@ -241,6 +280,8 @@ export const CommentThread = forwardRef<
                     comment={r}
                     author={authors[r.author_id]}
                     isReply
+                    isMine={!!viewerId && r.author_id === viewerId}
+                    onDeleted={() => removeReply(c.id, r.id)}
                     onReply={() =>
                       // A reply to a reply still attaches to the top-level
                       // parent (one level deep) but addresses that user.
@@ -268,15 +309,34 @@ function CommentRow({
   comment,
   author,
   isReply = false,
+  isMine = false,
+  onDeleted,
   onReply,
 }: {
   comment: FeedComment;
   author?: Author;
   isReply?: boolean;
+  /** Whether the signed-in viewer authored this comment (shows Delete). */
+  isMine?: boolean;
+  /** Called after the row is deleted so the thread can drop it from state. */
+  onDeleted?: () => void;
   onReply: () => void;
 }) {
   const [liked, setLiked] = useState(comment.liked_by_me);
   const [likes, setLikes] = useState(comment.like_count);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function onDelete() {
+    setDeleting(true);
+    const res = await deleteComment(comment.id);
+    if (!res.ok) {
+      setDeleting(false);
+      setConfirmDelete(false);
+      return;
+    }
+    onDeleted?.();
+  }
 
   async function onLike() {
     const wasLiked = liked;
@@ -321,13 +381,45 @@ function CommentRow({
         <p className="mt-0.5 whitespace-pre-wrap text-[15px] leading-[20px] text-fg">
           {comment.body}
         </p>
-        <button
-          type="button"
-          onClick={onReply}
-          className="mt-1 text-[12px] font-semibold text-fg-muted transition-colors hover:text-fg"
-        >
-          Reply
-        </button>
+        <div className="mt-1 flex items-center gap-4">
+          <button
+            type="button"
+            onClick={onReply}
+            className="text-[12px] font-semibold text-fg-muted transition-colors hover:text-fg"
+          >
+            Reply
+          </button>
+          {isMine &&
+            (confirmDelete ? (
+              <span className="flex items-center gap-3 text-[12px] font-semibold">
+                <button
+                  type="button"
+                  onClick={onDelete}
+                  disabled={deleting}
+                  className="flex items-center gap-1 text-error disabled:opacity-60"
+                >
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                  {deleting ? "Deleting…" : "Delete"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(false)}
+                  disabled={deleting}
+                  className="text-fg-muted transition-colors hover:text-fg"
+                >
+                  Cancel
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="text-[12px] font-semibold text-fg-muted transition-colors hover:text-error"
+              >
+                Delete
+              </button>
+            ))}
+        </div>
       </div>
 
       {/* Like column, right-aligned like Instagram. */}

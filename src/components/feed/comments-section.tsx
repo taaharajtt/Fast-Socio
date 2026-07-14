@@ -24,6 +24,7 @@ export function CommentsSection({
   initialComments,
   initialAuthors,
   viewerAvatar,
+  viewerId,
   variant,
   onCommentAdded,
 }: {
@@ -31,6 +32,8 @@ export function CommentsSection({
   initialComments: FeedComment[];
   initialAuthors: Record<string, Author>;
   viewerAvatar?: string | null;
+  /** Signed-in viewer's id — a comment's own author gets a delete option. */
+  viewerId?: string | null;
   variant: "sheet" | "page";
   /** Fired after any comment or reply posts — lets the card bump its count. */
   onCommentAdded?: () => void;
@@ -53,6 +56,7 @@ export function CommentsSection({
           postId={postId}
           initialComments={initialComments}
           initialAuthors={initialAuthors}
+          viewerId={viewerId}
           onReply={setReplyTo}
         />
       </div>
