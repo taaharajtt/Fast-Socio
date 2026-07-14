@@ -234,6 +234,23 @@ export function ChatThread({
   > | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  // Set when the user discards a take, so onstop skips the upload/send.
+  const cancelledRef = useRef(false);
+
+  // Unread boundary, frozen at mount. markConversationRead() runs in an effect
+  // just after this, wiping read_at — so the "new" state has to be captured from
+  // the server-rendered rows first, or the divider would vanish on arrival.
+  // Lazy initializer: computed once, never recomputed on re-render.
+  const [initialUnread] = useState(() => {
+    const incomingUnread = initialMessages.filter(
+      (m) => m.sender_id !== meId && !m.read_at
+    );
+    return {
+      ids: new Set(incomingUnread.map((m) => m.id)),
+      firstId: incomingUnread[0]?.id ?? null,
+      count: incomingUnread.length,
+    };
+  });
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPress = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -411,6 +428,13 @@ export function ChatThread({
     setBusy(false);
   }
 
+  /** Discard the take: stop the recorder but skip the upload in onstop. */
+  function cancelRecording() {
+    if (!recording) return;
+    cancelledRef.current = true;
+    recorderRef.current?.stop();
+  }
+
   async function toggleRecording() {
     if (recording) {
       recorderRef.current?.stop();
@@ -423,10 +447,18 @@ export function ChatThread({
         : "audio/mp4";
       const rec = new MediaRecorder(stream, { mimeType: mime });
       chunksRef.current = [];
+      cancelledRef.current = false;
       rec.ondataavailable = (ev) => chunksRef.current.push(ev.data);
       rec.onstop = async () => {
+        // Always release the mic, whether we're sending or discarding.
         stream.getTracks().forEach((t) => t.stop());
         setRecording(false);
+        // Cancelled: drop the captured audio without uploading or sending.
+        if (cancelledRef.current) {
+          cancelledRef.current = false;
+          chunksRef.current = [];
+          return;
+        }
         setBusy(true);
         const blob = new Blob(chunksRef.current, { type: mime });
         const ext = mime === "audio/webm" ? "webm" : "mp4";
@@ -639,8 +671,22 @@ export function ChatThread({
 
           const chips = aggregateReactions(reactions[m.id], meId);
 
+          const isNew = initialUnread.ids.has(m.id);
+
           return (
             <div key={m.id}>
+              {/* "New messages" divider above the first message that was still
+                  unread when this thread opened (WhatsApp/Slack convention). */}
+              {m.id === initialUnread.firstId && (
+                <div className="flex items-center gap-2 py-2">
+                  <span className="h-px flex-1 bg-accent/40" aria-hidden />
+                  <span className="rounded-full bg-accent/[0.14] px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-accent">
+                    {initialUnread.count} new message
+                    {initialUnread.count === 1 ? "" : "s"}
+                  </span>
+                  <span className="h-px flex-1 bg-accent/40" aria-hidden />
+                </div>
+              )}
               <div className={cn("flex", mine ? "justify-end" : "justify-start")}>
                 <div
                   {...(deleted ? {} : pressHandlers(m))}
@@ -654,7 +700,10 @@ export function ChatThread({
                       ? "border border-dashed border-glass-border bg-transparent text-fg-disabled"
                       : mine
                         ? "gradient-brand rounded-br-md text-white"
-                        : "glass rounded-bl-md cursor-pointer text-fg"
+                        : "glass rounded-bl-md cursor-pointer text-fg",
+                    // Unread-on-open incoming messages get an accent ring so they
+                    // stand out from everything already read.
+                    isNew && !deleted && "ring-1 ring-accent/50"
                   )}
                 >
                   {deleted ? (
@@ -819,18 +868,31 @@ export function ChatThread({
             hidden
             onChange={onPickImage}
           />
+          {/* While recording, the image button is replaced by Discard — so a
+              take can be thrown away instead of only stopped-and-sent. */}
+          {recording ? (
+            <button
+              type="button"
+              aria-label="Discard voice note"
+              onClick={cancelRecording}
+              className="glass flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-error"
+            >
+              <Trash2 className="h-5 w-5" aria-hidden />
+            </button>
+          ) : (
+            <button
+              type="button"
+              aria-label="Attach image"
+              onClick={() => fileRef.current?.click()}
+              disabled={busy}
+              className="glass flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-fg-muted disabled:opacity-40"
+            >
+              <ImagePlus className="h-5 w-5" aria-hidden />
+            </button>
+          )}
           <button
             type="button"
-            aria-label="Attach image"
-            onClick={() => fileRef.current?.click()}
-            disabled={busy}
-            className="glass flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-fg-muted disabled:opacity-40"
-          >
-            <ImagePlus className="h-5 w-5" aria-hidden />
-          </button>
-          <button
-            type="button"
-            aria-label={recording ? "Stop recording" : "Record voice note"}
+            aria-label={recording ? "Send voice note" : "Record voice note"}
             onClick={toggleRecording}
             disabled={busy && !recording}
             className={cn(
@@ -1077,7 +1139,8 @@ function ForwardSheetContent({
   return (
       <div className="flex max-h-[70vh] flex-col">
         <h3 className="mb-3 text-lg font-bold">Forward to</h3>
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        {/* Keeps finger-scrolling while the sheet panel claims the drag gesture. */}
+        <div data-sheet-scroll className="min-h-0 flex-1 overflow-y-auto">
           {friends === null ? (
             <p className="py-6 text-center text-sm text-fg-muted">Loading…</p>
           ) : friends.length === 0 ? (

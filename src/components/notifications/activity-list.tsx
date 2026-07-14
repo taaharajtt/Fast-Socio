@@ -7,6 +7,7 @@ import {
   Megaphone,
   UserPlus,
   Bell,
+  Image as ImageIcon,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -33,6 +34,7 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   post_like: Heart,
   comment: MessageSquare,
   match: Star,
+  match_post: ImageIcon,
   message: MessageSquare,
   message_request: UserPlus,
   community_post_approved: Megaphone,

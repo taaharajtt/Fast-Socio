@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { AppImage } from "@/components/ui/app-image";
 import { OnlineDot } from "@/components/ui/badges";
+import { cn } from "@/lib/utils";
 import { isOnline, timeAgo } from "@/lib/time";
 
 type ProfileLite = {
@@ -82,6 +83,26 @@ export default async function ChatPage({
         ? "Message deleted"
         : (m.body || "Sent an attachment");
       lastMsg.set(m.conversation_id, `${prefix}${text}`);
+    }
+  }
+
+  // Unread count per conversation: incoming messages the viewer hasn't read.
+  // Queried separately (not from the 300-row preview page) so the count is exact
+  // even in a very busy thread.
+  const unread = new Map<string, number>();
+  if (convIds.length > 0) {
+    const { data: unreadRows } = await supabase
+      .from("messages")
+      .select("conversation_id")
+      .in("conversation_id", convIds)
+      .neq("sender_id", me)
+      .is("read_at", null)
+      .eq("hidden", false);
+    for (const m of unreadRows ?? []) {
+      unread.set(
+        m.conversation_id,
+        (unread.get(m.conversation_id) ?? 0) + 1
+      );
     }
   }
 
@@ -273,11 +294,20 @@ export default async function ChatPage({
               }
               const p = profiles.get(t.otherId);
               const preview = lastMsg.get(t.convId);
+              const unreadCount = unread.get(t.convId) ?? 0;
+              const hasUnread = unreadCount > 0;
               return (
                 <Link
                   key={t.convId}
                   href={`/chat/${t.convId}`}
-                  className="flex items-center gap-3 rounded-[12px] px-3 py-3 transition-colors hover:bg-card"
+                  className={cn(
+                    "flex items-center gap-3 rounded-[12px] px-3 py-3 transition-colors",
+                    // A thread with unread messages is tinted + accent-bordered so
+                    // it reads apart from already-seen conversations at a glance.
+                    hasUnread
+                      ? "border-l-[3px] border-l-accent bg-accent/[0.08]"
+                      : "border-l-[3px] border-l-transparent hover:bg-card"
+                  )}
                 >
                   <div className="relative h-11 w-11 shrink-0 rounded-full">
                     <div className="relative h-full w-full overflow-hidden rounded-full bg-card">
@@ -295,12 +325,29 @@ export default async function ChatPage({
                     <p className="truncate text-[15px] font-semibold text-fg">
                       {p?.full_name ?? "Student"}
                     </p>
-                    <p className="truncate text-sm text-fg-muted">
+                    <p
+                      className={cn(
+                        "truncate text-sm",
+                        hasUnread ? "font-semibold text-fg" : "text-fg-muted"
+                      )}
+                    >
                       {preview ?? "Say hi 👋"}
                     </p>
                   </div>
-                  <span className="shrink-0 self-start text-xs text-fg-muted">
-                    {timeAgo(t.ts)}
+                  <span className="flex shrink-0 flex-col items-end gap-1 self-start">
+                    <span
+                      className={cn(
+                        "text-xs",
+                        hasUnread ? "font-semibold text-accent" : "text-fg-muted"
+                      )}
+                    >
+                      {timeAgo(t.ts)}
+                    </span>
+                    {hasUnread && (
+                      <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-[11px] font-bold text-white">
+                        {unreadCount > 99 ? "99+" : unreadCount}
+                      </span>
+                    )}
                   </span>
                 </Link>
               );

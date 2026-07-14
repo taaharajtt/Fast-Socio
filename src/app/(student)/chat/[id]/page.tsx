@@ -135,29 +135,36 @@ export default async function ConversationPage({
         >
           <ChevronLeft className="h-5 w-5" aria-hidden />
         </Link>
-        <div className="relative shrink-0">
-          <div className="glass relative h-9 w-9 overflow-hidden rounded-full">
-            {other?.avatar_url ? (
-              <AppImage
-                src={other.avatar_url}
-                alt={other.full_name ?? "Match"}
-                sizes="36px"
-              />
-            ) : null}
+        {/* Tapping the avatar/name opens the other person's profile — the same
+            affordance every other avatar in the app has. */}
+        <Link
+          href={`/profile/${otherId}`}
+          className="flex min-w-0 flex-1 items-center gap-3"
+        >
+          <div className="relative shrink-0">
+            <div className="glass relative h-9 w-9 overflow-hidden rounded-full">
+              {other?.avatar_url ? (
+                <AppImage
+                  src={other.avatar_url}
+                  alt={other.full_name ?? "Match"}
+                  sizes="36px"
+                />
+              ) : null}
+            </div>
+            {/* UAT-003: the dot used to be unconditional, so every match looked
+                online. It now tracks the other user's heartbeat. */}
+            {isOnline(other?.last_seen_at) && <OnlineDot />}
           </div>
-          {/* UAT-003: the dot used to be unconditional, so every match looked
-              online. It now tracks the other user's heartbeat. */}
-          {isOnline(other?.last_seen_at) && <OnlineDot />}
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold">
-            {other?.full_name ?? "Student"}
-          </p>
-          <p className="truncate text-[11px] text-fg-muted">
-            {other?.department ? `${other.department} · ` : ""}
-            {presenceLabel(other?.last_seen_at)}
-          </p>
-        </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-semibold">
+              {other?.full_name ?? "Student"}
+            </p>
+            <p className="truncate text-[11px] text-fg-muted">
+              {other?.department ? `${other.department} · ` : ""}
+              {presenceLabel(other?.last_seen_at)}
+            </p>
+          </div>
+        </Link>
       </header>
 
       <ChatThread

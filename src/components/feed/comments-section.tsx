@@ -45,6 +45,9 @@ export function CommentsSection({
   return (
     <div className={isSheet ? "flex min-h-0 flex-1 flex-col" : "flex flex-1 flex-col"}>
       <div
+        // Inside the sheet this is the scroll area: it must keep vertical
+        // panning even though the sheet panel claims touch-action for dragging.
+        data-sheet-scroll={isSheet ? "" : undefined}
         className={
           isSheet
             ? "-mx-5 min-h-0 flex-1 overflow-y-auto px-5 py-4"

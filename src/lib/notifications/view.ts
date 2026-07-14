@@ -29,6 +29,8 @@ export function notificationActionPhrase(type: string): string {
       return "approved your community post";
     case "community_post_rejected":
       return "rejected your community post";
+    case "match_post":
+      return "shared a new post";
     default:
       return "interacted with you";
   }
@@ -65,6 +67,7 @@ export function notificationCategory(type: string): ActivityCategory {
     case "comment":
       return "replies";
     case "match":
+    case "match_post":
       return "matches";
     case "message_request":
       return "requests";
@@ -125,6 +128,11 @@ export function notificationView(
     case "comment":
       return {
         text: `${who} replied to your ${data.community_id ? "community post" : "post"}`,
+        href: data.post_id ? `/post/${data.post_id}` : "/home",
+      };
+    case "match_post":
+      return {
+        text: `${who} shared a new post`,
         href: data.post_id ? `/post/${data.post_id}` : "/home",
       };
     case "community_approved":

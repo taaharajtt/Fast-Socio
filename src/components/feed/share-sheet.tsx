@@ -69,7 +69,8 @@ function ShareSheetContent({
   return (
     <div className="flex max-h-[70vh] flex-col">
       <h3 className="mb-3 text-lg font-bold">Share to a friend</h3>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      {/* Keeps finger-scrolling while the sheet panel claims the drag gesture. */}
+      <div data-sheet-scroll className="min-h-0 flex-1 overflow-y-auto">
         {friends === null ? (
           <p className="py-6 text-center text-sm text-fg-muted">
             Loading your matches…

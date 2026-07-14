@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { ArrowUp, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AppImage } from "@/components/ui/app-image";
@@ -227,10 +228,13 @@ function StudentBoard({
           const title = LEADERBOARD_TITLES[r.rank]?.title;
           const isMe = r.user_id === meId;
           return (
-            <div
+            // Tapping a row opens that student's profile (your own row goes to
+            // your profile) — avatars are tappable everywhere else in the app.
+            <Link
               key={r.user_id}
+              href={isMe ? "/profile" : `/profile/${r.user_id}`}
               className={cn(
-                "flex items-center gap-3 rounded-[12px] px-3 py-3",
+                "flex items-center gap-3 rounded-[12px] px-3 py-3 transition-transform active:scale-[0.99]",
                 isMe ? "bg-accent/[0.10] ring-1 ring-accent/40" : "bg-card"
               )}
             >
@@ -275,7 +279,7 @@ function StudentBoard({
                 <Zap className="h-3.5 w-3.5" aria-hidden />
                 {r.weekly_aura.toLocaleString()}
               </span>
-            </div>
+            </Link>
           );
         })}
       </div>

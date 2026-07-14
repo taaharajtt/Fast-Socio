@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import Link from "next/link";
 import { Heart, Loader2, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { AppImage } from "@/components/ui/app-image";
@@ -356,7 +357,9 @@ function CommentRow({
 
   return (
     <div className="flex gap-3">
-      <div
+      {/* Avatar opens the commenter's profile (comments are always attributed). */}
+      <Link
+        href={`/profile/${comment.author_id}`}
         className={cn(
           "glass relative shrink-0 overflow-hidden rounded-full",
           avatarSize
@@ -369,13 +372,16 @@ function CommentRow({
             sizes={isReply ? "28px" : "36px"}
           />
         ) : null}
-      </div>
+      </Link>
 
       <div className="min-w-0 flex-1">
         <p className="text-[13px]">
-          <span className="font-semibold text-fg">
+          <Link
+            href={`/profile/${comment.author_id}`}
+            className="font-semibold text-fg"
+          >
             {author?.full_name ?? "Student"}
-          </span>
+          </Link>
           <span className="ml-2 text-fg-muted">{timeAgo(comment.created_at)}</span>
         </p>
         <p className="mt-0.5 whitespace-pre-wrap text-[15px] leading-[20px] text-fg">

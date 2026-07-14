@@ -9,6 +9,16 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
+  A drag-to-dismiss sheet sets touch-action:none on its panel so framer-motion
+  receives the drag gesture instead of the browser treating it as a scroll.
+  Scrollable regions inside a sheet mark themselves [data-sheet-scroll] to opt
+  back into vertical panning, so their content still scrolls by finger.
+*/
+[data-sheet-scroll] {
+  touch-action: pan-y;
+}
+
+/*
   FAST SOCIO design tokens (UI Spec v2 §2).
   Dark is the primary identity; .light is the required secondary theme.
   Theme is class-based (html.dark / html.light) for next-themes (Task #001g).

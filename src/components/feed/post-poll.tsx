@@ -106,8 +106,10 @@ export function PostPoll({ pollId }: { pollId: string }) {
                     aria-hidden
                   />
                 )}
+                {/* Show the raw tally next to the share — a percentage alone
+                    hides whether "50%" means 1 vote or 100. */}
                 <span className="shrink-0 text-xs font-semibold tabular-nums text-fg-muted">
-                  {share}%
+                  {o.votes} {o.votes === 1 ? "vote" : "votes"} · {share}%
                 </span>
               </span>
             </button>

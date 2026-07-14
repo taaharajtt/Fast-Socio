@@ -60,6 +60,26 @@ export function GlassSheet({
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
+  // Keep onClose in a ref so the history effect below doesn't re-run (and
+  // push a duplicate entry) every time the parent re-renders a new callback.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
+  // Back button closes the sheet instead of leaving the page. Opening pushes a
+  // throwaway history entry; Back pops it and we close. If the sheet is closed
+  // any other way (scrim, Escape, drag, an action), we pop our own entry on
+  // cleanup so the user's Back doesn't have to be pressed twice.
+  useEffect(() => {
+    if (!open) return;
+    window.history.pushState({ glassSheet: true }, "");
+    const onPop = () => closeRef.current();
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      if (window.history.state?.glassSheet) window.history.back();
+    };
+  }, [open]);
+
   // Escape-to-close + focus trap while open.
   useEffect(() => {
     if (!open) return;
@@ -141,6 +161,13 @@ export function GlassSheet({
             dragListener={false}
             dragConstraints={{ top: 0, bottom: 0 }}
             dragElastic={{ top: 0, bottom: 0.4 }}
+            // framer-motion only sets touch-action itself when IT owns the
+            // pointer listeners. With dragListener={false} + dragControls it
+            // does not, so on touch the browser claimed the gesture as a scroll
+            // and cancelled the pointer — the sheet simply would not drag by
+            // hand. Claiming the gesture here is what makes dragging work.
+            // Scroll areas inside opt back out via [data-sheet-scroll].
+            style={{ touchAction: "none" }}
             onPointerDown={maybeStartDrag}
             onDragEnd={(_, info) => {
               if (info.offset.y > 120 || info.velocity.y > 600) onClose();
