@@ -1,22 +1,21 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
 /**
- * Mark every notification read (UISpec V3 Screen 4 "Mark all read"). Unlike the
- * old behaviour — which auto-marked on open and so never let an unread row show
- * — reads are now an explicit user action, preserving the unread purple-border
- * state until the user taps "Mark all read".
+ * Mark every notification read automatically when the panel is opened. Called
+ * once from the client on mount (AutoMarkRead), fire-and-forget. It deliberately
+ * does NOT revalidate: the just-rendered page keeps its unread highlights for
+ * THIS visit so the user still sees what's new, while the DB is cleared so the
+ * bell badge is gone on the next navigation and the rows read as seen next time.
  */
-export async function markAllActivityRead(): Promise<{ ok: boolean }> {
+export async function markActivityRead(): Promise<{ ok: boolean }> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false };
   await supabase.rpc("mark_notifications_read");
-  revalidatePath("/activity");
   return { ok: true };
 }
 

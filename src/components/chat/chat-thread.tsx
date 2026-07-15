@@ -6,6 +6,7 @@ import {
   CornerUpRight,
   Flag,
   ImagePlus,
+  Loader2,
   Mic,
   Pencil,
   Pin,
@@ -59,6 +60,11 @@ export type ChatMessage = {
   edited_at: string | null;
   deleted_at: string | null;
   pinned_at: string | null;
+  /** Client-only: object-URL preview for an optimistic image while it uploads. */
+  _localSrc?: string;
+  /** Client-only: optimistic image lifecycle — drives the in-bubble spinner and
+   *  the Uploading…/Sent footer. Absent on authoritative rows. */
+  _uploadStatus?: "uploading" | "sent" | "error";
 };
 
 export type { SharedPostPreview };
@@ -282,12 +288,20 @@ export function ChatThread({
               // Reconcile my optimistic bubble: the authoritative row replaces
               // the first matching temp message instead of duplicating it.
               if (m.sender_id === meId) {
-                const tempIdx = prev.findIndex(
-                  (x) => x.id.startsWith("temp-") && x.body === m.body
+                const tempIdx = prev.findIndex((x) =>
+                  x.id.startsWith("temp-")
+                    ? m.attachment_type
+                      ? // Image temp: match by kind (body is empty on both).
+                        x.attachment_type === m.attachment_type &&
+                        x._localSrc != null
+                      : x.body === m.body
+                    : false
                 );
                 if (tempIdx >= 0) {
                   const next = [...prev];
-                  next[tempIdx] = m;
+                  // Carry the local preview onto the real row so the bubble
+                  // doesn't flash to a placeholder while its signed URL resolves.
+                  next[tempIdx] = { ...m, _localSrc: prev[tempIdx]._localSrc };
                   return next;
                 }
               }
@@ -421,11 +435,50 @@ export function ChatThread({
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    setBusy(true);
     const ext = file.name.split(".").pop() ?? "jpg";
-    const url = await uploadMedia(file, ext, file.type);
-    if (url) await sendMessage(conversationId, "", { url, type: "image" });
-    setBusy(false);
+
+    // Optimistic image bubble: show the picked photo immediately with an
+    // "Uploading…" spinner, so the send has clear feedback instead of the
+    // composer just freezing until the upload + insert round-trips finish.
+    const localSrc = URL.createObjectURL(file);
+    const tempId = `temp-${crypto.randomUUID()}`;
+    const temp: ChatMessage = {
+      id: tempId,
+      sender_id: meId,
+      body: null,
+      attachment_url: "pending",
+      attachment_type: "image",
+      shared_post_id: null,
+      created_at: new Date().toISOString(),
+      read_at: null,
+      edited_at: null,
+      deleted_at: null,
+      pinned_at: null,
+      _localSrc: localSrc,
+      _uploadStatus: "uploading",
+    };
+    setMessages((prev) => [...prev, temp]);
+
+    const path = await uploadMedia(file, ext, file.type);
+    if (!path) {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? { ...m, _uploadStatus: "error" } : m))
+      );
+      return;
+    }
+
+    const res = await sendMessage(conversationId, "", { url: path, type: "image" });
+    if (!res.ok) {
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      URL.revokeObjectURL(localSrc);
+      setError(res.error);
+      return;
+    }
+    // Mark sent; the realtime INSERT then swaps in the authoritative row (which
+    // carries the local preview forward until its signed URL resolves).
+    setMessages((prev) =>
+      prev.map((m) => (m.id === tempId ? { ...m, _uploadStatus: "sent" } : m))
+    );
   }
 
   /** Discard the take: stop the recorder but skip the upload in onstop. */
@@ -717,18 +770,52 @@ export function ChatThread({
                       mine={mine}
                     />
                   ) : m.attachment_type === "image" && m.attachment_url ? (
-                    signedAttachments[m.id] ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={signedAttachments[m.id]}
-                        alt="Shared image"
-                        className="block max-h-72 w-[220px] rounded-xl object-cover"
-                        loading="lazy"
-                        decoding="async"
-                      />
-                    ) : (
-                      <div className="flex h-40 w-[220px] animate-pulse items-center justify-center rounded-xl bg-white/10" />
-                    )
+                    (() => {
+                      // Prefer the signed URL; fall back to the local preview
+                      // while an optimistic upload is in flight or its signed URL
+                      // is still resolving.
+                      const src = signedAttachments[m.id] ?? m._localSrc;
+                      if (!src) {
+                        return (
+                          <div className="flex h-40 w-[220px] animate-pulse items-center justify-center rounded-xl bg-white/10" />
+                        );
+                      }
+                      const uploading = m._uploadStatus === "uploading";
+                      const failed = m._uploadStatus === "error";
+                      return (
+                        <div className="relative">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={src}
+                            alt="Shared image"
+                            className={cn(
+                              "block max-h-72 w-[220px] rounded-xl object-cover transition-opacity",
+                              uploading && "opacity-70"
+                            )}
+                            loading="lazy"
+                            decoding="async"
+                          />
+                          {uploading && (
+                            <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/25">
+                              <span className="flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-[11px] font-medium text-white">
+                                <Loader2
+                                  className="h-3.5 w-3.5 animate-spin"
+                                  aria-hidden
+                                />
+                                Uploading…
+                              </span>
+                            </div>
+                          )}
+                          {failed && (
+                            <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/40">
+                              <span className="rounded-full bg-error px-3 py-1.5 text-[11px] font-semibold text-white">
+                                Upload failed
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()
                   ) : m.attachment_type === "voice" && m.attachment_url ? (
                     signedAttachments[m.id] ? (
                       <VoiceNote src={signedAttachments[m.id]} mine={mine} />
@@ -780,19 +867,43 @@ export function ChatThread({
                 </div>
               )}
 
-              {/* UAT-004: a read receipt now says WHEN, not just "Read". */}
-              {mine && m.id === (lastReadMine ?? lastMineId) && (
-                <p className="mr-1 mt-0.5 flex items-center justify-end gap-1 text-right text-[11px] text-fg-muted">
-                  {m.read_at && showReadReceipts ? (
-                    <>
-                      <Check className="h-3 w-3" strokeWidth={3} aria-hidden />
-                      Seen {timeAgo(m.read_at)} ago
-                    </>
-                  ) : (
-                    "Sent"
-                  )}
-                </p>
-              )}
+              {/* UAT-004: a read receipt now says WHEN, not just "Read". An
+                  image still uploading shows its own status here regardless of
+                  whether it's the last message. */}
+              {mine &&
+                (m._uploadStatus === "uploading" || m._uploadStatus === "error" ? (
+                  <p
+                    className={cn(
+                      "mr-1 mt-0.5 flex items-center justify-end gap-1 text-right text-[11px]",
+                      m._uploadStatus === "error" ? "text-error" : "text-fg-muted"
+                    )}
+                  >
+                    {m._uploadStatus === "error" ? (
+                      "Failed to send"
+                    ) : (
+                      <>
+                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                        Uploading…
+                      </>
+                    )}
+                  </p>
+                ) : (
+                  m.id === (lastReadMine ?? lastMineId) && (
+                    <p className="mr-1 mt-0.5 flex items-center justify-end gap-1 text-right text-[11px] text-fg-muted">
+                      {m.read_at && showReadReceipts ? (
+                        <>
+                          <Check className="h-3 w-3" strokeWidth={3} aria-hidden />
+                          Seen {timeAgo(m.read_at)} ago
+                        </>
+                      ) : (
+                        <>
+                          <Check className="h-3 w-3" strokeWidth={3} aria-hidden />
+                          Sent
+                        </>
+                      )}
+                    </p>
+                  )
+                ))}
             </div>
           );
         })}

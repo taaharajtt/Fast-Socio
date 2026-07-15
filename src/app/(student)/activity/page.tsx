@@ -5,13 +5,12 @@ import { timeAgo } from "@/lib/time";
 import {
   notificationView,
   notificationActionPhrase,
-  SYSTEM_NOTIFICATION_TYPES,
 } from "@/lib/notifications/view";
 import {
   ActivityList,
   type ActivityItem,
 } from "@/components/notifications/activity-list";
-import { MarkAllReadButton } from "@/components/notifications/mark-all-read";
+import { AutoMarkRead } from "@/components/notifications/mark-all-read";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -41,54 +40,24 @@ type FeedItem = {
   anyUnread: boolean;
 };
 
-const GROUP_WINDOW_MS = 60 * 60 * 1000; // bundle same-sender actions within 1h
-
 /**
- * Bundle consecutive notifications from the same actor that occur within an hour
- * into one item (CR-013). System notifications (matches, approvals) are never
- * grouped — each is its own item.
+ * One item per notification — no bundling. Notifications are never merged, not
+ * even multiple from the same person (product decision): every like, comment,
+ * and event is its own row. (The DB-side per-post collapse was removed in mig
+ * 0077; this drops the former client-side same-actor hourly grouping.)
  */
 function buildFeed(notifs: Notif[]): FeedItem[] {
-  const items: FeedItem[] = [];
-  const open = new Map<string, FeedItem>();
-
-  for (const n of notifs) {
-    const groupable = n.actor_id && !SYSTEM_NOTIFICATION_TYPES.has(n.type);
-    if (!groupable) {
-      items.push({
-        key: n.id,
-        actorId: n.actor_id,
-        actions: [n],
-        latestAt: n.created_at,
-        anyUnread: !n.read_at,
-      });
-      continue;
-    }
-    const actor = n.actor_id as string;
-    const g = open.get(actor);
-    const withinWindow =
-      g &&
-      new Date(g.latestAt).getTime() - new Date(n.created_at).getTime() <=
-        GROUP_WINDOW_MS;
-    if (g && withinWindow) {
-      g.actions.push(n);
-      g.anyUnread = g.anyUnread || !n.read_at;
-    } else {
-      const item: FeedItem = {
-        key: `${actor}:${n.id}`,
-        actorId: actor,
-        actions: [n],
-        latestAt: n.created_at,
-        anyUnread: !n.read_at,
-      };
-      open.set(actor, item);
-      items.push(item);
-    }
-  }
-
-  return items.sort(
-    (a, b) => new Date(b.latestAt).getTime() - new Date(a.latestAt).getTime()
-  );
+  return notifs
+    .map((n) => ({
+      key: n.id,
+      actorId: n.actor_id,
+      actions: [n],
+      latestAt: n.created_at,
+      anyUnread: !n.read_at,
+    }))
+    .sort(
+      (a, b) => new Date(b.latestAt).getTime() - new Date(a.latestAt).getTime()
+    );
 }
 
 function summarize(item: FeedItem, actorName: string | null): string {
@@ -143,10 +112,11 @@ export default async function ActivityPage() {
   }
 
   const feed = buildFeed(notifs);
-  const unreadCount = notifs.filter((n) => !n.read_at).length;
 
-  // NB: reads are no longer cleared on open (UISpec V3) — the unread purple
-  // borders persist until the user taps "Mark all read".
+  // Reads are cleared automatically on open (AutoMarkRead, below). The current
+  // render still shows the unread highlights for THIS visit — the mark-read runs
+  // client-side without revalidating — so nothing is missed, and next visit the
+  // rows (and the bell badge) read as seen.
 
   // Flatten into serializable rows for the list.
   const items: ActivityItem[] = feed.map((item) => {
@@ -179,8 +149,10 @@ export default async function ActivityPage() {
         <h1 className="flex-1 text-[22px] font-bold tracking-tight">
           Notifications
         </h1>
-        {unreadCount > 0 && <MarkAllReadButton />}
       </header>
+
+      {/* Visiting the panel marks everything read automatically (no button). */}
+      <AutoMarkRead />
 
       {items.length === 0 ? (
         <p className="py-16 text-center text-[15px] text-fg-muted">

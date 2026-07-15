@@ -264,6 +264,38 @@ export default async function ChatPage({
           </p>
         ) : (
           <>
+            {/* Fresh matches (no conversation yet) sit at the TOP so a new match
+                is the first thing seen, not buried under older threads. */}
+            {newMatches.map((otherId) => {
+              const p = profiles.get(otherId);
+              return (
+                <div
+                  key={`nm:${otherId}`}
+                  className="flex items-center gap-3 rounded-[12px] px-3 py-3"
+                >
+                  <Link
+                    href={`/profile/${otherId}`}
+                    className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full bg-card"
+                  >
+                    {p?.avatar_url && (
+                      <AppImage
+                        src={p.avatar_url}
+                        alt={p.full_name ?? "Match"}
+                        sizes="44px"
+                      />
+                    )}
+                  </Link>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[15px] font-semibold text-fg">
+                      {p?.full_name ?? "Student"}
+                    </p>
+                    <p className="truncate text-sm text-accent">New match ✨</p>
+                  </div>
+                  <OpenChatButton otherId={otherId} />
+                </div>
+              );
+            })}
+
             {threads.map((t) => {
               if (t.kind === "community") {
                 return (
@@ -350,36 +382,6 @@ export default async function ChatPage({
                     )}
                   </span>
                 </Link>
-              );
-            })}
-
-            {newMatches.map((otherId) => {
-              const p = profiles.get(otherId);
-              return (
-                <div
-                  key={otherId}
-                  className="flex items-center gap-3 rounded-[12px] px-3 py-3"
-                >
-                  <Link
-                    href={`/profile/${otherId}`}
-                    className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full bg-card"
-                  >
-                    {p?.avatar_url && (
-                      <AppImage
-                        src={p.avatar_url}
-                        alt={p.full_name ?? "Match"}
-                        sizes="44px"
-                      />
-                    )}
-                  </Link>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[15px] font-semibold text-fg">
-                      {p?.full_name ?? "Student"}
-                    </p>
-                    <p className="truncate text-sm text-accent">New match ✨</p>
-                  </div>
-                  <OpenChatButton otherId={otherId} />
-                </div>
               );
             })}
           </>
