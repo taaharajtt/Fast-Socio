@@ -28,6 +28,14 @@ export function presenceLabel(lastSeenAt: string | null | undefined): string {
   return `Active ${timeAgo(lastSeenAt)} ago`;
 }
 
+/** Clock time for a chat message, e.g. "2:32 PM" / "14:32" (locale-aware). */
+export function clockTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 /** Compact relative time, e.g. "now", "5m", "3h", "2d", "4w". */
 export function timeAgo(iso: string): string {
   const then = new Date(iso).getTime();

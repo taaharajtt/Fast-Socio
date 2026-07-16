@@ -1,0 +1,25 @@
+-- =============================================================================
+-- FAST SOCIO — Restore UPDATE grant on public.profiles for authenticated
+--
+-- SYMPTOM: "permission denied for table profiles" (SQLSTATE 42501) during
+-- account creation. The onboarding wizard saves via an UPSERT
+-- (`insert ... on conflict (id) do update`) — see src/app/onboarding/actions.ts.
+-- Because handle_new_user() (mig 0001) already inserts the profiles row at
+-- signup, that upsert always resolves to the DO UPDATE branch, which requires
+-- the table-level UPDATE privilege.
+--
+-- ROOT CAUSE: the `authenticated` role had every privilege on public.profiles
+-- EXCEPT UPDATE (verified against the live DB, 2026-07-16). No migration ever
+-- revoked it — the grant drifted out of the schema out-of-band (e.g. a manual
+-- dashboard/SQL change), so the repo and the live database disagreed. The
+-- table's design has always assumed authenticated can UPDATE: the RLS policy
+-- "users can update their own profile" (mig 0001) is meaningless without the
+-- underlying GRANT, and protect_profile_columns() (mig 0001/0022) guards the
+-- privileged columns (aura_score, is_admin, is_banned) against self-escalation.
+--
+-- FIX: restore the grant. This does NOT weaken security — RLS (id = auth.uid())
+-- scopes the write to the caller's own row and the protect trigger still blocks
+-- privileged-column escalation. Idempotent: safe to re-run.
+-- =============================================================================
+
+grant update on public.profiles to authenticated;

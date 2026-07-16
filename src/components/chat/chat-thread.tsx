@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils";
 import { useKeyboardInset } from "@/lib/use-keyboard-inset";
 import { createClient } from "@/lib/supabase/client";
 import { chatMediaPath, CHAT_MEDIA_TTL_SECONDS } from "@/lib/chat-media";
-import { timeAgo } from "@/lib/time";
+import { clockTime, absoluteTime, timeAgo } from "@/lib/time";
 import { VoiceNote } from "@/components/chat/voice-note";
 import {
   SharedPostCard,
@@ -867,43 +867,46 @@ export function ChatThread({
                 </div>
               )}
 
-              {/* UAT-004: a read receipt now says WHEN, not just "Read". An
-                  image still uploading shows its own status here regardless of
-                  whether it's the last message. */}
-              {mine &&
-                (m._uploadStatus === "uploading" || m._uploadStatus === "error" ? (
-                  <p
-                    className={cn(
-                      "mr-1 mt-0.5 flex items-center justify-end gap-1 text-right text-[11px]",
-                      m._uploadStatus === "error" ? "text-error" : "text-fg-muted"
-                    )}
-                  >
-                    {m._uploadStatus === "error" ? (
-                      "Failed to send"
-                    ) : (
+              {/* WhatsApp-style meta line under every message: a clock time on
+                  each bubble, plus the send/read status on my own messages.
+                  UAT-004: the receipt says WHEN a message was seen, not just
+                  "Read"; an image still uploading shows its own status. */}
+              {!deleted && (
+                <p
+                  className={cn(
+                    "mt-0.5 flex items-center gap-1 text-[11px] text-fg-muted",
+                    mine ? "justify-end pr-1" : "justify-start pl-1",
+                    m._uploadStatus === "error" && "text-error"
+                  )}
+                >
+                  <time dateTime={m.created_at} title={absoluteTime(m.created_at)}>
+                    {clockTime(m.created_at)}
+                  </time>
+                  {mine &&
+                    (m._uploadStatus === "uploading" ? (
                       <>
+                        <span aria-hidden>·</span>
                         <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
                         Uploading…
                       </>
-                    )}
-                  </p>
-                ) : (
-                  m.id === (lastReadMine ?? lastMineId) && (
-                    <p className="mr-1 mt-0.5 flex items-center justify-end gap-1 text-right text-[11px] text-fg-muted">
-                      {m.read_at && showReadReceipts ? (
+                    ) : m._uploadStatus === "error" ? (
+                      <>
+                        <span aria-hidden>·</span>
+                        Failed to send
+                      </>
+                    ) : (
+                      m.id === (lastReadMine ?? lastMineId) && (
                         <>
+                          <span aria-hidden>·</span>
                           <Check className="h-3 w-3" strokeWidth={3} aria-hidden />
-                          Seen {timeAgo(m.read_at)} ago
+                          {m.read_at && showReadReceipts
+                            ? `Seen ${timeAgo(m.read_at)} ago`
+                            : "Sent"}
                         </>
-                      ) : (
-                        <>
-                          <Check className="h-3 w-3" strokeWidth={3} aria-hidden />
-                          Sent
-                        </>
-                      )}
-                    </p>
-                  )
-                ))}
+                      )
+                    ))}
+                </p>
+              )}
             </div>
           );
         })}
@@ -954,7 +957,7 @@ export function ChatThread({
               autoFocus
               value={editDraft}
               onChange={(e) => setEditDraft(e.target.value)}
-              className="glass h-11 flex-1 rounded-[var(--radius-pill)] px-4 text-base text-fg outline-none focus:ring-2 focus:ring-aura/40"
+              className="glass h-11 min-w-0 flex-1 rounded-[var(--radius-pill)] px-4 text-base text-fg outline-none focus:ring-2 focus:ring-aura/40"
             />
             <GlassButton
               type="submit"
@@ -1027,7 +1030,10 @@ export function ChatThread({
             }}
             placeholder={recording ? "Recording…" : "Message…"}
             disabled={recording}
-            className="glass h-11 flex-1 rounded-[var(--radius-pill)] px-4 text-base text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
+            // min-w-0 lets this flex-1 input shrink below its intrinsic width so
+            // the row never overflows and pushes the Send button off-screen on
+            // narrow viewports (a flex item defaults to min-width:auto).
+            className="glass h-11 min-w-0 flex-1 rounded-[var(--radius-pill)] px-4 text-base text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
           />
           <GlassButton
             type="submit"

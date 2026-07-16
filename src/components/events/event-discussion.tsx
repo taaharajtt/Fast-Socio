@@ -5,6 +5,7 @@ import { Send } from "lucide-react";
 import { GlassButton } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
 import { cn } from "@/lib/utils";
+import { clockTime, absoluteTime } from "@/lib/time";
 import { createClient } from "@/lib/supabase/client";
 import { sendEventMessage } from "@/app/(student)/events/actions";
 
@@ -157,6 +158,16 @@ export function EventDiscussion({
                   </p>
                 )}
                 {m.body}
+                <time
+                  dateTime={m.created_at}
+                  title={absoluteTime(m.created_at)}
+                  className={cn(
+                    "mt-0.5 block text-right text-[10px]",
+                    mine ? "text-white/70" : "text-fg-muted"
+                  )}
+                >
+                  {clockTime(m.created_at)}
+                </time>
               </div>
             </div>
           );
@@ -170,7 +181,9 @@ export function EventDiscussion({
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="Message attendees…"
-            className="glass h-11 flex-1 rounded-[var(--radius-pill)] px-4 text-[15px] text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
+            // min-w-0 lets the input shrink so the Send button stays on-screen
+            // on narrow viewports instead of being pushed off the row.
+            className="glass h-11 min-w-0 flex-1 rounded-[var(--radius-pill)] px-4 text-[15px] text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
           />
           <GlassButton
             type="submit"

@@ -11,7 +11,15 @@ export function DeleteAccountButton() {
 
   if (!confirming) {
     return (
-      <GlassButton variant="danger" size="md" onClick={() => setConfirming(true)}>
+      // Force a solid error fill + white text (not the /90 alpha) and a border,
+      // so the destructive action is unmistakably visible in BOTH light and dark
+      // themes — a translucent danger fill can wash out on the light surface.
+      <GlassButton
+        variant="danger"
+        size="md"
+        onClick={() => setConfirming(true)}
+        className="border border-error !bg-error !text-white"
+      >
         Delete account
       </GlassButton>
     );
