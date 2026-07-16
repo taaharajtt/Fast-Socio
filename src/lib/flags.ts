@@ -49,13 +49,13 @@ export type MaintenanceState = {
 export const getMaintenanceState = cache(
   async (): Promise<MaintenanceState> => {
     const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("app_settings")
-      .select("value")
-      .eq("key", "maintenance")
-      .maybeSingle();
+    // Read via the get_maintenance_state() SECURITY DEFINER RPC. The base
+    // app_settings table is no longer directly readable by authenticated users
+    // (migration 0081) so its rollout/version config isn't enumerable; the RPC
+    // returns only the public-safe { enabled, message } shape.
+    const { data, error } = await supabase.rpc("get_maintenance_state");
     if (error || !data) return { enabled: false, message: "" };
-    const value = (data.value ?? {}) as Record<string, unknown>;
+    const value = (data ?? {}) as Record<string, unknown>;
     return {
       enabled: Boolean(value.enabled),
       message: typeof value.message === "string" ? value.message : "",
