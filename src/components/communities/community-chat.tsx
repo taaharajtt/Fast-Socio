@@ -283,7 +283,9 @@ export function CommunityChat({
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder={anon ? "Message anonymously…" : "Message the community…"}
-            className="glass h-11 flex-1 rounded-[var(--radius-pill)] px-4 text-base text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
+            // min-w-0 lets the input shrink so the Send button stays on-screen
+            // on narrow viewports instead of being pushed off the row.
+            className="glass h-11 min-w-0 flex-1 rounded-[var(--radius-pill)] px-4 text-base text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
           />
           <GlassButton
             type="submit"
