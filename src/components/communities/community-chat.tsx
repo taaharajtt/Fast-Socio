@@ -5,6 +5,7 @@ import { BarChart3, Plus, Send, VenetianMask, X } from "lucide-react";
 import { GlassButton } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
 import { cn } from "@/lib/utils";
+import { clockTime, absoluteTime } from "@/lib/time";
 import { useKeyboardInset } from "@/lib/use-keyboard-inset";
 import { createClient } from "@/lib/supabase/client";
 import { PollCard } from "@/components/communities/poll-card";
@@ -248,6 +249,16 @@ export function CommunityChat({
                 ) : (
                   m.body
                 )}
+                <time
+                  dateTime={m.created_at}
+                  title={absoluteTime(m.created_at)}
+                  className={cn(
+                    "mt-0.5 block text-right text-[10px]",
+                    mine ? "text-white/70" : "text-fg-muted"
+                  )}
+                >
+                  {clockTime(m.created_at)}
+                </time>
               </div>
             </div>
           );
