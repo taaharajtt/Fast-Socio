@@ -1,0 +1,24 @@
+-- =============================================================================
+-- FAST SOCIO — Re-enable Row Level Security on public.profiles
+--
+-- RLS was declared for public.profiles back in migration 0001, but the live
+-- database had it toggled OFF out-of-band (verified 2026-07-16:
+-- pg_class.relrowsecurity = false). With RLS disabled the SELECT/INSERT/UPDATE
+-- policies still existed but were NOT enforced, so the table-level grants alone
+-- governed access — meaning any authenticated user could read or write ANY
+-- profile row. The Supabase security advisor flagged this as
+-- `rls_disabled_in_public`.
+--
+-- Re-enabling restores the intended access model (all policies already exist,
+-- unchanged, from migrations 0001 / 0032):
+--   * SELECT: any authenticated user may read any profile (using true)
+--   * INSERT: only your own row            (with check id = auth.uid())
+--   * UPDATE: only your own row            (using / with check id = auth.uid())
+--   * DELETE: no policy -> only service role / SECURITY DEFINER may delete
+--
+-- Verified after enabling: the onboarding account-creation upsert still
+-- succeeds for the row owner, and a WHERE-less UPDATE by an authenticated user
+-- affects exactly their own row (1 of 53), confirming enforcement. Idempotent.
+-- =============================================================================
+
+alter table public.profiles enable row level security;
