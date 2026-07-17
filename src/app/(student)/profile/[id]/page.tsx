@@ -33,14 +33,26 @@ export default async function PublicProfilePage({
   const me = user!.id;
   const isSelf = id === me;
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select(
-      "id, full_name, department, semester, bio, avatar_url, cover_url, aura_score, verified, last_seen_at, show_online, show_aura, show_department, show_semester, deactivated_at"
-    )
-    .eq("id", id)
-    .single();
+  const [{ data: profile }, { data: presence }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select(
+        "id, full_name, department, semester, bio, avatar_url, cover_url, aura_score, verified, show_online, show_aura, show_department, show_semester, deactivated_at"
+      )
+      .eq("id", id)
+      .single(),
+    // Presence moved to profile_presence (mig 0092), where an RLS policy — not
+    // this page — decides whether you may see it. A user with show_online off
+    // simply returns no row, so last_seen_at is null and reads as offline.
+    supabase
+      .from("profile_presence")
+      .select("last_seen_at")
+      .eq("id", id)
+      .maybeSingle(),
+  ]);
   if (!profile) notFound();
+
+  const lastSeenAt = presence?.last_seen_at ?? null;
 
   // Privacy gating (Refactor Phase 8): a viewer never sees hidden fields; the
   // owner always sees their own. Columns are absent until mig 0058 → default to
@@ -192,7 +204,7 @@ export default async function PublicProfilePage({
                 </span>
               )}
             </div>
-            {showOnline && isOnline(profile.last_seen_at) && (
+            {showOnline && isOnline(lastSeenAt) && (
               <OnlineDot className="bottom-1 right-1 h-3.5 w-3.5" />
             )}
           </div>
@@ -220,7 +232,7 @@ export default async function PublicProfilePage({
             <p className="truncate text-sm text-fg-muted">{deptLabel}</p>
             {showOnline && (
               <p className="truncate text-xs text-fg-disabled">
-                {presenceLabel(profile.last_seen_at)}
+                {presenceLabel(lastSeenAt)}
               </p>
             )}
           </div>

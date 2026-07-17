@@ -36,12 +36,21 @@ export default async function ConversationPage({
   if (!conv) notFound();
 
   const otherId = conv.user_low === me ? conv.user_high : conv.user_low;
-  const [{ data: other }, { data: msgs }] = await Promise.all([
+  const [{ data: other }, { data: otherPresence }, { data: msgs }] = await Promise.all([
     supabase
       .from("profiles")
-      .select("full_name, avatar_url, department, last_seen_at, read_receipts")
+      .select("full_name, avatar_url, department, read_receipts")
       .eq("id", otherId)
       .single(),
+    // Presence now comes from profile_presence (mig 0092). This header used to
+    // read profiles.last_seen_at directly and never checked show_online, so a
+    // user who had turned presence off still showed an online dot here. The RLS
+    // policy now decides: no row means offline, with nothing to forget.
+    supabase
+      .from("profile_presence")
+      .select("last_seen_at")
+      .eq("id", otherId)
+      .maybeSingle(),
     supabase
       .from("messages")
       // select * (not an explicit list) so this query keeps working before the
@@ -152,8 +161,9 @@ export default async function ConversationPage({
               ) : null}
             </div>
             {/* UAT-003: the dot used to be unconditional, so every match looked
-                online. It now tracks the other user's heartbeat. */}
-            {isOnline(other?.last_seen_at) && <OnlineDot />}
+                online. It now tracks the other user's heartbeat — and only when
+                they publish it (mig 0092 enforces show_online in RLS). */}
+            {isOnline(otherPresence?.last_seen_at) && <OnlineDot />}
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate font-semibold">
@@ -161,7 +171,7 @@ export default async function ConversationPage({
             </p>
             <p className="truncate text-[11px] text-fg-muted">
               {other?.department ? `${other.department} · ` : ""}
-              {presenceLabel(other?.last_seen_at)}
+              {presenceLabel(otherPresence?.last_seen_at)}
             </p>
           </div>
         </Link>

@@ -118,11 +118,25 @@ export default async function ChatPage({
 
   const profiles = new Map<string, ProfileLite>();
   if (otherIds.size > 0) {
-    const { data: profRows } = await supabase
-      .from("profiles")
-      .select("id, full_name, avatar_url, department, last_seen_at")
-      .in("id", [...otherIds]);
-    (profRows ?? []).forEach((p) => profiles.set(p.id, p));
+    const ids = [...otherIds];
+    // Presence lives in profile_presence (mig 0092) and is RLS-gated on the
+    // owner's show_online, so this returns rows only for people who publish it.
+    // Anyone who has it switched off is simply absent → last_seen_at null →
+    // rendered offline. The list used to read profiles.last_seen_at and show an
+    // online dot regardless of the setting.
+    const [{ data: profRows }, { data: presRows }] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("id, full_name, avatar_url, department")
+        .in("id", ids),
+      supabase.from("profile_presence").select("id, last_seen_at").in("id", ids),
+    ]);
+    const seen = new Map(
+      (presRows ?? []).map((r) => [r.id as string, r.last_seen_at as string | null])
+    );
+    (profRows ?? []).forEach((p) =>
+      profiles.set(p.id, { ...p, last_seen_at: seen.get(p.id) ?? null })
+    );
   }
 
   const incoming: IncomingRequest[] = requests.map((r) => {
