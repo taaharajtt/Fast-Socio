@@ -39,47 +39,6 @@ export async function reactivateAccount(): Promise<{ error: string } | void> {
   revalidatePath("/settings/account");
 }
 
-const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
-
-/**
- * Change username with a live-checked format + uniqueness. The 30-day cooldown
- * is enforced authoritatively by a DB trigger (mig 0058); we surface its error.
- */
-export async function changeUsername(
-  raw: string
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const username = raw.trim().toLowerCase();
-  if (!USERNAME_RE.test(username))
-    return {
-      ok: false,
-      error: "3–20 chars, lowercase letters, numbers or underscore.",
-    };
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
-
-  // Friendly pre-check (the unique index is the real guard).
-  const { data: taken } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("username", username)
-    .neq("id", user.id)
-    .maybeSingle();
-  if (taken) return { ok: false, error: "That username is taken." };
-
-  const { error } = await supabase
-    .from("profiles")
-    .update({ username })
-    .eq("id", user.id);
-  if (error) {
-    if (error.message.includes("once every 30 days"))
-      return { ok: false, error: "You can only change your username once every 30 days." };
-    if (error.code === "23505") return { ok: false, error: "That username is taken." };
-    return { ok: false, error: error.message };
-  }
-  revalidatePath("/settings/account");
-  return { ok: true };
-}
+// Usernames are permanently fixed to the campus roll number (email local-part),
+// assigned by handle_new_user() at signup and immutable thereafter (mig 0094).
+// There is no change-username path by design.

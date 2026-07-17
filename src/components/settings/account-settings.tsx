@@ -1,14 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { GlassButton, GlassInput } from "@/components/ui";
+import { GlassButton } from "@/components/ui";
 import {
-  changeUsername,
   deactivateAccount,
   reactivateAccount,
 } from "@/app/(student)/settings/account-actions";
-
-const USERNAME_RE = /^[a-z0-9_]{0,20}$/;
 
 export function AccountSettings({
   currentUsername,
@@ -17,22 +14,8 @@ export function AccountSettings({
   currentUsername: string | null;
   deactivated: boolean;
 }) {
-  const [username, setUsername] = useState(currentUsername ?? "");
-  const [uMsg, setUMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [isDeactivated, setIsDeactivated] = useState(deactivated);
   const [pending, start] = useTransition();
-
-  const dirty = username.trim().toLowerCase() !== (currentUsername ?? "");
-  const valid = /^[a-z0-9_]{3,20}$/.test(username.trim().toLowerCase());
-
-  function saveUsername() {
-    setUMsg(null);
-    start(async () => {
-      const res = await changeUsername(username);
-      if (res.ok) setUMsg({ ok: true, text: "Username updated." });
-      else setUMsg({ ok: false, text: res.error });
-    });
-  }
 
   function toggleDeactivate() {
     start(async () => {
@@ -50,33 +33,12 @@ export function AccountSettings({
         <div className="rounded-[var(--radius-card)] bg-card p-5 space-y-3">
           <div className="flex items-center gap-2">
             <span className="text-fg-muted">@</span>
-            <GlassInput
-              value={username}
-              onChange={(e) => {
-                const v = e.target.value.toLowerCase();
-                if (USERNAME_RE.test(v)) setUsername(v);
-              }}
-              placeholder="username"
-              autoCapitalize="none"
-              spellCheck={false}
-            />
+            <span className="font-medium">{currentUsername ?? "—"}</span>
           </div>
           <p className="text-xs text-fg-muted">
-            3–20 characters — lowercase letters, numbers, underscore. Can be
-            changed once every 30 days.
+            Your username is your roll number. It&apos;s set from your campus
+            email and can&apos;t be changed.
           </p>
-          <GlassButton
-            size="sm"
-            onClick={saveUsername}
-            disabled={pending || !dirty || !valid}
-          >
-            {pending ? "Saving…" : "Save username"}
-          </GlassButton>
-          {uMsg && (
-            <p className={uMsg.ok ? "text-sm text-success" : "text-sm text-error"}>
-              {uMsg.text}
-            </p>
-          )}
         </div>
       </section>
 
