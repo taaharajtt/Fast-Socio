@@ -7,6 +7,7 @@ import {
   Megaphone,
   UserPlus,
   Bell,
+  AtSign,
   Image as ImageIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -33,6 +34,7 @@ export type ActivityItem = {
 const TYPE_ICON: Record<string, LucideIcon> = {
   post_like: Heart,
   comment: MessageSquare,
+  mention: AtSign,
   match: Star,
   match_post: ImageIcon,
   message: MessageSquare,

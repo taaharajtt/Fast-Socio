@@ -9,6 +9,7 @@ const ALL_TYPES: { type: string; data: Record<string, unknown> }[] = [
   { type: "message", data: { conversation_id: "c" } },
   { type: "post_like", data: { post_id: "p" } },
   { type: "comment", data: { post_id: "p" } },
+  { type: "mention", data: { post_id: "p" } },
   { type: "community_approved", data: { community_id: "c" } },
   { type: "event_approved", data: { event_id: "e" } },
   { type: "community_post_approved", data: { community_id: "c" } },

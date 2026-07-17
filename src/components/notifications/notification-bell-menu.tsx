@@ -6,6 +6,7 @@ import {
   Bell,
   Heart,
   MessageSquare,
+  AtSign,
   Star,
   Zap,
   Megaphone,
@@ -35,6 +36,7 @@ export type BellItem = {
 const TYPE_ICON: Record<string, LucideIcon> = {
   post_like: Heart,
   comment: MessageSquare,
+  mention: AtSign,
   match: Star,
   message: MessageSquare,
   message_request: UserPlus,
