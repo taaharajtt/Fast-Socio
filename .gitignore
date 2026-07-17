@@ -71,6 +71,16 @@ SECURITY.md
 AUDIT_REPORT.md
 IMPLEMENTATION_PLAN.md
 FAST-SOCIO-LaunchReadiness.md
+# These three name real people. The incident report and the DAST identify
+# students by roll number (i232064, i245681) and the owner by personal email,
+# alongside the attacker's IP and coordinates; the DAST is marked "Confidential
+# — For Internal Use Only" and its Appendix C JWT carries its author's address.
+# The hardening plan is a live inventory of still-open weaknesses. This repo is
+# public, so committing any of them publishes that permanently — history, forks
+# and mirrors survive a later delete.
+FAST-SOCIO-SecurityHardening-Plan.md
+SECURITY-INCIDENT-2026-07-15.md
+vapt_report.md
 
 # Local scratch screenshot (not part of the app)
 where_badges_are_placed.png
