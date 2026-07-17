@@ -62,7 +62,14 @@ function sanitizeTags(
   return [...new Set(values.filter((v) => set.has(v)))].slice(0, max);
 }
 
-/** Build the DB patch shared by autosave and finalize. Only defined keys land. */
+/**
+ * Build the `profiles` patch shared by autosave and finalize. Only defined keys
+ * land.
+ *
+ * The wizard's location + matching-preference fields are NOT here — they live
+ * on profile_private (mig 0089) so no other user can read them, and go through
+ * toPrivatePatch() below.
+ */
 function toProfilePatch(d: OnboardingDraft): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
   if (d.fullName !== undefined) patch.full_name = d.fullName.trim() || null;
@@ -84,12 +91,28 @@ function toProfilePatch(d: OnboardingDraft): Record<string, unknown> {
     patch.languages = sanitizeTags(d.languages, LANGUAGES, MAX_LANGUAGES);
   if (d.pronouns !== undefined)
     patch.pronouns = d.pronouns?.slice(0, 40).trim() || null;
+  if (d.graduationYear !== undefined) patch.graduation_year = d.graduationYear;
+  return patch;
+}
+
+/**
+ * Build the `profile_private` patch — the half of the wizard no other user may
+ * read (mig 0089, F16).
+ *
+ * These used to sit on `profiles`, where a SELECT policy of `using (true)` made
+ * them readable by anyone with an account: `GET /rest/v1/profiles?select=*`
+ * returned every user's pref_genders, relationship_pref, hometown and
+ * hostel_status. On profile_private, RLS scopes reads to the owner.
+ *
+ * Same sanitizers as before — only the destination table changed.
+ */
+function toPrivatePatch(d: OnboardingDraft): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
   if (d.hostelStatus !== undefined)
     patch.hostel_status =
       d.hostelStatus && HOSTEL_VALUES.includes(d.hostelStatus)
         ? d.hostelStatus
         : null;
-  if (d.graduationYear !== undefined) patch.graduation_year = d.graduationYear;
   if (d.hometown !== undefined)
     patch.hometown = d.hometown?.slice(0, 60).trim() || null;
   if (d.relationshipPref !== undefined)
@@ -140,6 +163,17 @@ export async function saveOnboardingStep(
     .from("profiles")
     .upsert({ ...patch, id: user.id }, { onConflict: "id" });
   if (error) return { error: error.message };
+
+  // The private half (mig 0089). Sequential, not parallel: profile_private.id
+  // is FK'd to profiles.id, so the profiles row must exist first for a
+  // self-healing insert to land.
+  const priv = toPrivatePatch(draft);
+  if (Object.keys(priv).length > 0) {
+    const { error: pErr } = await supabase
+      .from("profile_private")
+      .upsert({ ...priv, id: user.id }, { onConflict: "id" });
+    if (pErr) return { error: pErr.message };
+  }
   return undefined;
 }
 
@@ -182,6 +216,16 @@ export async function saveProfile(
     .from("profiles")
     .upsert({ ...patch, id: user.id }, { onConflict: "id" });
   if (error) return { error: error.message };
+
+  // The private half (mig 0089), before the redirect — a throw here would leave
+  // onboarding marked complete with the matching preferences dropped.
+  const priv = toPrivatePatch(draft);
+  if (Object.keys(priv).length > 0) {
+    const { error: pErr } = await supabase
+      .from("profile_private")
+      .upsert({ ...priv, id: user.id }, { onConflict: "id" });
+    if (pErr) return { error: pErr.message };
+  }
 
   redirect("/home");
 }

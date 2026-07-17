@@ -18,6 +18,7 @@ export async function GET() {
   const uid = user.id;
   const [
     profile,
+    profilePrivate,
     aura,
     prefs,
     blocks,
@@ -35,6 +36,10 @@ export async function GET() {
     notifications,
   ] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", uid).single(),
+    // Location + matching preferences moved off `profiles` in mig 0089, so the
+    // select("*") above no longer reaches them. Without this the export would
+    // silently stop including data the user is legally entitled to.
+    supabase.from("profile_private").select("*").eq("id", uid).maybeSingle(),
     supabase.from("aura_transactions").select("*").eq("user_id", uid),
     supabase
       .from("notification_preferences")
@@ -65,7 +70,10 @@ export async function GET() {
   const payload = {
     exported_at: new Date().toISOString(),
     account: { id: user.id, email: user.email, created_at: user.created_at },
-    profile: profile.data,
+    // Flattened back together on purpose: the profiles/profile_private split is
+    // an internal security boundary (mig 0089), not something the user's data
+    // export should expose. Keeps the payload shape identical to before.
+    profile: { ...profile.data, ...(profilePrivate.data ?? {}) },
     aura_transactions: aura.data ?? [],
     notification_preferences: prefs.data,
     blocked_users: blocks.data ?? [],
