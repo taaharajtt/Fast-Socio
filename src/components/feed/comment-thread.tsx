@@ -11,6 +11,7 @@ import Link from "next/link";
 import { Heart, Loader2, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { AppImage } from "@/components/ui/app-image";
+import { CommentBody } from "@/components/feed/comment-body";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/time";
 import {
@@ -385,7 +386,7 @@ function CommentRow({
           <span className="ml-2 text-fg-muted">{timeAgo(comment.created_at)}</span>
         </p>
         <p className="mt-0.5 whitespace-pre-wrap text-[15px] leading-[20px] text-fg">
-          {comment.body}
+          <CommentBody body={comment.body} />
         </p>
         <div className="mt-1 flex items-center gap-4">
           <button

@@ -8,6 +8,11 @@ import { isAppStorageUrl } from "@/lib/url-safety";
 import { FEED_PAGE_SIZE, type FeedPost } from "@/lib/feed/types";
 import { scoreContent, blockMessage } from "@/lib/moderation/rules";
 import { postingBlockReason } from "@/lib/moderation/server";
+import {
+  mentionToken,
+  mentionsToPlainText,
+  parseMentions,
+} from "@/lib/mentions";
 
 /**
  * Fetch a page of the main campus feed older than `cursor` (a created_at ISO
@@ -348,10 +353,101 @@ export async function fetchReplies(commentId: string): Promise<{
   return { replies: comments, authors };
 }
 
+/** A user the viewer can @-mention in a comment (one of their matches). */
+export type MentionTarget = {
+  id: string;
+  username: string | null;
+  full_name: string | null;
+  avatar_url: string | null;
+};
+
+/**
+ * The set of people the viewer may @-mention: their matches. Returned once when
+ * the composer first needs it and filtered client-side as the user types, so
+ * autocomplete is instant and there's no per-keystroke round trip. Mentions are
+ * restricted to matches by design — you can only tag people you've matched with.
+ */
+export async function fetchMentionRoster(): Promise<MentionTarget[]> {
+  const supabase = await createClient();
+  const userId = await getAuthUserId();
+  if (!userId) return [];
+
+  const { data: matchRows } = await supabase
+    .from("matches")
+    .select("user_low, user_high")
+    .or(`user_low.eq.${userId},user_high.eq.${userId}`);
+  const otherIds = [
+    ...new Set(
+      (matchRows ?? []).map((m) =>
+        m.user_low === userId ? m.user_high : m.user_low
+      )
+    ),
+  ];
+  if (otherIds.length === 0) return [];
+
+  const { data } = await supabase
+    .from("profiles")
+    .select("id, username, full_name, avatar_url")
+    .in("id", otherIds);
+  return (data ?? []) as MentionTarget[];
+}
+
+/**
+ * Make every @-mention token in a comment truthful before it's stored. For each
+ * token the client sent, we keep the link only when its id is a REAL profile
+ * that the author is actually matched with, and we relabel it with that
+ * profile's own username — so a crafted body can never render "@victim" pointing
+ * at someone else's page. Anything else is downgraded to plain "@handle" text.
+ */
+async function sanitizeMentions(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  authorId: string,
+  body: string
+): Promise<string> {
+  const parts = parseMentions(body);
+  const ids = [
+    ...new Set(parts.flatMap((p) => (p.type === "mention" ? [p.id] : []))),
+  ];
+  if (ids.length === 0) return body;
+
+  const [{ data: profs }, { data: matchRows }] = await Promise.all([
+    supabase.from("profiles").select("id, username").in("id", ids),
+    supabase
+      .from("matches")
+      .select("user_low, user_high")
+      .or(`user_low.eq.${authorId},user_high.eq.${authorId}`),
+  ]);
+  const nameById = new Map(
+    (profs ?? []).map((p: { id: string; username: string | null }) => [
+      p.id,
+      p.username,
+    ])
+  );
+  const matched = new Set(
+    (matchRows ?? []).map((m) =>
+      m.user_low === authorId ? m.user_high : m.user_low
+    )
+  );
+
+  return parts
+    .map((part) => {
+      if (part.type === "text") return part.value;
+      const realName = nameById.get(part.id);
+      if (realName && matched.has(part.id) && part.id !== authorId)
+        return mentionToken(realName, part.id);
+      return `@${realName ?? part.username}`;
+    })
+    .join("");
+}
+
 /**
  * Add a comment to a post, or a reply when parentId is set. One level of
  * nesting only — a reply's parent must itself be a top-level comment, enforced
  * by the enforce_comment_depth trigger (0065) in addition to this check.
+ *
+ * `body` may carry @-mention tokens (see lib/mentions). Length and moderation
+ * run on the human-visible text, and mentions are sanitized so stored links are
+ * always truthful.
  */
 export async function addComment(
   postId: string,
@@ -364,7 +460,9 @@ export async function addComment(
   if (!userId) return { ok: false, error: "Not signed in." };
 
   const text = body.trim();
-  if (text.length < 1 || text.length > 1000)
+  // Validate + moderate the human-readable text, not the token markup.
+  const visible = mentionsToPlainText(text);
+  if (visible.length < 1 || visible.length > 1000)
     return { ok: false, error: "Comment must be 1–1000 characters." };
 
   const allowed = await checkRateLimit("comment", 60, 60 * 60);
@@ -375,14 +473,21 @@ export async function addComment(
 
   // Rule engine (Phase 9): block severe content; hold a risky comment (hidden
   // until a moderator restores it).
-  const risk = scoreContent(text);
+  const risk = scoreContent(visible);
   if (risk.action === "block")
     return { ok: false, error: blockMessage(risk) };
+
+  const storedBody = await sanitizeMentions(supabase, userId, text);
+  // Mention tokens expand the stored body (mig 0095 widened the CHECK to 4000);
+  // guard here so an extreme mention count returns a friendly message instead of
+  // a raw constraint error.
+  if (storedBody.length > 4000)
+    return { ok: false, error: "Too many mentions in one comment." };
 
   const { error } = await supabase.from("post_comments").insert({
     post_id: postId,
     author_id: userId,
-    body: text,
+    body: storedBody,
     parent_id: parentId ?? null,
     risk_score: risk.score,
     hidden: risk.action === "hold",
