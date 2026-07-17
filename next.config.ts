@@ -16,22 +16,34 @@ const withPWA = withPWAInit({
   },
 });
 
-// Baseline Content-Security-Policy (Phase 1 web hardening). Script/style allow
-// 'unsafe-inline' for now because Next injects inline bootstrap; this is
-// tightened with nonces during Phase 12 hardening. connect-src permits Supabase
-// REST + Realtime (wss). frame-ancestors 'none' blocks clickjacking.
+// Baseline Content-Security-Policy (Phase 1 web hardening). connect-src permits
+// Supabase REST + Realtime (wss). frame-ancestors 'none' blocks clickjacking.
 //
 // Pin the Supabase host to THIS project (audit P2-03) instead of a *.supabase.co
 // wildcard, and add an explicit media-src so voice-note audio served from
 // storage actually loads (it was falling back to default-src 'self' and being
 // blocked). Falls back to the wildcard only if the env var is unset at build.
+//
+// 'unsafe-eval' is dev-only: React uses eval() there to rebuild server-side
+// error stacks in the browser. Neither React nor Next needs it in production,
+// so production drops it outright (security-hardening F10).
+//
+// 'unsafe-inline' stays in script-src for now, and that is a deliberate,
+// documented trade rather than an oversight. Removing it requires nonces, and
+// per Next's CSP guide nonces force EVERY page to render dynamically, which
+// disables static optimization, ISR and CDN caching and is outright
+// incompatible with PPR. That would undo the TTFB work (3s -> 0.7s) for a
+// partial XSS gain. Revisit via experimental `sri` (hash-based CSP keeps static
+// rendering) once it is no longer experimental.
+const isDev = process.env.NODE_ENV === "development";
 const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
   ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).host
   : "*.supabase.co";
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
+  "object-src 'none'",
   `img-src 'self' blob: data: https://${supabaseHost}`,
   `media-src 'self' blob: https://${supabaseHost}`,
   "font-src 'self' data:",
@@ -56,6 +68,15 @@ const securityHeaders = [
     key: "Strict-Transport-Security",
     value: "max-age=63072000; includeSubDomains; preload",
   },
+  // Isolate our browsing context group so a cross-origin opener can't reach
+  // into window.opener (F10 headers pass). Safe here: auth is magic-link, so
+  // there is no OAuth popup relying on an opener handle.
+  //
+  // Deliberately NOT adding Cross-Origin-Embedder-Policy: require-corp -- it
+  // would block every Supabase-hosted avatar, post image and voice note unless
+  // storage returns Cross-Origin-Resource-Policy, which it does not guarantee.
+  // COEP buys cross-origin isolation we have no use for (no SharedArrayBuffer).
+  { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
 ];
 
 const nextConfig: NextConfig = {
