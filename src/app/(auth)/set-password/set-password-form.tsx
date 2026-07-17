@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { GlassButton, GlassInput } from "@/components/ui";
 import { createClient } from "@/lib/supabase/client";
-import { passwordError } from "@/lib/auth/password";
+import { passwordError, PASSWORD_MIN_LENGTH } from "@/lib/auth/password";
 
 /**
  * Client form for /set-password. Sets the password on the current session
@@ -78,7 +78,7 @@ export function SetPasswordForm({
           type="password"
           autoComplete="new-password"
           aria-label="New password"
-          placeholder="New password (min 8 characters)"
+          placeholder={`New password (${PASSWORD_MIN_LENGTH}+ chars, mixed case & a number)`}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           disabled={loading}
