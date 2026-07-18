@@ -13,6 +13,7 @@ import { deptMeta } from "@/lib/leaderboard/departments";
 import { isOnline, presenceLabel } from "@/lib/time";
 import type { FeedPost } from "@/lib/feed/types";
 import { semesterLabel } from "@/lib/profile/constants";
+import { deriveSemester } from "@/lib/profile/semester";
 
 export default async function PublicProfilePage({
   params,
@@ -31,7 +32,7 @@ export default async function PublicProfilePage({
     supabase
       .from("profiles")
       .select(
-        "id, full_name, department, semester, bio, avatar_url, cover_url, aura_score, verified, show_online, show_aura, show_department, show_semester, deactivated_at"
+        "id, full_name, username, department, bio, avatar_url, cover_url, aura_score, verified, show_online, show_aura, show_department, show_semester, deactivated_at"
       )
       .eq("id", id)
       .single(),
@@ -147,12 +148,11 @@ export default async function PublicProfilePage({
       .join("")
       .toUpperCase() || "?";
 
+  const semester = deriveSemester(profile.username);
   const deptLabel =
     showDept && profile.department
       ? deptMeta(profile.department).abbr +
-        (showSem && profile.semester
-          ? ` · ${semesterLabel(profile.semester)}`
-          : "")
+        (showSem && semester ? ` · ${semesterLabel(semester)}` : "")
       : "—";
 
   return (

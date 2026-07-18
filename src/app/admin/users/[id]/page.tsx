@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getAdminContext } from "@/lib/admin/access";
 import { auraReasonLabel } from "@/lib/aura/labels";
 import { semesterLabel } from "@/lib/profile/constants";
+import { deriveSemester } from "@/lib/profile/semester";
 import type { GrantableRole } from "@/app/admin/users/actions";
 
 const nf = new Intl.NumberFormat("en-US");
@@ -34,7 +35,7 @@ export default async function AdminUserPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, full_name, department, semester, aura_score, is_banned, admin_role, verified")
+    .select("id, full_name, username, department, aura_score, is_banned, admin_role, verified")
     .eq("id", id)
     .single();
   if (!profile) notFound();
@@ -127,7 +128,9 @@ export default async function AdminUserPage({
         </div>
         <p className="mt-1 text-xs text-fg-muted">
           {profile.department ?? "—"}
-          {profile.semester ? ` · ${semesterLabel(profile.semester)}` : ""}
+          {deriveSemester(profile.username)
+            ? ` · ${semesterLabel(deriveSemester(profile.username)!)}`
+            : ""}
           <span className="ml-2 font-mono text-fg-disabled">{profile.id}</span>
         </p>
       </header>

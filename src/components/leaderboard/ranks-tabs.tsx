@@ -15,6 +15,7 @@ import {
 
 const PERIODS: { key: LeaderboardPeriod; label: string }[] = [
   { key: "weekly", label: "Weekly" },
+  { key: "monthly", label: "Monthly" },
   { key: "alltime", label: "All-Time" },
 ];
 

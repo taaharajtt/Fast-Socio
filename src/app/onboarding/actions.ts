@@ -15,7 +15,6 @@ import {
   MIN_INTERESTS,
   PERSONALITY_TRAITS,
   RELATIONSHIP_PREFS,
-  ALUMNI_SEMESTER,
 } from "@/lib/profile/constants";
 import { isAppStorageUrl } from "@/lib/url-safety";
 
@@ -28,7 +27,6 @@ export type OnboardingDraft = {
   fullName?: string;
   avatarUrl?: string | null;
   department?: string;
-  semester?: number | null;
   gender?: string | null;
   interests?: string[];
   bio?: string;
@@ -76,7 +74,6 @@ function toProfilePatch(d: OnboardingDraft): Record<string, unknown> {
   if (d.fullName !== undefined) patch.full_name = d.fullName.trim() || null;
   if (d.department !== undefined && DEPARTMENTS.includes(d.department as never))
     patch.department = d.department;
-  if (d.semester !== undefined) patch.semester = d.semester;
   if (d.gender !== undefined)
     patch.gender = d.gender && GENDER_VALUES.includes(d.gender) ? d.gender : null;
   if (d.interests !== undefined)
@@ -196,12 +193,8 @@ export async function saveProfile(
   const fullName = (draft.fullName ?? "").trim();
   if (fullName.length < 2) return { error: "Please enter your name." };
   if (!draft.department) return { error: "Please choose your department." };
-  if (
-    !draft.semester ||
-    draft.semester < 1 ||
-    draft.semester > ALUMNI_SEMESTER
-  )
-    return { error: "Please choose your semester." };
+  // Semester is not collected — it's derived from the roll number on read
+  // (see lib/profile/semester.ts).
   const interests = sanitizeTags(draft.interests, INTERESTS, MAX_INTERESTS);
   if (interests.length < MIN_INTERESTS)
     return { error: `Pick ${MIN_INTERESTS}–${MAX_INTERESTS} interests.` };

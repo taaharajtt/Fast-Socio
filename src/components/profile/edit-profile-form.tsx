@@ -18,14 +18,11 @@ import {
   INTERESTS,
   MAX_INTERESTS,
   MIN_INTERESTS,
-  SEMESTERS,
-  ALUMNI_SEMESTER,
 } from "@/lib/profile/constants";
 
 export type EditableProfile = {
   full_name: string | null;
   department: string | null;
-  semester: number | null;
   gender: string | null;
   interests: string[];
   bio: string | null;
@@ -44,7 +41,6 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
       avatarUrl: profile.avatar_url,
       coverUrl: profile.cover_url,
       department: profile.department ?? "",
-      semester: profile.semester,
       gender: profile.gender,
       interests: profile.interests ?? [],
       bio: profile.bio ?? "",
@@ -59,7 +55,6 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
   const [uploading, setUploading] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
   const [department, setDepartment] = useState(initial.department);
-  const [semester, setSemester] = useState<number | null>(initial.semester);
   const [gender, setGender] = useState<string | null>(initial.gender);
   const [interests, setInterests] = useState<string[]>(initial.interests);
   const [bio, setBio] = useState(initial.bio);
@@ -71,7 +66,6 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
     avatarUrl !== initial.avatarUrl ||
     coverUrl !== initial.coverUrl ||
     department !== initial.department ||
-    semester !== initial.semester ||
     gender !== initial.gender ||
     bio !== initial.bio ||
     interests.length !== initial.interests.length ||
@@ -80,7 +74,6 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
   const valid =
     fullName.trim().length >= 2 &&
     Boolean(department) &&
-    Boolean(semester) &&
     interests.length >= MIN_INTERESTS &&
     interests.length <= MAX_INTERESTS &&
     bio.length <= BIO_MAX;
@@ -142,7 +135,6 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
       const res = await updateProfile({
         fullName,
         department,
-        semester: semester!,
         gender,
         interests,
         bio,
@@ -272,23 +264,8 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
         </div>
       </div>
 
-      {/* Semester */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium">Semester</label>
-        <div className="flex flex-wrap gap-2">
-          {SEMESTERS.map((s) => (
-            <Pill key={s} active={semester === s} onClick={() => setSemester(s)}>
-              {s}
-            </Pill>
-          ))}
-          <Pill
-            active={semester === ALUMNI_SEMESTER}
-            onClick={() => setSemester(ALUMNI_SEMESTER)}
-          >
-            Alumni
-          </Pill>
-        </div>
-      </div>
+      {/* Semester is derived from the roll number (lib/profile/semester.ts) and
+          no longer editable here. */}
 
       {/* Gender */}
       <div className="space-y-2">

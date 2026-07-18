@@ -9,6 +9,7 @@ import { AppImage } from "@/components/ui/app-image";
 import { deptMeta } from "@/lib/leaderboard/departments";
 import type { FeedPost } from "@/lib/feed/types";
 import { semesterLabel } from "@/lib/profile/constants";
+import { deriveSemester } from "@/lib/profile/semester";
 
 export default async function ProfilePage() {
   const supabase = await createClient();
@@ -27,7 +28,7 @@ export default async function ProfilePage() {
     supabase
       .from("profiles")
       .select(
-        "full_name, department, semester, bio, avatar_url, cover_url, aura_score, verified, level, xp"
+        "full_name, username, department, bio, avatar_url, cover_url, aura_score, verified, level, xp"
       )
       .eq("id", me)
       .single(),
@@ -69,9 +70,10 @@ export default async function ProfilePage() {
       Boolean(c) && c!.status === "approved"
     )) as ProfileCommunity[];
 
+  const semester = deriveSemester(profile?.username);
   const deptLabel = profile?.department
     ? deptMeta(profile.department).abbr +
-      (profile.semester ? ` · ${semesterLabel(profile.semester)}` : "")
+      (semester ? ` · ${semesterLabel(semester)}` : "")
     : "—";
 
   return (

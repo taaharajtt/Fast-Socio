@@ -19,8 +19,6 @@ import {
   MIN_INTERESTS,
   PERSONALITY_TRAITS,
   RELATIONSHIP_PREFS,
-  SEMESTERS,
-  ALUMNI_SEMESTER,
 } from "@/lib/profile/constants";
 
 const STEPS = [
@@ -63,9 +61,6 @@ export function OnboardingWizard({
   );
   const [uploading, setUploading] = useState(false);
   const [department, setDepartment] = useState(initial.department ?? "");
-  const [semester, setSemester] = useState<number | null>(
-    initial.semester ?? null
-  );
   const [gender, setGender] = useState<string | null>(initial.gender ?? null);
   const [gradYear, setGradYear] = useState<number | null>(
     initial.graduationYear ?? null
@@ -96,7 +91,6 @@ export function OnboardingWizard({
       fullName,
       avatarUrl,
       department,
-      semester,
       gender,
       graduationYear: gradYear,
       hostelStatus: hostel,
@@ -159,7 +153,7 @@ export function OnboardingWizard({
   // steps are always skippable (they enrich, they don't block).
   const stepValid = [
     fullName.trim().length >= 2,
-    Boolean(department) && Boolean(semester),
+    Boolean(department),
     interests.length >= MIN_INTERESTS,
     true, // personality
     true, // about you
@@ -250,7 +244,10 @@ export function OnboardingWizard({
         <section className="space-y-6">
           <div>
             <h1 className="text-2xl font-bold">Your academics</h1>
-            <p className="mt-1 text-fg-muted">School and semester.</p>
+            <p className="mt-1 text-fg-muted">
+              Your school. Your semester is set automatically from your roll
+              number.
+            </p>
           </div>
           <Field label="School">
             <PillRow>
@@ -259,21 +256,6 @@ export function OnboardingWizard({
                   {d}
                 </Pill>
               ))}
-            </PillRow>
-          </Field>
-          <Field label="Semester">
-            <PillRow>
-              {SEMESTERS.map((s) => (
-                <Pill key={s} active={semester === s} onClick={() => setSemester(s)}>
-                  {s}
-                </Pill>
-              ))}
-              <Pill
-                active={semester === ALUMNI_SEMESTER}
-                onClick={() => setSemester(ALUMNI_SEMESTER)}
-              >
-                Alumni
-              </Pill>
             </PillRow>
           </Field>
           <Field label="Gender" optional>

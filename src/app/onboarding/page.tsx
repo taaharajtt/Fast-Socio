@@ -23,7 +23,7 @@ export default async function OnboardingPage() {
     supabase
       .from("profiles")
       .select(
-        "full_name, avatar_url, department, semester, gender, interests, bio, personality, languages, pronouns, graduation_year, onboarding_step, onboarding_completed"
+        "full_name, avatar_url, department, gender, interests, bio, personality, languages, pronouns, graduation_year, onboarding_step, onboarding_completed"
       )
       .eq("id", user.id)
       .single(),
@@ -45,7 +45,6 @@ export default async function OnboardingPage() {
     fullName: p?.full_name ?? "",
     avatarUrl: p?.avatar_url ?? null,
     department: p?.department ?? "",
-    semester: p?.semester ?? null,
     gender: p?.gender ?? null,
     interests: p?.interests ?? [],
     bio: p?.bio ?? "",

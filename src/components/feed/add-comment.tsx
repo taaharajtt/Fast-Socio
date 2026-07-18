@@ -84,7 +84,7 @@ export function AddComment({
         p.username.toLowerCase().includes(q)
       );
     });
-    return list.slice(0, 6);
+    return list.slice(0, 30);
   }, [mq, roster]);
 
   const showMenu = mq !== null && (roster === null || suggestions.length > 0);
@@ -162,7 +162,7 @@ export function AddComment({
     <div className="relative pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
       {/* @-mention suggestions, floating above the composer. */}
       {showMenu && (
-        <div className="glass-strong absolute inset-x-0 bottom-full z-20 mb-2 overflow-hidden rounded-[var(--radius-sm)] border border-glass-border">
+        <div className="glass-strong absolute inset-x-0 bottom-full z-20 mb-2 max-h-56 overflow-y-auto overscroll-contain rounded-[var(--radius-sm)] border border-glass-border">
           {roster === null ? (
             <p className="px-3 py-2.5 text-sm text-fg-muted">Loading matches…</p>
           ) : (
