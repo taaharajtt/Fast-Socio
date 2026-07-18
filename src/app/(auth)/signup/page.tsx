@@ -29,7 +29,7 @@ export default function SignupPage() {
     e.preventDefault();
     setError(null);
     if (!isValidFastEmail(email)) {
-      setError("Use your @isb.nu.edu.pk university email.");
+      setError("Use your FAST Islamabad university email.");
       return;
     }
     setLoading(true);
@@ -88,7 +88,8 @@ export default function SignupPage() {
             />
             {emailInvalid && (
               <p className="px-1 text-[13px] font-medium text-error">
-                Only @isb.nu.edu.pk email addresses are allowed.
+                Only FAST Islamabad email addresses are allowed (@isb.nu.edu.pk,
+                or i221000@nu.edu.pk for pre-2023 batches).
               </p>
             )}
 
@@ -111,7 +112,8 @@ export default function SignupPage() {
           <p className="mt-3 text-center text-[11px] text-fg-disabled">
             • Only{" "}
             <span className="font-medium text-fg-muted">@isb.nu.edu.pk</span>{" "}
-            addresses are accepted
+            addresses are accepted (pre-2023 batches: your{" "}
+            <span className="font-medium text-fg-muted">@nu.edu.pk</span> email)
           </p>
 
           <p className="mt-6 text-center text-[14px] text-fg-muted">
