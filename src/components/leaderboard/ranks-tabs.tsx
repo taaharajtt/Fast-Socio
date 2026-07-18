@@ -15,7 +15,6 @@ import {
 
 const PERIODS: { key: LeaderboardPeriod; label: string }[] = [
   { key: "weekly", label: "Weekly" },
-  { key: "monthly", label: "Monthly" },
   { key: "alltime", label: "All-Time" },
 ];
 
@@ -80,14 +79,14 @@ export function RanksTabs({
 
   return (
     <>
-      {/* Purple pill tabs (UISpec V3 §Ranks). */}
-      <div className="mb-5 flex gap-2">
-        <Pill active={tab === "students"} onClick={() => setTab("students")}>
+      {/* Underlined text tabs (Leaderboard refresh). */}
+      <div className="mb-5 flex border-b border-white/[0.08]">
+        <Tab active={tab === "students"} onClick={() => setTab("students")}>
           Leaderboard
-        </Pill>
-        <Pill active={tab === "depts"} onClick={() => setTab("depts")}>
+        </Tab>
+        <Tab active={tab === "depts"} onClick={() => setTab("depts")}>
           Department Rankings
-        </Pill>
+        </Tab>
       </div>
 
       {switching ? (
@@ -105,7 +104,7 @@ export function RanksTabs({
   );
 }
 
-function Pill({
+function Tab({
   active,
   onClick,
   children,
@@ -120,13 +119,15 @@ function Pill({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "rounded-full px-4 py-2 text-sm font-semibold transition-all active:scale-95",
-        active
-          ? "gradient-brand text-white shadow-[0_4px_16px_rgba(124,58,237,0.4)]"
-          : "bg-card text-fg-muted hover:text-fg"
+        "relative flex-1 pb-3 text-center text-[17px] font-semibold transition-colors",
+        active ? "text-fg" : "text-fg-muted hover:text-fg"
       )}
     >
       {children}
+      {/* Purple underline for the active tab, sitting on top of the hairline. */}
+      {active && (
+        <span className="absolute inset-x-0 -bottom-px h-[3px] rounded-full bg-accent" />
+      )}
     </button>
   );
 }
@@ -171,10 +172,10 @@ function StudentSection({
             onClick={() => select(p.key)}
             aria-pressed={period === p.key}
             className={cn(
-              "rounded-full px-3 py-1.5 text-[13px] font-semibold transition-all active:scale-95",
+              "rounded-full px-4 py-2 text-[15px] font-semibold transition-all active:scale-95",
               period === p.key
-                ? "bg-accent/[0.12] text-accent ring-1 ring-accent/40"
-                : "bg-card text-fg-muted hover:text-fg"
+                ? "gradient-brand text-white shadow-[0_4px_16px_rgba(124,58,237,0.4)]"
+                : "text-fg-muted hover:text-fg"
             )}
           >
             {p.label}
@@ -219,10 +220,10 @@ function StudentBoard({
   }
   return (
     <>
-      <p className="mb-3 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-disabled">
+      <p className="mb-1 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-disabled">
         Top {rows.length} {span}
       </p>
-      <div className="space-y-2">
+      <div className="divide-y divide-white/[0.06]">
         {rows.map((r) => {
           const medal = MEDAL[r.rank];
           const title = LEADERBOARD_TITLES[r.rank]?.title;
@@ -234,12 +235,12 @@ function StudentBoard({
               key={r.user_id}
               href={isMe ? "/profile" : `/profile/${r.user_id}`}
               className={cn(
-                "flex items-center gap-3 rounded-[12px] px-3 py-3 transition-transform active:scale-[0.99]",
-                isMe ? "bg-accent/[0.10] ring-1 ring-accent/40" : "bg-card"
+                "flex items-center gap-3.5 py-3.5 transition-transform active:scale-[0.99]",
+                isMe && "-mx-2 rounded-[12px] bg-accent/[0.10] px-2"
               )}
             >
               <span
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[13px] font-bold"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[14px] font-bold"
                 style={
                   medal
                     ? { backgroundColor: medal.chip, color: "#fff" }
@@ -252,19 +253,19 @@ function StudentBoard({
               </span>
 
               <div
-                className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full bg-bg-elevated"
+                className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full bg-bg-elevated"
                 style={medal ? { boxShadow: `0 0 0 2px ${medal.ring}` } : undefined}
               >
                 {r.avatar_url && (
-                  <AppImage src={r.avatar_url} alt={r.full_name ?? ""} sizes="44px" />
+                  <AppImage src={r.avatar_url} alt={r.full_name ?? ""} sizes="48px" />
                 )}
               </div>
 
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[15px] font-semibold text-fg">
+                <p className="truncate text-[17px] font-semibold text-fg">
                   {r.full_name ?? "Student"}
                 </p>
-                <p className="truncate text-[13px] text-fg-muted">
+                <p className="truncate text-[14px] text-fg-muted">
                   {deptMeta(r.department).abbr}
                   {title && (
                     <>
@@ -275,8 +276,8 @@ function StudentBoard({
                 </p>
               </div>
 
-              <span className="flex shrink-0 items-center gap-1 text-[15px] font-semibold text-gold">
-                <Zap className="h-3.5 w-3.5" aria-hidden />
+              <span className="flex shrink-0 items-center gap-1 text-[17px] font-semibold text-gold">
+                <Zap className="h-4 w-4" aria-hidden />
                 {r.weekly_aura.toLocaleString()}
               </span>
             </Link>
@@ -284,6 +285,59 @@ function StudentBoard({
         })}
       </div>
     </>
+  );
+}
+
+/**
+ * Per-rank styling for the three department cards (Leaderboard refresh). Ranks 1
+ * and 3 get an orange frame, rank 2 a muted silver one — mirroring the medal
+ * palette used on the student board. Only the top two carry a status pill.
+ */
+const DEPT_RANK: Record<
+  number,
+  {
+    border: string;
+    badge: string;
+    accent: string | null;
+    pill: string | null;
+  }
+> = {
+  1: { border: "#D97706", badge: "#D97706", accent: "#F59E0B", pill: "Current Leader" },
+  2: { border: "rgba(148,163,184,0.30)", badge: "#9CA3AF", accent: null, pill: "Runner-Up" },
+  3: { border: "#F97316", badge: "#F97316", accent: "#F97316", pill: null },
+};
+
+function RankBadge({ rank }: { rank: number }) {
+  const r = DEPT_RANK[rank];
+  return (
+    <span
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 text-[14px] font-bold"
+      style={{ borderColor: r.badge, color: r.badge }}
+    >
+      {rank}
+    </span>
+  );
+}
+
+function ContributorRow({ d }: { d: DeptRow }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <AvatarStack urls={d.avatars} />
+      <span className="text-[13px] text-fg-muted">
+        {d.member_count.toLocaleString()} member
+        {d.member_count === 1 ? "" : "s"} contributing
+      </span>
+    </div>
+  );
+}
+
+function WeeklyChange({ value }: { value: number }) {
+  if (value <= 0) return null;
+  return (
+    <span className="flex shrink-0 items-center gap-1 text-[13px] font-semibold text-success">
+      <ArrowUp className="h-3.5 w-3.5" aria-hidden />+{value.toLocaleString()} this
+      week
+    </span>
   );
 }
 
@@ -295,105 +349,120 @@ function DepartmentBoard({ rows }: { rows: DeptRow[] }) {
       </p>
     );
   }
-  const [leader, ...others] = rows;
-  const lead = deptMeta(leader.department);
 
+  const top3 = rows.slice(0, 3);
   return (
-    <>
-      {/* Current-leader hero card. */}
-      <div
-        className="rounded-2xl bg-card p-5"
-        style={{
-          border: "2px solid #D97706",
-          boxShadow: "0 8px 36px rgba(217,119,6,0.26)",
-        }}
-      >
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-3xl" aria-hidden>
-              {lead.icon}
-            </span>
-            <span className="flex items-center gap-1 rounded-full bg-[#D97706] px-2.5 py-1 text-xs font-bold text-white">
-              🥇 Current Leader
-            </span>
-          </div>
-          <div className="text-right">
-            <p className="text-[32px] font-black leading-none text-gold">
-              {leader.total_aura.toLocaleString()}
-            </p>
-            <p className="mt-1 text-xs text-fg-muted">Total Aura</p>
-          </div>
-        </div>
-        <div className="mt-3 flex items-end justify-between">
-          <div>
-            <p className="text-[32px] font-black leading-none text-fg">
-              {lead.abbr}
-            </p>
-            <p className="mt-1 text-[15px] text-fg-muted">{leader.department}</p>
-          </div>
-          {leader.weekly_change > 0 && (
-            <span className="flex items-center gap-1 text-[13px] font-semibold text-success">
-              <ArrowUp className="h-3.5 w-3.5" aria-hidden />+
-              {leader.weekly_change.toLocaleString()} this week
-            </span>
-          )}
-        </div>
-        <div className="my-4 h-px bg-white/[0.06]" />
-        <div className="flex items-center gap-3">
-          <AvatarStack urls={leader.avatars} />
-          <span className="text-[13px] text-fg-muted">
-            {leader.member_count.toLocaleString()} member
-            {leader.member_count === 1 ? "" : "s"} contributing
+    <div className="space-y-3">
+      {top3.map((d, i) =>
+        i === 0 ? (
+          <LeaderCard key={d.department} d={d} />
+        ) : (
+          <DeptCard key={d.department} d={d} rank={i + 1} />
+        )
+      )}
+    </div>
+  );
+}
+
+/** Rank-1 hero card. */
+function LeaderCard({ d }: { d: DeptRow }) {
+  const m = deptMeta(d.department);
+  const r = DEPT_RANK[1];
+  return (
+    <div
+      className="rounded-2xl bg-card p-5"
+      style={{
+        border: `2px solid ${r.border}`,
+        boxShadow: "0 8px 36px rgba(217,119,6,0.26)",
+      }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <RankBadge rank={1} />
+          <span
+            className="rounded-full px-3 py-1 text-[13px] font-bold text-white"
+            style={{ backgroundColor: r.badge }}
+          >
+            {r.pill}
           </span>
         </div>
+        <div className="text-right">
+          <p
+            className="text-[32px] font-black leading-none"
+            style={{ color: r.accent ?? undefined }}
+          >
+            {d.total_aura.toLocaleString()}
+          </p>
+          <p className="mt-1 text-xs text-fg-muted">Total Aura</p>
+        </div>
       </div>
 
-      <p className="my-4 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-disabled">
-        All Departments
-      </p>
+      <div className="mt-3 flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[32px] font-black leading-none text-fg">{m.abbr}</p>
+          <p className="mt-1.5 truncate text-[15px] text-fg-muted">
+            {d.department}
+          </p>
+        </div>
+        <WeeklyChange value={d.weekly_change} />
+      </div>
 
-      <div className="space-y-2">
-        {rows.map((d, i) => {
-          const m = deptMeta(d.department);
-          const medal = ["🥇", "🥈", "🥉"][i];
-          return (
-            <div
-              key={d.department}
-              className="flex items-center gap-3 rounded-[12px] bg-card px-4 py-3.5"
-            >
-              <span className="w-6 shrink-0 text-center text-lg">
-                {medal ?? (
-                  <span className="text-sm font-bold text-fg-disabled">
-                    {i + 1}
-                  </span>
-                )}
-              </span>
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-bg-elevated text-lg">
-                {m.icon}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[15px] font-semibold text-fg">
-                  {m.abbr}
-                </p>
-                <p className="truncate text-xs text-fg-muted">{d.department}</p>
-              </div>
-              <div className="shrink-0 text-right">
-                <p className="flex items-center justify-end gap-1 text-[15px] font-semibold text-gold">
-                  <Zap className="h-3.5 w-3.5" aria-hidden />
-                  {d.total_aura.toLocaleString()}
-                </p>
-                {d.weekly_change > 0 && (
-                  <p className="flex items-center justify-end gap-0.5 text-xs text-success">
-                    <ArrowUp className="h-3 w-3" aria-hidden />
-                    {d.weekly_change.toLocaleString()}
-                  </p>
-                )}
-              </div>
+      <div className="my-4 h-px bg-white/[0.06]" />
+      <ContributorRow d={d} />
+    </div>
+  );
+}
+
+/** Compact card for ranks 2 and 3. */
+function DeptCard({ d, rank }: { d: DeptRow; rank: number }) {
+  const m = deptMeta(d.department);
+  const r = DEPT_RANK[rank];
+  return (
+    <div
+      className="rounded-2xl bg-card p-4"
+      style={{ border: `2px solid ${r.border}` }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <RankBadge rank={rank} />
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="text-[22px] font-black leading-none text-fg">
+                {m.abbr}
+              </p>
+              {r.pill && (
+                <span className="rounded-full bg-[#64748B] px-2.5 py-0.5 text-[12px] font-bold text-white">
+                  {r.pill}
+                </span>
+              )}
             </div>
-          );
-        })}
+            <p className="mt-1 truncate text-[14px] text-fg-muted">
+              {d.department}
+            </p>
+          </div>
+        </div>
+        <div className="shrink-0 text-right">
+          <p
+            className="flex items-center justify-end gap-1 text-[24px] font-black leading-none"
+            style={{ color: r.accent ?? undefined }}
+          >
+            <Zap
+              className={cn("h-4 w-4", !r.accent && "text-fg-muted")}
+              aria-hidden
+            />
+            <span className={r.accent ? undefined : "text-fg"}>
+              {d.total_aura.toLocaleString()}
+            </span>
+          </p>
+          <p className="mt-1 text-xs text-fg-muted">Total Aura</p>
+        </div>
       </div>
-    </>
+
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <ContributorRow d={d} />
+        <WeeklyChange value={d.weekly_change} />
+      </div>
+    </div>
   );
 }
 
