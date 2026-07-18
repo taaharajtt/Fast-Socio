@@ -15,6 +15,7 @@ import {
   MIN_INTERESTS,
   PERSONALITY_TRAITS,
   RELATIONSHIP_PREFS,
+  ALUMNI_SEMESTER,
 } from "@/lib/profile/constants";
 import { isAppStorageUrl } from "@/lib/url-safety";
 
@@ -195,7 +196,11 @@ export async function saveProfile(
   const fullName = (draft.fullName ?? "").trim();
   if (fullName.length < 2) return { error: "Please enter your name." };
   if (!draft.department) return { error: "Please choose your department." };
-  if (!draft.semester || draft.semester < 1 || draft.semester > 12)
+  if (
+    !draft.semester ||
+    draft.semester < 1 ||
+    draft.semester > ALUMNI_SEMESTER
+  )
     return { error: "Please choose your semester." };
   const interests = sanitizeTags(draft.interests, INTERESTS, MAX_INTERESTS);
   if (interests.length < MIN_INTERESTS)

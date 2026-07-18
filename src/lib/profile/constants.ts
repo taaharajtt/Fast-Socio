@@ -15,6 +15,22 @@ export const SCHOOL_FIELD_LABEL = "School";
 /** Semesters 1–8 cover a standard four-year program. */
 export const SEMESTERS = Array.from({ length: 8 }, (_, i) => i + 1);
 
+/**
+ * Sentinel `profiles.semester` value meaning "graduated" — pre-2023 batches
+ * signing up with legacy @nu.edu.pk emails are alumni and have no current
+ * semester. 13 sits above every real semester (DB check allows 1–13, mig 0098)
+ * so distance-based Discover affinity degrades gracefully to zero.
+ */
+export const ALUMNI_SEMESTER = 13;
+
+/** "6" → "6th Semester", ALUMNI_SEMESTER → "Alumni" (UISpec V3 wording). */
+export function semesterLabel(n: number): string {
+  if (n === ALUMNI_SEMESTER) return "Alumni";
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]} Semester`;
+}
+
 export const GENDERS = [
   { value: "male", label: "Male" },
   { value: "female", label: "Female" },

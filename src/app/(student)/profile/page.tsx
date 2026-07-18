@@ -8,13 +8,7 @@ import { getAuthUserId } from "@/lib/auth/user";
 import { AppImage } from "@/components/ui/app-image";
 import { deptMeta } from "@/lib/leaderboard/departments";
 import type { FeedPost } from "@/lib/feed/types";
-
-/** 1 → "1st", 6 → "6th" (UISpec V3 "6th Semester"). */
-function ordinal(n: number): string {
-  const s = ["th", "st", "nd", "rd"];
-  const v = n % 100;
-  return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]);
-}
+import { semesterLabel } from "@/lib/profile/constants";
 
 export default async function ProfilePage() {
   const supabase = await createClient();
@@ -77,7 +71,7 @@ export default async function ProfilePage() {
 
   const deptLabel = profile?.department
     ? deptMeta(profile.department).abbr +
-      (profile.semester ? ` · ${ordinal(profile.semester)} Semester` : "")
+      (profile.semester ? ` · ${semesterLabel(profile.semester)}` : "")
     : "—";
 
   return (

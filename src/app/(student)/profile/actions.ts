@@ -2,7 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { BIO_MAX, MAX_INTERESTS, MIN_INTERESTS } from "@/lib/profile/constants";
+import {
+  ALUMNI_SEMESTER,
+  BIO_MAX,
+  MAX_INTERESTS,
+  MIN_INTERESTS,
+} from "@/lib/profile/constants";
 import { isAppStorageUrl } from "@/lib/url-safety";
 
 export type UpdateProfileResult = { error: string } | { ok: true };
@@ -31,7 +36,11 @@ export async function updateProfile(input: {
   const fullName = input.fullName.trim();
   if (fullName.length < 2) return { error: "Please enter your name." };
   if (!input.department) return { error: "Please choose your department." };
-  if (!input.semester || input.semester < 1 || input.semester > 12)
+  if (
+    !input.semester ||
+    input.semester < 1 ||
+    input.semester > ALUMNI_SEMESTER
+  )
     return { error: "Please choose your semester." };
   if (
     input.interests.length < MIN_INTERESTS ||

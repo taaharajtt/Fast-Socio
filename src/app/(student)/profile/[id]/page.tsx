@@ -12,13 +12,7 @@ import { OnlineDot } from "@/components/ui/badges";
 import { deptMeta } from "@/lib/leaderboard/departments";
 import { isOnline, presenceLabel } from "@/lib/time";
 import type { FeedPost } from "@/lib/feed/types";
-
-/** 1 → "1st", 6 → "6th" (UISpec V3 "6th Semester"). */
-function ordinal(n: number): string {
-  const s = ["th", "st", "nd", "rd"];
-  const v = n % 100;
-  return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]);
-}
+import { semesterLabel } from "@/lib/profile/constants";
 
 export default async function PublicProfilePage({
   params,
@@ -157,7 +151,7 @@ export default async function PublicProfilePage({
     showDept && profile.department
       ? deptMeta(profile.department).abbr +
         (showSem && profile.semester
-          ? ` · ${ordinal(profile.semester)} Semester`
+          ? ` · ${semesterLabel(profile.semester)}`
           : "")
       : "—";
 

@@ -19,6 +19,7 @@ import {
   MAX_INTERESTS,
   MIN_INTERESTS,
   SEMESTERS,
+  ALUMNI_SEMESTER,
 } from "@/lib/profile/constants";
 
 export type EditableProfile = {
@@ -280,6 +281,12 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
               {s}
             </Pill>
           ))}
+          <Pill
+            active={semester === ALUMNI_SEMESTER}
+            onClick={() => setSemester(ALUMNI_SEMESTER)}
+          >
+            Alumni
+          </Pill>
         </div>
       </div>
 

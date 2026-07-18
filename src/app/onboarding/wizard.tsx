@@ -20,6 +20,7 @@ import {
   PERSONALITY_TRAITS,
   RELATIONSHIP_PREFS,
   SEMESTERS,
+  ALUMNI_SEMESTER,
 } from "@/lib/profile/constants";
 
 const STEPS = [
@@ -267,6 +268,12 @@ export function OnboardingWizard({
                   {s}
                 </Pill>
               ))}
+              <Pill
+                active={semester === ALUMNI_SEMESTER}
+                onClick={() => setSemester(ALUMNI_SEMESTER)}
+              >
+                Alumni
+              </Pill>
             </PillRow>
           </Field>
           <Field label="Gender" optional>

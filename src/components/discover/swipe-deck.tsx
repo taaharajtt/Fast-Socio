@@ -13,6 +13,7 @@ import { VerifiedBadge } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { AppImage } from "@/components/ui/app-image";
 import type { DiscoverProfile } from "@/lib/profile/types";
+import { semesterLabel } from "@/lib/profile/constants";
 import { ReportSheet } from "@/components/discover/report-sheet";
 import {
   recordSwipe,
@@ -363,7 +364,7 @@ function ProfileCardBody({
         </h2>
         <p className="mt-1 text-sm text-fg-muted">
           {profile.department ?? ""}
-          {profile.semester ? ` · ${ordinal(profile.semester)} Semester` : ""}
+          {profile.semester ? ` · ${semesterLabel(profile.semester)}` : ""}
         </p>
         {profile.bio && (
           <p className="mt-1.5 line-clamp-2 text-sm text-white">{profile.bio}</p>
@@ -396,12 +397,6 @@ function ProfileCardBody({
   );
 }
 
-/** 1 → "1st", 6 → "6th", etc. (UISpec V3 "6th Semester"). */
-function ordinal(n: number): string {
-  const s = ["th", "st", "nd", "rd"];
-  const v = n % 100;
-  return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]);
-}
 
 function MessageRequestSheet({
   profile,
@@ -491,7 +486,7 @@ function DetailSheet({
             </h3>
             <p className="text-fg-muted">
               {profile.department ?? ""}
-              {profile.semester ? ` · Semester ${profile.semester}` : ""}
+              {profile.semester ? ` · ${semesterLabel(profile.semester)}` : ""}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

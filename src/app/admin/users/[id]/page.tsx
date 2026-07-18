@@ -9,6 +9,7 @@ import { BadgeControls, type AdminBadgeRow } from "@/components/admin/badge-cont
 import { createClient } from "@/lib/supabase/server";
 import { getAdminContext } from "@/lib/admin/access";
 import { auraReasonLabel } from "@/lib/aura/labels";
+import { semesterLabel } from "@/lib/profile/constants";
 import type { GrantableRole } from "@/app/admin/users/actions";
 
 const nf = new Intl.NumberFormat("en-US");
@@ -126,7 +127,7 @@ export default async function AdminUserPage({
         </div>
         <p className="mt-1 text-xs text-fg-muted">
           {profile.department ?? "—"}
-          {profile.semester ? ` · Semester ${profile.semester}` : ""}
+          {profile.semester ? ` · ${semesterLabel(profile.semester)}` : ""}
           <span className="ml-2 font-mono text-fg-disabled">{profile.id}</span>
         </p>
       </header>
