@@ -35,6 +35,7 @@ export function ChatCommunityTabs({
     <RouteTabs
       tabs={tabs}
       activeKey={active}
+      variant="underline"
       className="mt-4"
       skeletons={{
         messages: <SkeletonRows />,

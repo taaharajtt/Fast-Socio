@@ -271,13 +271,14 @@ export default async function ChatPage({
             )}
           </div>
         ) : (
-      <div className="mt-5 space-y-1">
+      <div className="mt-5">
         {threads.length === 0 && newMatches.length === 0 ? (
           <p className="py-16 text-center text-sm text-fg-muted">
             No conversations yet. Match in Discover to start chatting.
           </p>
         ) : (
-          <>
+          // Flat rows separated by a thin hairline (chat refresh).
+          <div className="divide-y divide-white/[0.05]">
             {/* Fresh matches (no conversation yet) sit at the TOP so a new match
                 is the first thing seen, not buried under older threads. */}
             {newMatches.map((otherId) => {
@@ -285,7 +286,7 @@ export default async function ChatPage({
               return (
                 <div
                   key={`nm:${otherId}`}
-                  className="flex items-center gap-3 rounded-[12px] px-3 py-3"
+                  className="flex items-center gap-3 py-3.5"
                 >
                   <Link
                     href={`/profile/${otherId}`}
@@ -316,7 +317,7 @@ export default async function ChatPage({
                   <Link
                     key={`c:${t.id}`}
                     href={`/communities/${t.id}/chat`}
-                    className="flex items-center gap-3 rounded-[12px] px-3 py-3 transition-colors hover:bg-card"
+                    className="flex items-center gap-3 py-3.5 transition-transform active:scale-[0.99]"
                   >
                     <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-2xl bg-card">
                       {t.avatar && (
@@ -347,12 +348,11 @@ export default async function ChatPage({
                   key={t.convId}
                   href={`/chat/${t.convId}`}
                   className={cn(
-                    "flex items-center gap-3 rounded-[12px] px-3 py-3 transition-colors",
-                    // A thread with unread messages is tinted + accent-bordered so
-                    // it reads apart from already-seen conversations at a glance.
-                    hasUnread
-                      ? "border-l-[3px] border-l-accent bg-accent/[0.08]"
-                      : "border-l-[3px] border-l-transparent hover:bg-card"
+                    "flex items-center gap-3 py-3.5 transition-transform active:scale-[0.99]",
+                    // A thread with unread messages gets a faint tint (plus the
+                    // bold preview + count badge below) so it reads apart from
+                    // already-seen conversations at a glance.
+                    hasUnread && "-mx-2 rounded-[12px] bg-accent/[0.06] px-2"
                   )}
                 >
                   <div className="relative h-11 w-11 shrink-0 rounded-full">
@@ -398,9 +398,9 @@ export default async function ChatPage({
                 </Link>
               );
             })}
-          </>
-        )}
           </div>
+        )}
+      </div>
         )}
       </ChatCommunityTabs>
     </main>

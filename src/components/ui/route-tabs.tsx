@@ -31,6 +31,7 @@ export function RouteTabs({
   skeletons,
   children,
   className,
+  variant = "pill",
 }: {
   tabs: RouteTab[];
   activeKey: string;
@@ -42,6 +43,9 @@ export function RouteTabs({
   skeletons: Record<string, React.ReactNode>;
   children: React.ReactNode;
   className?: string;
+  /** "pill" = gradient segmented pills; "underline" = text tabs with a purple
+   *  active underline over a full-width hairline. */
+  variant?: "pill" | "underline";
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -61,11 +65,42 @@ export function RouteTabs({
     start(() => router.push(tab.href, { scroll: false }));
   }
 
+  const underline = variant === "underline";
+
   return (
     <>
-      <div className={cn("flex gap-2", className)}>
+      <div
+        className={cn(
+          underline ? "flex border-b border-white/[0.08]" : "flex gap-2",
+          className
+        )}
+      >
         {tabs.map((tab) => {
           const active = tab.key === shownKey;
+          if (underline) {
+            return (
+              <Link
+                key={tab.key}
+                href={tab.href}
+                onClick={(e) => select(tab, e)}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "relative flex flex-1 basis-1/3 items-center justify-center gap-1.5 pb-3 text-center text-[16px] font-semibold transition-colors",
+                  active ? "text-fg" : "text-fg-muted hover:text-fg"
+                )}
+              >
+                {tab.label}
+                {tab.badge ? (
+                  <span className="gradient-brand rounded-full px-1.5 text-xs text-white">
+                    {tab.badge}
+                  </span>
+                ) : null}
+                {active && (
+                  <span className="absolute inset-x-0 -bottom-px h-[3px] rounded-full bg-accent" />
+                )}
+              </Link>
+            );
+          }
           return (
             <Link
               key={tab.key}

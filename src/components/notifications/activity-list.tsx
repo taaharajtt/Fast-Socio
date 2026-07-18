@@ -8,6 +8,11 @@ import {
   UserPlus,
   Bell,
   AtSign,
+  Clock,
+  Ticket,
+  Award,
+  ShieldAlert,
+  Gavel,
   Image as ImageIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -30,7 +35,8 @@ export type ActivityItem = {
   bucket: "Today" | "Earlier";
 };
 
-/** Badge icon overlaid on the actor avatar, keyed by notification type. */
+/** Badge icon overlaid on the actor avatar (or shown in the solid-purple
+ *  circle for actor-less system notifications), keyed by notification type. */
 const TYPE_ICON: Record<string, LucideIcon> = {
   post_like: Heart,
   comment: MessageSquare,
@@ -43,18 +49,25 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   community_post_rejected: Megaphone,
   community_approved: Megaphone,
   event_approved: Megaphone,
+  event_reminder: Clock,
+  waitlist_promoted: Ticket,
+  level_up: Zap,
+  achievement: Award,
+  moderation_warning: ShieldAlert,
+  appeal_result: Gavel,
 };
 
 /** Notification types shown with the special solid-purple Aura icon (no actor). */
-const AURA_TYPES = new Set(["aura", "aura_milestone"]);
+const AURA_TYPES = new Set(["aura", "aura_milestone", "level_up"]);
 
 const BUCKET_ORDER = ["Today", "Earlier"] as const;
 
 /**
  * The Notifications full-screen body (UISpec V3 Screen 4). Time-bucketed rows
- * (TODAY / EARLIER) with a 3px purple left border on unread rows and a solid
- * purple Aura icon for actor-less milestone notifications. When there's nothing
- * in EARLIER, the caught-up message takes its place.
+ * (TODAY / EARLIER) rendered flat with hairline dividers — the actor avatar
+ * carries a small type badge, while actor-less system notifications (e.g. an
+ * event reminder) show a solid-purple circle with the matching icon. When
+ * there's nothing in EARLIER, the caught-up message takes its place.
  */
 export function ActivityList({ items }: { items: ActivityItem[] }) {
   const sections = BUCKET_ORDER.map((label) => ({
@@ -71,7 +84,7 @@ export function ActivityList({ items }: { items: ActivityItem[] }) {
         if (section.items.length === 0 && !isEarlier) return null;
         return (
           <section key={section.label}>
-            <p className="mb-2 mt-5 px-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-fg-disabled">
+            <p className="mb-1 mt-5 px-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-fg-disabled">
               {section.label}
             </p>
             {section.items.length === 0 && isEarlier ? (
@@ -79,7 +92,7 @@ export function ActivityList({ items }: { items: ActivityItem[] }) {
                 You&apos;re all caught up! 🎉
               </p>
             ) : (
-              <div className="space-y-2">
+              <div className="divide-y divide-white/[0.06]">
                 {section.items.map((item) => (
                   <ActivityRow key={item.key} item={item} />
                 ))}
@@ -93,7 +106,10 @@ export function ActivityList({ items }: { items: ActivityItem[] }) {
 }
 
 function ActivityRow({ item }: { item: ActivityItem }) {
-  const isAura = AURA_TYPES.has(item.type) || (!item.avatar && !item.actorName);
+  const isAura = AURA_TYPES.has(item.type);
+  // Actor-less system notifications (no avatar, no name) get the solid-purple
+  // circle treatment instead of an avatar + badge.
+  const noActor = !item.avatar && !item.actorName;
   const Icon = TYPE_ICON[item.type] ?? Bell;
 
   // Bold the actor name ahead of the muted action text where we can.
@@ -105,17 +121,16 @@ function ActivityRow({ item }: { item: ActivityItem }) {
   return (
     <Link
       href={item.href}
-      className={cn(
-        "flex items-center gap-3 rounded-[12px] border-l-[3px] px-4 py-3.5",
-        item.unread
-          ? "border-l-accent bg-accent/[0.08]"
-          : "border-l-transparent bg-card"
-      )}
+      className="flex items-center gap-3 py-3.5 transition-transform active:scale-[0.99]"
     >
       <div className="relative shrink-0">
-        {isAura ? (
+        {noActor ? (
           <div className="flex h-11 w-11 items-center justify-center rounded-full bg-accent">
-            <Zap className="h-5 w-5 text-white" aria-hidden />
+            {isAura ? (
+              <Zap className="h-5 w-5 text-white" aria-hidden />
+            ) : (
+              <Icon className="h-5 w-5 text-white" aria-hidden />
+            )}
           </div>
         ) : (
           <>
@@ -141,6 +156,12 @@ function ActivityRow({ item }: { item: ActivityItem }) {
         </p>
         <p className="mt-1 text-xs text-fg-disabled">{item.timeAgo}</p>
       </div>
+      {item.unread && (
+        <span
+          className="h-2 w-2 shrink-0 rounded-full bg-accent"
+          aria-label="Unread"
+        />
+      )}
     </Link>
   );
 }
