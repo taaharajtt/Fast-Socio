@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { Settings, Pencil, Plus, Zap, Heart } from "lucide-react";
+import { Settings, Pencil, Zap, Heart } from "lucide-react";
 import { ProfileTabs, type ProfileCommunity } from "@/components/profile/profile-tabs";
-import { ShareProfileButton } from "@/components/profile/share-profile-button";
 import { BadgeStrip } from "@/components/profile/badge-strip";
 import { getEarnedBadges } from "@/lib/badges";
 import { createClient } from "@/lib/supabase/server";
@@ -155,20 +154,12 @@ export default async function ProfilePage() {
               <p className="truncate text-sm text-fg-muted">{deptLabel}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <ShareProfileButton profileId={me} />
               <Link
                 href="/profile/edit"
                 className="gradient-brand flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold text-white"
               >
                 <Pencil className="h-4 w-4" aria-hidden />
                 Edit
-              </Link>
-              <Link
-                href="/home"
-                aria-label="Create post"
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white"
-              >
-                <Plus className="h-4 w-4" aria-hidden />
               </Link>
             </div>
           </div>

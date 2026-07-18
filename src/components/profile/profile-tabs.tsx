@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Award, ChevronRight } from "lucide-react";
-import { SegmentedPills } from "@/components/ui";
+import { cn } from "@/lib/utils";
 import { PostCard } from "@/components/feed/post-card";
 import { levelProgress } from "@/lib/aura/levels";
 import type { FeedPost } from "@/lib/feed/types";
@@ -43,18 +43,38 @@ export function ProfileTabs({
   const [tab, setTab] = useState("posts");
   const [list, setList] = useState<FeedPost[]>(posts);
 
+  const tabs = [
+    { value: "posts", label: "Posts" },
+    { value: "communities", label: "Communities" },
+    ...(stats ? [{ value: "stats", label: "Stats" }] : []),
+  ];
+
   return (
     <div>
-      <SegmentedPills
-        options={[
-          { value: "posts", label: "Posts" },
-          { value: "communities", label: "Communities" },
-          ...(stats ? [{ value: "stats", label: "Stats" }] : []),
-        ]}
-        value={tab}
-        onChange={setTab}
-        className="mb-4"
-      />
+      {/* Underlined switchable tabs (matches Ranks + Chat). */}
+      <div className="mb-4 flex border-b border-white/[0.08]">
+        {tabs.map((t) => {
+          const active = tab === t.value;
+          return (
+            <button
+              key={t.value}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setTab(t.value)}
+              className={cn(
+                "relative flex flex-1 items-center justify-center pb-3 text-center text-[16px] font-semibold transition-colors",
+                active ? "text-fg" : "text-fg-muted hover:text-fg"
+              )}
+            >
+              {t.label}
+              {active && (
+                <span className="absolute inset-x-0 -bottom-px h-[3px] rounded-full bg-accent" />
+              )}
+            </button>
+          );
+        })}
+      </div>
 
       {tab === "stats" && stats && <StatsPanel stats={stats} />}
 
