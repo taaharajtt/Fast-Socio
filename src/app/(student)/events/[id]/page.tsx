@@ -7,10 +7,15 @@ import {
   Users,
   Star,
   QrCode,
+  ChevronRight,
 } from "lucide-react";
 import { GlassCard, GlassChip } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
 import { RsvpButton, type RsvpState } from "@/components/events/rsvp-button";
+import {
+  EventHostControls,
+  type Organizer,
+} from "@/components/events/event-host-controls";
 import { EventTicket } from "@/components/events/event-ticket";
 import {
   EventDiscussion,
@@ -66,6 +71,7 @@ export default async function EventPage({
     { data: rating },
     { data: myFeedback },
     { data: discussionRows },
+    { data: organizerRows },
   ] = await Promise.all([
     supabase
       .from("event_attendees")
@@ -99,7 +105,23 @@ export default async function EventPage({
       .eq("event_id", id)
       .order("created_at", { ascending: true })
       .limit(100),
+    supabase
+      .from("event_organizers")
+      // event_organizers has two FKs to profiles (user_id + added_by), so the
+      // embed must name the one to follow or PostgREST drops it as ambiguous.
+      .select(
+        "user_id, user:profiles!event_organizers_user_id_fkey(id, full_name, username, avatar_url)"
+      )
+      .eq("event_id", id)
+      .order("created_at", { ascending: true }),
   ]);
+
+  const organizers: Organizer[] = (
+    (organizerRows as unknown as { user: Organizer | null }[]) ?? []
+  )
+    .map((r) => r.user)
+    .filter((u): u is Organizer => Boolean(u));
+  const isOrganizer = isHost || organizers.some((o) => o.id === me);
 
   const attending = Boolean(attendance);
   const waitlisted = !attending && Boolean(waitrow);
@@ -175,11 +197,17 @@ export default async function EventPage({
               {event.location}
             </p>
           )}
-          <p className="flex items-center gap-2">
+          <Link
+            href={`/events/${id}/attendees`}
+            className="-mx-1 flex items-center gap-2 rounded-lg px-1 py-0.5 transition-colors hover:text-fg"
+          >
             <Users className="h-4 w-4" aria-hidden />
-            {event.attendee_count} going
-            {event.capacity != null && ` · capacity ${event.capacity}`}
-          </p>
+            <span>
+              {event.attendee_count} going
+              {event.capacity != null && ` · capacity ${event.capacity}`}
+            </span>
+            <ChevronRight className="h-4 w-4 shrink-0" aria-hidden />
+          </Link>
         </div>
 
         {event.description && (
@@ -234,8 +262,43 @@ export default async function EventPage({
         </Link>
       )}
 
+      {/* Co-organizers (public), if any. */}
+      {organizers.length > 0 && (
+        <GlassCard className="mt-3 p-4">
+          <p className="text-xs text-fg-muted">Co-organizers</p>
+          <div className="mt-2 space-y-2">
+            {organizers.map((o) => (
+              <Link
+                key={o.id}
+                href={`/profile/${o.id}`}
+                className="flex items-center gap-3"
+              >
+                <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full bg-bg-elevated">
+                  {o.avatar_url && (
+                    <AppImage src={o.avatar_url} alt="" sizes="32px" />
+                  )}
+                </div>
+                <span className="truncate text-sm font-medium text-fg">
+                  {o.full_name ?? "Organizer"}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </GlassCard>
+      )}
+
+      {/* Host management: organizers + delete. Available in any status so a host
+          can also remove a pending or rejected event. */}
+      {isHost && (
+        <EventHostControls
+          eventId={id}
+          hostId={me}
+          initialOrganizers={organizers}
+        />
+      )}
+
       {/* Organizer check-in entry. */}
-      {isHost && !pending && (
+      {isOrganizer && !pending && (
         <Link href={`/events/${id}/check-in`} className="mt-3 block">
           <GlassCard className="flex items-center gap-3 p-4">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full gradient-brand">
@@ -277,14 +340,14 @@ export default async function EventPage({
         </div>
       )}
 
-      {/* Discussion — visible to attendees (and host/admin via RLS). */}
-      {!pending && (attending || isHost) && (
+      {/* Discussion — visible to attendees and organizers (host/admin via RLS). */}
+      {!pending && (attending || isOrganizer) && (
         <section className="mt-5">
           <h3 className="mb-1 text-sm font-semibold text-fg">Discussion</h3>
           <EventDiscussion
             eventId={id}
             meId={me}
-            canPost={attending}
+            canPost={attending || isOrganizer}
             initialMessages={messages}
           />
         </section>

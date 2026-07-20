@@ -206,6 +206,100 @@ export async function submitEventFeedback(
   return { ok: true };
 }
 
+/**
+ * Delete an event (host or admin only; enforced by the delete_event RPC).
+ * Cascades remove attendees, waitlist, discussion, feedback and organizers.
+ * Redirects to /events on success; returns { error } if the RPC refuses.
+ */
+export async function deleteEvent(
+  eventId: string
+): Promise<{ error: string } | void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not signed in." };
+
+  const { error } = await supabase.rpc("delete_event", { p_event_id: eventId });
+  if (error) return { error: error.message };
+
+  revalidatePath("/events");
+  revalidatePath("/profile");
+  redirect("/events");
+}
+
+export type OrganizerCandidate = {
+  id: string;
+  full_name: string | null;
+  username: string | null;
+  avatar_url: string | null;
+};
+
+/**
+ * Search students to appoint as co-organizers — matches display name OR roll
+ * number (username). Onboarded, non-banned students only. Used by the host's
+ * "Manage organizers" panel.
+ */
+export async function searchStudents(
+  query: string
+): Promise<OrganizerCandidate[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  // Neutralize the characters that would break PostgREST's or()/ilike grammar.
+  const safe = q.replace(/[,()*%\\]/g, " ").trim();
+  if (!safe) return [];
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("profiles")
+    .select("id, full_name, username, avatar_url")
+    .eq("onboarding_completed", true)
+    .eq("is_banned", false)
+    .or(`full_name.ilike.%${safe}%,username.ilike.%${safe}%`)
+    .limit(8);
+  return (data as OrganizerCandidate[]) ?? [];
+}
+
+/** Appoint a co-organizer (host/admin only; enforced by the RPC). */
+export async function addOrganizer(
+  eventId: string,
+  userId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const { error } = await supabase.rpc("add_event_organizer", {
+    p_event: eventId,
+    p_user: userId,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/events/${eventId}`);
+  return { ok: true };
+}
+
+/** Remove a co-organizer (host/admin only; enforced by the RPC). */
+export async function removeOrganizer(
+  eventId: string,
+  userId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const { error } = await supabase.rpc("remove_event_organizer", {
+    p_event: eventId,
+    p_user: userId,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/events/${eventId}`);
+  return { ok: true };
+}
+
 /** Report an event (target_type = 'event'), feeds /admin/reports?type=event. */
 export async function reportEvent(
   eventId: string,

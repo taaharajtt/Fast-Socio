@@ -24,12 +24,17 @@ export default async function EventCheckInPage({
     .single();
   if (!event) notFound();
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("is_admin")
-    .eq("id", me)
-    .single();
-  const isOrganizer = event.host_id === me || profile?.is_admin === true;
+  const [{ data: profile }, { data: coOrg }] = await Promise.all([
+    supabase.from("profiles").select("is_admin").eq("id", me).single(),
+    supabase
+      .from("event_organizers")
+      .select("user_id")
+      .eq("event_id", id)
+      .eq("user_id", me)
+      .maybeSingle(),
+  ]);
+  const isOrganizer =
+    event.host_id === me || Boolean(coOrg) || profile?.is_admin === true;
   if (!isOrganizer) redirect(`/events/${id}`);
 
   const [{ count: attendees }, { count: checkedIn }] = await Promise.all([
