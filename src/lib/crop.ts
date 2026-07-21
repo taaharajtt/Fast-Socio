@@ -51,6 +51,59 @@ export function clampOffset(
   };
 }
 
+/**
+ * Decide the crop view (zoom + pan) for the current render.
+ *
+ * The cropper auto-centres an image exactly ONCE — when it (and a measured
+ * frame) first appear — keyed on the image, never on the frame. Mobile browsers
+ * change window.innerHeight, and therefore the frame, as their dynamic toolbar
+ * shows/hides during a drag; re-centring on every frame change used to silently
+ * reset the user's zoom and pan mid-gesture, so the exported crop came back as
+ * the default centred "cover" view instead of what they had adjusted.
+ *
+ * - New image (`imageKey !== centeredKey`): centre at MIN_ZOOM.
+ * - Same image, frame resized: keep the user's zoom, only re-clamp the pan so it
+ *   stays within the new geometry.
+ * - Otherwise: no change (returns null).
+ */
+export function reconcileView(params: {
+  imageKey: string;
+  centeredKey: string;
+  natural: Size;
+  frame: Size;
+  lastFrame: Size;
+  zoom: number;
+  offset: Offset;
+}): { centeredKey: string; lastFrame: Size; zoom: number; offset: Offset } | null {
+  const { imageKey, centeredKey, natural, frame, lastFrame, zoom, offset } = params;
+  if (!imageKey || !frame.width || !natural.width) return null;
+
+  if (imageKey !== centeredKey) {
+    const base = coverScale(natural, frame) * MIN_ZOOM;
+    return {
+      centeredKey: imageKey,
+      lastFrame: frame,
+      zoom: MIN_ZOOM,
+      offset: {
+        x: (frame.width - natural.width * base) / 2,
+        y: (frame.height - natural.height * base) / 2,
+      },
+    };
+  }
+
+  if (frame.width !== lastFrame.width || frame.height !== lastFrame.height) {
+    const scale = coverScale(natural, frame) * zoom;
+    return {
+      centeredKey,
+      lastFrame: frame,
+      zoom,
+      offset: clampOffset(offset, natural, frame, scale),
+    };
+  }
+
+  return null;
+}
+
 /** The source rectangle, in the image's own pixel space, currently framed. */
 export function sourceRect(
   offset: Offset,
