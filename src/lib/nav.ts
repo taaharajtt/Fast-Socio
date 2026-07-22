@@ -17,7 +17,8 @@ export type NavItem = {
 /**
  * Six-item bottom navigation (UISpec V3 §2.1): Home · Discover · Ranks · Events ·
  * Chat · Me. "Ranks" is the Leaderboard route (weekly + department rankings);
- * "Me" is the profile. Communities and Requests live as inner tabs of Chat.
+ * "Me" is the profile. Communities and Requests live as inner tabs of Chat. The
+ * Campus Map (/map) is reached from the Home header, not the dock.
  */
 export const NAV_ITEMS: NavItem[] = [
   { href: "/home", label: "Home", icon: Home },
