@@ -10,6 +10,7 @@ import {
   clampOffset,
   coverScale,
   croppedExtension,
+  reconcileView,
   renderCrop,
   type Offset,
   type Size,
@@ -106,21 +107,34 @@ export function ImageCropper({
     });
   }, [natural, frame]);
 
-  // Recentre whenever the geometry changes (image finishes loading, viewport
-  // resizes). This is the "adjust state when props change" pattern rather than
-  // an effect: an effect would paint one frame with a stale, off-centre crop.
-  const geometryKey =
-    natural && frame.width
-      ? `${natural.width}x${natural.height}@${frame.width}x${frame.height}`
-      : "";
-  const [lastGeometry, setLastGeometry] = useState("");
-  if (geometryKey && geometryKey !== lastGeometry && natural) {
-    setLastGeometry(geometryKey);
-    setZoom(MIN_ZOOM);
-    setOffset({
-      x: (frame.width - natural.width * base) / 2,
-      y: (frame.height - natural.height * base) / 2,
+  // Auto-centre ONCE per image, keyed on the image itself — never on the frame.
+  // Mobile browsers change window.innerHeight (and therefore the frame) as their
+  // dynamic toolbar shows/hides during a drag; keying the recentre on the frame
+  // meant that jitter silently reset the user's zoom and pan mid-gesture, so the
+  // exported crop came back as the default centred "cover" view instead of what
+  // they adjusted. Centre when the image (and a measured frame) first appear;
+  // afterwards, a frame change keeps the user's zoom and only re-clamps the pan.
+  // This is the "adjust state during render" pattern rather than an effect: an
+  // effect would paint one frame with a stale, off-centre crop.
+  const imageKey = src && natural ? src : "";
+  const [centeredKey, setCenteredKey] = useState("");
+  const [lastFrame, setLastFrame] = useState<Size>({ width: 0, height: 0 });
+  if (natural) {
+    const next = reconcileView({
+      imageKey,
+      centeredKey,
+      natural,
+      frame,
+      lastFrame,
+      zoom,
+      offset,
     });
+    if (next) {
+      setCenteredKey(next.centeredKey);
+      setLastFrame(next.lastFrame);
+      setZoom(next.zoom);
+      setOffset(next.offset);
+    }
   }
 
   /** Zoom about the frame's centre so the subject stays put. */

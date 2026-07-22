@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Activity } from "lucide-react";
+import { Activity, MapPinned } from "lucide-react";
 import { HomeFeed } from "@/components/feed/home-feed";
 import { FirstRunTour } from "@/components/tour/first-run-tour";
 import { EventsStrip } from "@/components/feed/events-strip";
@@ -67,25 +67,34 @@ export default async function HomePage() {
           />
           <span className="sr-only">FAST SOCIO</span>
         </h1>
-        {/* Activity is the sole top-right action; the dp lives on the bottom
-            nav's "Me" tab (UAT-005). */}
-        <Link
-          href="/activity"
-          data-tour="activity"
-          aria-label={
-            unreadActivity
-              ? `Activity, ${unreadActivity} unread`
-              : "Activity"
-          }
-          className="glass relative flex h-9 w-9 items-center justify-center rounded-full text-fg-muted hover:text-fg"
-        >
-          <Activity className="h-5 w-5" aria-hidden />
-          {(unreadActivity ?? 0) > 0 && (
-            <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold leading-none text-white ring-2 ring-bg">
-              {unreadActivity! > 99 ? "99+" : unreadActivity}
-            </span>
-          )}
-        </Link>
+        {/* Top-right actions: quick jump to the Campus Map, then Activity. The
+            dp lives on the bottom nav's "Me" tab (UAT-005). */}
+        <div className="flex items-center gap-2">
+          <Link
+            href="/map"
+            aria-label="Campus Map"
+            className="glass flex h-9 w-9 items-center justify-center rounded-full text-fg-muted hover:text-fg"
+          >
+            <MapPinned className="h-5 w-5" aria-hidden />
+          </Link>
+          <Link
+            href="/activity"
+            data-tour="activity"
+            aria-label={
+              unreadActivity
+                ? `Activity, ${unreadActivity} unread`
+                : "Activity"
+            }
+            className="glass relative flex h-9 w-9 items-center justify-center rounded-full text-fg-muted hover:text-fg"
+          >
+            <Activity className="h-5 w-5" aria-hidden />
+            {(unreadActivity ?? 0) > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold leading-none text-white ring-2 ring-bg">
+                {unreadActivity! > 99 ? "99+" : unreadActivity}
+              </span>
+            )}
+          </Link>
+        </div>
       </header>
 
       {/* Campus Help discovery strip — a utility surface, not a feed category

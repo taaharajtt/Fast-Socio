@@ -3,8 +3,12 @@ import {
   clampOffset,
   coverScale,
   exportSize,
+  reconcileView,
   sourceRect,
   MAX_EXPORT_EDGE,
+  MIN_ZOOM,
+  type Offset,
+  type Size,
 } from "./crop";
 
 const FRAME = { width: 400, height: 400 };
@@ -83,5 +87,89 @@ describe("exportSize", () => {
 
   it("never rounds a thin crop down to zero", () => {
     expect(exportSize(4000, 0.4).height).toBe(1);
+  });
+});
+
+describe("reconcileView", () => {
+  const natural: Size = { width: 4000, height: 3000 };
+  const frame: Size = { width: 420, height: 525 }; // 4:5 portrait post frame
+
+  /** The view a freshly-opened cropper centres to. */
+  function centred() {
+    return reconcileView({
+      imageKey: "blob:a",
+      centeredKey: "",
+      natural,
+      frame,
+      lastFrame: { width: 0, height: 0 },
+      zoom: MIN_ZOOM,
+      offset: { x: 0, y: 0 },
+    })!;
+  }
+
+  it("centres once when the image first appears", () => {
+    const r = centred();
+    expect(r.zoom).toBe(MIN_ZOOM);
+    expect(r.centeredKey).toBe("blob:a");
+  });
+
+  it("does nothing on a steady state (same image, same frame)", () => {
+    const c = centred();
+    const r = reconcileView({
+      imageKey: "blob:a",
+      centeredKey: "blob:a",
+      natural,
+      frame,
+      lastFrame: c.lastFrame,
+      zoom: 2.5,
+      offset: c.offset,
+    });
+    expect(r).toBeNull(); // the user's zoom/pan is left untouched
+  });
+
+  // Regression: a mobile toolbar show/hide changes the frame height mid-gesture.
+  // The old code re-centred (reset to MIN_ZOOM), so Done exported an uncropped
+  // image. The view must keep the user's zoom across a frame change.
+  it("preserves the user's zoom when the frame jitters mid-gesture", () => {
+    const zoomed = 2.5;
+    const jittered: Size = { width: 420, height: 500 };
+    const r = reconcileView({
+      imageKey: "blob:a",
+      centeredKey: "blob:a",
+      natural,
+      frame: jittered,
+      lastFrame: frame,
+      zoom: zoomed,
+      offset: { x: -300, y: -400 } as Offset,
+    });
+    expect(r).not.toBeNull();
+    expect(r!.zoom).toBe(zoomed); // NOT reset to MIN_ZOOM
+    expect(r!.lastFrame).toEqual(jittered);
+  });
+
+  it("re-centres when a different image is loaded", () => {
+    const r = reconcileView({
+      imageKey: "blob:b",
+      centeredKey: "blob:a",
+      natural,
+      frame,
+      lastFrame: frame,
+      zoom: 3,
+      offset: { x: -900, y: -900 },
+    });
+    expect(r).not.toBeNull();
+    expect(r!.zoom).toBe(MIN_ZOOM);
+    expect(r!.centeredKey).toBe("blob:b");
+  });
+
+  it("a zoomed crop frames strictly fewer source pixels than the centred one", () => {
+    // Proves the symptom: the reset (centred) view exports the full 'cover'
+    // region, while a real zoom exports a tighter sub-crop.
+    const c = centred();
+    const baseScale = coverScale(natural, frame);
+    const centredSrc = sourceRect(c.offset, frame, baseScale * c.zoom);
+    const zoomedSrc = sourceRect(c.offset, frame, baseScale * 2.5);
+    expect(zoomedSrc.sw).toBeLessThan(centredSrc.sw);
+    expect(zoomedSrc.sh).toBeLessThan(centredSrc.sh);
   });
 });

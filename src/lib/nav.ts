@@ -15,11 +15,12 @@ export type NavItem = {
 };
 
 /**
- * Bottom navigation (UISpec V3 §2.1): Home · Discover · Ranks · Events · Chat ·
- * Me. "Ranks" is the Leaderboard route (weekly + department rankings); "Me" is
- * the profile. Communities and Requests live as inner tabs of Chat. Campus Help
- * no longer has its own dock button — it's reached via Me → Help (the /help
- * route still exists for deep links and lights the Me tab, see ADOPTED_ROUTES).
+ * Six-item bottom navigation (UISpec V3 §2.1): Home · Discover · Ranks · Events ·
+ * Chat · Me. "Ranks" is the Leaderboard route (weekly + department rankings);
+ * "Me" is the profile. Communities and Requests live as inner tabs of Chat.
+ * Two features are reached without their own dock button: the Campus Map (/map)
+ * from the Home header, and Campus Help from Me → Help (the /help route still
+ * exists for deep links and lights the Me tab, see ADOPTED_ROUTES).
  */
 export const NAV_ITEMS: NavItem[] = [
   { href: "/home", label: "Home", icon: Home },
