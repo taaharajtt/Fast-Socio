@@ -4,6 +4,8 @@ import { Activity } from "lucide-react";
 import { HomeFeed } from "@/components/feed/home-feed";
 import { FirstRunTour } from "@/components/tour/first-run-tour";
 import { EventsStrip } from "@/components/feed/events-strip";
+import { HomeHelpStrip } from "@/components/help/home-help-strip";
+import { HomeSocietyStrip } from "@/components/societies/home-society-strip";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { FEED_PAGE_SIZE, type FeedPost } from "@/lib/feed/types";
@@ -85,6 +87,13 @@ export default async function HomePage() {
           )}
         </Link>
       </header>
+
+      {/* Campus Help discovery strip — a utility surface, not a feed category
+          (rendered above the feed; renders nothing when nothing is open). */}
+      <div className="px-4">
+        <HomeHelpStrip />
+        <HomeSocietyStrip />
+      </div>
 
       {/* Same DOM as before, but a client shell ties composer → feed so a new
           post appears via one targeted fetch instead of a full RSC refresh. */}

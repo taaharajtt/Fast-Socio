@@ -9,6 +9,7 @@ export const AURA_REASON_LABELS: Record<string, string> = {
   profile_completed: "Profile completed",
   achievement: "Badges",
   admin_adjust: "Admin adjustments",
+  help_thanked: "Helping others",
 };
 
 export function auraReasonLabel(reason: string): string {

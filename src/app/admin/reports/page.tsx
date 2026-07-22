@@ -2,7 +2,19 @@ import { ReportRow, type AdminReport } from "@/components/admin/report-row";
 import { PageHeader } from "@/components/admin/kit";
 import { createClient } from "@/lib/supabase/server";
 
-const TYPES = ["profile", "post", "comment", "message", "community", "event"];
+const TYPES = [
+  "profile",
+  "post",
+  "comment",
+  "message",
+  "community",
+  "event",
+  "help_request",
+  "help_response",
+  "society",
+  "society_announcement",
+  "matching_request",
+];
 
 /** Relative age (server-rendered → static text, no hydration concern). */
 function ago(iso: string): string {
@@ -23,7 +35,13 @@ function targetHref(type: string, id: string): string | null {
       return `/communities/${id}`;
     case "event":
       return `/events/${id}`;
+    case "help_request":
+      return `/help/${id}`;
+    case "society":
+      return `/societies/${id}`;
     default:
+      // help_response / society_announcement have no standalone page; each is
+      // reviewed via its parent request / society.
       return null;
   }
 }

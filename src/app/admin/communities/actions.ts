@@ -18,6 +18,24 @@ export async function moderateCommunity(
   revalidatePath("/admin/communities");
 }
 
+/**
+ * Mark a society as official/verified (or revoke). verify_society() is
+ * SECURITY DEFINER and checks is_admin internally; it also stamps verified_at
+ * and writes a moderation audit row.
+ */
+export async function verifySociety(
+  societyId: string,
+  official: boolean
+): Promise<{ error: string } | void> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("verify_society", {
+    p_society: societyId,
+    p_official: official,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/admin/communities");
+}
+
 /** Permanently delete a community (super_admin only; audited before-snapshot). */
 export async function deleteCommunity(
   communityId: string

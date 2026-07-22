@@ -8,6 +8,7 @@ import { JoinButton } from "@/components/communities/join-button";
 import { PostComposer } from "@/components/feed/post-composer";
 import { PostCard } from "@/components/feed/post-card";
 import { ReviewPostRow, type PendingPost } from "@/components/communities/review-post-row";
+import { RegisterSocietyButton } from "@/components/societies/register-society-button";
 import { RouteTabs, type RouteTab } from "@/components/ui/route-tabs";
 import { SkeletonCards } from "@/components/ui/skeleton";
 import { createClient } from "@/lib/supabase/server";
@@ -32,7 +33,7 @@ export default async function CommunityPage({
 
   const { data: community } = await supabase
     .from("communities")
-    .select("id, name, description, avatar_url, cover_url, member_count, status, owner_id")
+    .select("id, name, description, avatar_url, cover_url, member_count, status, owner_id, is_society")
     .eq("id", id)
     .single();
   if (!community) notFound();
@@ -166,6 +167,34 @@ export default async function CommunityPage({
       <div className="flex flex-1 flex-col px-4 py-4">
       {community.description && (
         <p className="text-[15px] text-fg-muted">{community.description}</p>
+      )}
+
+      {/* Society/Event OS entry point: an approved community can become a
+          society (public page + officer roles + announcements + events). */}
+      {community.is_society ? (
+        <Link
+          href={`/societies/${community.id}`}
+          className="mt-4 flex items-center gap-3 rounded-[var(--radius-md)] bg-card px-4 py-3"
+        >
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
+            <ChevronRight className="h-5 w-5" aria-hidden />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold text-fg">
+              Society page
+            </span>
+            <span className="block text-xs text-fg-muted">
+              Public profile, officers, announcements & events
+            </span>
+          </span>
+        </Link>
+      ) : (
+        isOwner &&
+        !pending && (
+          <div className="mt-4">
+            <RegisterSocietyButton communityId={community.id} />
+          </div>
+        )
       )}
 
       {pending ? (

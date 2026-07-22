@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, Zap, Heart, Check } from "lucide-react";
 import { OpenChatButton } from "@/components/chat/open-chat-button";
-import { ProfileTabs, type ProfileCommunity } from "@/components/profile/profile-tabs";
+import { ProfileTabs } from "@/components/profile/profile-tabs";
 import { ProfileActionsMenu } from "@/components/profile/profile-actions-menu";
 import { BadgeStrip } from "@/components/profile/badge-strip";
 import { getEarnedBadges } from "@/lib/badges";
@@ -17,10 +17,13 @@ import { deriveSemester } from "@/lib/profile/semester";
 
 export default async function PublicProfilePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }) {
   const { id } = await params;
+  const { tab: initialTab } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -108,36 +111,26 @@ export default async function PublicProfilePage({
     );
   }
 
-  const [{ data: postRows }, { count: matchCount }, { data: commRows }, badges] =
-    await Promise.all([
-      // Anonymous posts must NEVER appear on a profile — listing them here would
-      // attribute the post to this account and defeat anonymity (the feed_posts
-      // view only masks the author for non-admins, so filtering on the surface is
-      // the real guard). A profile's Posts tab shows attributed posts only.
-      supabase
-        .from("feed_posts")
-        .select("*")
-        .eq("author_id", id)
-        .eq("is_anonymous", false)
-        .order("created_at", { ascending: false })
-        .limit(30),
-      supabase
-        .from("matches")
-        .select("id", { count: "exact", head: true })
-        .or(`user_low.eq.${id},user_high.eq.${id}`),
-      supabase
-        .from("community_members")
-        .select("community:communities(id, name, member_count, status)")
-        .eq("user_id", id),
-      getEarnedBadges(supabase, id),
-    ]);
+  const [{ data: postRows }, { count: matchCount }, badges] = await Promise.all([
+    // Anonymous posts must NEVER appear on a profile — listing them here would
+    // attribute the post to this account and defeat anonymity (the feed_posts
+    // view only masks the author for non-admins, so filtering on the surface is
+    // the real guard). A profile's Posts tab shows attributed posts only.
+    supabase
+      .from("feed_posts")
+      .select("*")
+      .eq("author_id", id)
+      .eq("is_anonymous", false)
+      .order("created_at", { ascending: false })
+      .limit(30),
+    supabase
+      .from("matches")
+      .select("id", { count: "exact", head: true })
+      .or(`user_low.eq.${id},user_high.eq.${id}`),
+    getEarnedBadges(supabase, id),
+  ]);
 
   const posts = (postRows as FeedPost[]) ?? [];
-  const communities = ((commRows ?? [])
-    .map((r) => r.community as unknown as (ProfileCommunity & { status: string }) | null)
-    .filter((c): c is ProfileCommunity & { status: string } =>
-      Boolean(c) && c!.status === "approved"
-    )) as ProfileCommunity[];
 
   const initials =
     (profile.full_name ?? "")
@@ -279,7 +272,17 @@ export default async function PublicProfilePage({
           <p className="mb-5 text-sm leading-relaxed text-fg">{profile.bio}</p>
         )}
 
-        <ProfileTabs posts={posts} communities={communities} currentUserId={me} />
+        {/* Public profile is Posts-only — no Help/Stats data is passed, and
+            isOwnProfile is explicitly gated to isSelf, so Help never renders and
+            a stray ?tab=help falls back to Posts. Even visiting your own id
+            through this route (isSelf=true) still passes no help data, so the
+            gate alone can never leak another user's Campus Help activity. */}
+        <ProfileTabs
+          posts={posts}
+          currentUserId={me}
+          initialTab={initialTab}
+          isOwnProfile={isSelf}
+        />
       </main>
     </div>
   );

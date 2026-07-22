@@ -16,7 +16,7 @@ export default async function AdminCommunitiesPage({
 
   let query = supabase
     .from("communities")
-    .select("id, name, description, owner_id, member_count, status, created_at")
+    .select("id, name, description, owner_id, member_count, status, created_at, is_society, is_official")
     .order("created_at", { ascending: false });
   if (status !== "all") query = query.eq("status", status);
 
@@ -38,6 +38,8 @@ export default async function AdminCommunitiesPage({
     memberCount: c.member_count ?? 0,
     status: c.status,
     createdAt: `${c.created_at.slice(0, 16).replace("T", " ")} UTC`,
+    isSociety: Boolean(c.is_society),
+    isOfficial: Boolean(c.is_official),
   }));
 
   return (

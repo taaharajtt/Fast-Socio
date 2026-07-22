@@ -28,6 +28,10 @@ describe("activeNavHref", () => {
     expect(activeNavHref("/communities", ME)).toBe("/chat");
     expect(activeNavHref("/communities/abc", ME)).toBe("/chat");
     expect(activeNavHref("/settings", ME)).toBe("/profile");
+    // Campus Help now lives at Me → Help, not its own dock tab.
+    expect(activeNavHref("/help", ME)).toBe("/profile");
+    expect(activeNavHref("/help/abc", ME)).toBe("/profile");
+    expect(activeNavHref("/help/abc/edit", ME)).toBe("/profile");
   });
 
   // UAT-011: viewing someone else must not light your own avatar.

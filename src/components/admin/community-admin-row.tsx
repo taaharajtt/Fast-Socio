@@ -3,7 +3,11 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { StatusDot, ctrl, ctrlDanger } from "@/components/admin/kit";
-import { moderateCommunity, deleteCommunity } from "@/app/admin/communities/actions";
+import {
+  moderateCommunity,
+  deleteCommunity,
+  verifySociety,
+} from "@/app/admin/communities/actions";
 
 export type AdminCommunity = {
   id: string;
@@ -13,6 +17,8 @@ export type AdminCommunity = {
   memberCount: number;
   status: "pending" | "approved" | "rejected";
   createdAt: string;
+  isSociety: boolean;
+  isOfficial: boolean;
 };
 
 const tone: Record<AdminCommunity["status"], string> = {
@@ -49,6 +55,8 @@ export function CommunityAdminRow({
           )}
           <p className="mt-1 font-mono text-[11px] text-fg-muted">
             by {community.ownerName ?? "unknown"} · {community.memberCount} members · {community.createdAt}
+            {community.isSociety && " · society"}
+            {community.isOfficial && " · ✓ official"}
           </p>
           {err && <p className="mt-1 font-mono text-[11px] text-error">{err}</p>}
         </div>
@@ -68,6 +76,24 @@ export function CommunityAdminRow({
         <Link href={`/communities/${community.id}`} className={ctrl}>
           View →
         </Link>
+        {community.isSociety &&
+          (community.isOfficial ? (
+            <button
+              className={ctrl}
+              disabled={pending}
+              onClick={() => act(() => verifySociety(community.id, false))}
+            >
+              Unverify
+            </button>
+          ) : (
+            <button
+              className={ctrl}
+              disabled={pending}
+              onClick={() => act(() => verifySociety(community.id, true))}
+            >
+              Verify ✓
+            </button>
+          ))}
         {isSuper && (
           <button
             className={`${ctrlDanger} ml-auto`}

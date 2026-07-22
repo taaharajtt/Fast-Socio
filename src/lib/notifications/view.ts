@@ -12,6 +12,11 @@ export const SYSTEM_NOTIFICATION_TYPES = new Set([
   "event_reminder",
   "moderation_warning",
   "appeal_result",
+  "help_thanked",
+  "help_resolved",
+  "help_offer_accepted",
+  "matching_accepted",
+  "smart_match_accepted",
 ]);
 
 /** Short verb phrase for a groupable actor action, e.g. "liked your post". */
@@ -27,12 +32,32 @@ export function notificationActionPhrase(type: string): string {
       return "sent you a message";
     case "message_request":
       return "sent you a message request";
+    case "matching_request":
+      return "wants to connect";
+    case "matching_accepted":
+      return "accepted your request";
+    case "help_response":
+      return "responded to your help request";
+    case "help_offer_accepted":
+      return "approved your offer to help";
+    case "help_follow":
+      return "is following your help request";
+    case "society_announcement":
+      return "posted a society announcement";
+    case "society_role":
+      return "made you a society officer";
     case "community_post_approved":
       return "approved your community post";
     case "community_post_rejected":
       return "rejected your community post";
     case "match_post":
       return "shared a new post";
+    case "smart_match_application":
+      return "wants to join your post";
+    case "smart_match_accepted":
+      return "accepted your request";
+    case "smart_match_mention":
+      return "tagged you as a teammate";
     default:
       return "interacted with you";
   }
@@ -73,6 +98,13 @@ export function notificationCategory(type: string): ActivityCategory {
     case "match_post":
       return "matches";
     case "message_request":
+    case "matching_request":
+      return "requests";
+    case "matching_accepted":
+    case "smart_match_accepted":
+      return "matches";
+    case "smart_match_application":
+    case "smart_match_mention":
       return "requests";
     case "message":
       return "messages";
@@ -80,6 +112,8 @@ export function notificationCategory(type: string): ActivityCategory {
     case "event_approved":
     case "community_post_approved":
     case "community_post_rejected":
+    case "society_announcement":
+    case "society_role":
       return "announcements";
     case "waitlist_promoted":
     case "event_reminder":
@@ -88,6 +122,12 @@ export function notificationCategory(type: string): ActivityCategory {
       return "announcements";
     case "level_up":
     case "achievement":
+      return "other";
+    case "help_response":
+    case "help_follow":
+    case "help_thanked":
+    case "help_resolved":
+    case "help_offer_accepted":
       return "other";
     default:
       return "other";
@@ -118,6 +158,16 @@ export function notificationView(
       return { text: `You matched with ${who}!`, href: "/chat" };
     case "message_request":
       return { text: `${who} sent you a message request`, href: "/chat" };
+    case "matching_request":
+      return {
+        text: `${who} wants to connect`,
+        href: data.mode ? `/discover?mode=${data.mode}` : "/discover",
+      };
+    case "matching_accepted":
+      return {
+        text: `${who} accepted your request 🎉`,
+        href: data.mode ? `/discover?mode=${data.mode}` : "/discover",
+      };
     case "message":
       return {
         text: `${who} sent you a message`,
@@ -205,6 +255,58 @@ export function notificationView(
           ? "Your appeal was approved ✅"
           : "Your appeal was reviewed and declined.",
         href: "/appeals",
+      };
+    case "help_response":
+      return {
+        text: `${who} responded to your help request`,
+        href: data.request_id ? `/help/${data.request_id}` : "/help",
+      };
+    case "help_follow":
+      return {
+        text: `${who} is following your help request`,
+        href: data.request_id ? `/help/${data.request_id}` : "/help",
+      };
+    case "help_thanked":
+      return {
+        text: "You were thanked for helping 🙏 (+15 Aura)",
+        href: data.request_id ? `/help/${data.request_id}` : "/help",
+      };
+    case "help_offer_accepted":
+      return {
+        text: `${who} approved your offer to help — say hi 👋`,
+        href: data.request_id ? `/help/${data.request_id}` : "/help",
+      };
+    case "help_resolved":
+      return {
+        text: "A request you follow was resolved ✅",
+        href: data.request_id ? `/help/${data.request_id}` : "/help",
+      };
+    case "society_announcement":
+      return {
+        text: `${who} posted a society announcement 📣`,
+        href: data.society_id
+          ? `/societies/${data.society_id}/announcements`
+          : "/societies",
+      };
+    case "society_role":
+      return {
+        text: "You were appointed a society officer 🎖️",
+        href: data.society_id ? `/societies/${data.society_id}` : "/societies",
+      };
+    case "smart_match_application":
+      return {
+        text: `${who} wants to join your post`,
+        href: data.mode ? `/discover?mode=${data.mode}` : "/discover",
+      };
+    case "smart_match_accepted":
+      return {
+        text: `${who} accepted your request 🎉`,
+        href: data.mode ? `/discover?mode=${data.mode}` : "/discover",
+      };
+    case "smart_match_mention":
+      return {
+        text: `${who} tagged you as a teammate`,
+        href: data.mode ? `/discover?mode=${data.mode}` : "/discover",
       };
     default:
       return { text: "New notification", href: "/home" };

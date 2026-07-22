@@ -2,16 +2,30 @@ import Link from "next/link";
 import { Settings, Pencil, Zap, Heart } from "lucide-react";
 import { ProfileTabs, type ProfileCommunity } from "@/components/profile/profile-tabs";
 import { BadgeStrip } from "@/components/profile/badge-strip";
+import { CampusHelpShell } from "@/components/help/campus-help-shell";
+import type { SocioFilters } from "@/components/help/help-filters";
 import { getEarnedBadges } from "@/lib/badges";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { AppImage } from "@/components/ui/app-image";
 import { deptMeta } from "@/lib/leaderboard/departments";
 import type { FeedPost } from "@/lib/feed/types";
+import { isHelpCategory } from "@/lib/help/logic";
+import { isHelpTab, DEFAULT_HELP_TAB } from "@/lib/help/constants";
 import { semesterLabel } from "@/lib/profile/constants";
 import { deriveSemester } from "@/lib/profile/semester";
 
-export default async function ProfilePage() {
+type SP = Record<string, string | string[] | undefined>;
+const one = (v: string | string[] | undefined) =>
+  (Array.isArray(v) ? v[0] : v) ?? "";
+
+export default async function ProfilePage({
+  searchParams,
+}: {
+  searchParams: Promise<SP>;
+}) {
+  const sp = await searchParams;
+  const initialTab = one(sp.tab);
   const supabase = await createClient();
   // Verified locally from the JWT — no Auth API round trip; RLS is authoritative.
   const me = (await getAuthUserId())!;
@@ -69,6 +83,29 @@ export default async function ProfilePage() {
     .filter((c): c is ProfileCommunity & { status: string } =>
       Boolean(c) && c!.status === "approved"
     )) as ProfileCommunity[];
+
+  // Profile → Help embeds the full Campus Help experience. Its internal SOCIO|ME
+  // tab uses `?h=` (top-level `?tab=` is Posts|Help|Stats), and its links keep
+  // `tab=help` so navigating SOCIO⇄ME / applying filters stays on the Help tab.
+  const rawH = one(sp.h);
+  const helpTab = isHelpTab(rawH) ? rawH : DEFAULT_HELP_TAB;
+  const helpFilters: SocioFilters = {
+    category: isHelpCategory(one(sp.category)) ? one(sp.category) : "",
+    department: one(sp.department),
+    semester: one(sp.semester),
+    course: one(sp.course),
+    q: one(sp.q),
+  };
+  const helpContent = (
+    <CampusHelpShell
+      helpTab={helpTab}
+      socioHref="/profile?tab=help"
+      meHref="/profile?tab=help&h=me"
+      filters={helpFilters}
+      filterBasePath="/profile"
+      filterKeep={{ tab: "help" }}
+    />
+  );
 
   const semester = deriveSemester(profile?.username);
   const deptLabel = profile?.department
@@ -185,8 +222,10 @@ export default async function ProfilePage() {
 
         <ProfileTabs
           posts={posts}
-          communities={communities}
+          helpContent={helpContent}
           currentUserId={me}
+          initialTab={initialTab}
+          isOwnProfile
           stats={{
             posts: postCount ?? 0,
             communities: communities.length,

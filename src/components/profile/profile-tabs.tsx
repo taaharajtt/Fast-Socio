@@ -3,11 +3,20 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Award, ChevronRight } from "lucide-react";
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { PostCard } from "@/components/feed/post-card";
 import { levelProgress } from "@/lib/aura/levels";
+import {
+  availableProfileTabs,
+  resolveInitialProfileTab,
+  type ProfileTab,
+} from "@/lib/profile/tabs";
 import type { FeedPost } from "@/lib/feed/types";
 
+/** Community row shape the profile pages still map to derive the Stats count.
+ *  (The joined-community LIST was removed from the profile; only the number
+ *  remains as one Stats cell.) */
 export type ProfileCommunity = {
   id: string;
   name: string;
@@ -24,50 +33,72 @@ export type ProfileStats = {
   xp: number;
 };
 
+const TAB_LABEL: Record<ProfileTab, string> = {
+  posts: "Posts",
+  help: "Help",
+  stats: "Stats",
+};
+
 /**
- * Posts | Communities switcher on the profile screen. Posts render exactly like
- * the home feed (UAT-021) — a scrollable list of full post cards with images and
- * text, likes, comments and share — instead of the old cramped grid.
+ * Posts | Help | Stats switcher on the profile screen. The old Communities tab
+ * (a list of joined communities) was removed — the global Communities feature is
+ * untouched. Help and Stats render only when their content is supplied, so a
+ * public profile shows Posts alone while your own "Me" profile shows all three.
+ * Posts render exactly like the home feed (full post cards); Help embeds the
+ * complete Campus Help experience (SOCIO | ME) via the `helpContent` slot — a
+ * server-rendered node passed down so a client tab switcher can host it; Stats
+ * shows level/XP and activity counts.
  */
 export function ProfileTabs({
   posts,
-  communities,
   currentUserId,
+  helpContent,
   stats,
+  initialTab,
+  isOwnProfile = false,
 }: {
   posts: FeedPost[];
-  communities: ProfileCommunity[];
   currentUserId?: string | null;
+  helpContent?: ReactNode;
   stats?: ProfileStats;
+  initialTab?: string;
+  /**
+   * Gates the Help tab. Someone else's Campus Help activity (requests, offers,
+   * anonymous asks, resolved history) must never be reachable through their
+   * profile, so Help renders only when this is explicitly true — even if
+   * `helpContent` were ever passed by mistake on a public profile.
+   */
+  isOwnProfile?: boolean;
 }) {
-  const [tab, setTab] = useState("posts");
+  const available = availableProfileTabs({
+    help: Boolean(helpContent),
+    stats: Boolean(stats),
+    isOwnProfile,
+  });
+  const [tab, setTab] = useState<ProfileTab>(
+    resolveInitialProfileTab(initialTab, available)
+  );
   const [list, setList] = useState<FeedPost[]>(posts);
-
-  const tabs = [
-    { value: "posts", label: "Posts" },
-    { value: "communities", label: "Communities" },
-    ...(stats ? [{ value: "stats", label: "Stats" }] : []),
-  ];
 
   return (
     <div>
       {/* Underlined switchable tabs (matches Ranks + Chat). */}
       <div className="mb-4 flex border-b border-white/[0.08]">
-        {tabs.map((t) => {
-          const active = tab === t.value;
+        {available.map((value) => {
+          const active = tab === value;
           return (
             <button
-              key={t.value}
+              key={value}
               type="button"
               role="tab"
               aria-selected={active}
-              onClick={() => setTab(t.value)}
+              onClick={() => setTab(value)}
               className={cn(
                 "relative flex flex-1 items-center justify-center pb-3 text-center text-[16px] font-semibold transition-colors",
                 active ? "text-fg" : "text-fg-muted hover:text-fg"
               )}
             >
-              {t.label}
+              {TAB_LABEL[value]}
               {active && (
                 <span className="absolute inset-x-0 -bottom-px h-[3px] rounded-full bg-accent" />
               )}
@@ -77,6 +108,8 @@ export function ProfileTabs({
       </div>
 
       {tab === "stats" && stats && <StatsPanel stats={stats} />}
+
+      {tab === "help" && helpContent}
 
       {tab === "posts" &&
         (list.length === 0 ? (
@@ -94,33 +127,6 @@ export function ProfileTabs({
                   setList((prev) => prev.filter((x) => x.id !== id))
                 }
               />
-            ))}
-          </div>
-        ))}
-
-      {tab === "communities" &&
-        (communities.length === 0 ? (
-          <p className="py-8 text-center text-sm text-fg-muted">
-            Not in any communities yet.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {communities.map((c) => (
-              <Link
-                key={c.id}
-                href={`/communities/${c.id}`}
-                className="glass flex items-center gap-3 rounded-[var(--radius-md)] p-3"
-              >
-                <span className="gradient-brand flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg">
-                  👥
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold">{c.name}</p>
-                  <p className="text-xs text-fg-muted">
-                    {c.member_count} member{c.member_count === 1 ? "" : "s"}
-                  </p>
-                </div>
-              </Link>
             ))}
           </div>
         ))}
