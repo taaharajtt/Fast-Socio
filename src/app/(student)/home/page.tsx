@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Activity, MapPinned } from "lucide-react";
 import { HomeFeed } from "@/components/feed/home-feed";
 import { FirstRunTour } from "@/components/tour/first-run-tour";
+import { NewFeaturesTour } from "@/components/tour/new-features-tour";
 import { EventsStrip } from "@/components/feed/events-strip";
 import { HomeHelpStrip } from "@/components/help/home-help-strip";
 import { HomeSocietyStrip } from "@/components/societies/home-society-strip";
@@ -111,8 +112,11 @@ export default async function HomePage() {
         currentUserId={userId}
         eventsStrip={<EventsStrip />}
       />
-      {/* One-time guided tour, gated per account via profiles.tour_seen_at. */}
-      {!viewer?.tour_seen_at && <FirstRunTour />}
+      {/* Guided tours (mutually exclusive). New accounts get the full first-run
+          tour, gated per account via profiles.tour_seen_at; accounts that have
+          already finished it get the release "what's new" tour instead, gated
+          per device via localStorage so it shows once after the addons rollout. */}
+      {viewer?.tour_seen_at ? <NewFeaturesTour /> : <FirstRunTour />}
     </main>
   );
 }
