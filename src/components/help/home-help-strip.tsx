@@ -1,38 +1,36 @@
 import Link from "next/link";
-import { HandHeart, ArrowRight } from "lucide-react";
-import { GlassCard, GlassChip } from "@/components/ui";
+import { HandHeart, ArrowRight, Zap, MessageSquare } from "lucide-react";
+import { GlassCard } from "@/components/ui";
 import { createClient } from "@/lib/supabase/server";
 import { CATEGORY_META } from "@/lib/help/constants";
-import { compareSocio, isUrgentRequest, type HelpUrgency } from "@/lib/help/logic";
+import { isUrgentRequest, type HelpUrgency } from "@/lib/help/logic";
+import { pickHelpPreview } from "@/lib/help/preview";
 import type { HelpRequestRow } from "@/lib/help/types";
 
 /**
- * A compact "Campus Help" strip for the Home feed: a few open requests (most
- * urgent first) so students discover the utility surface without it becoming the
- * feed. Renders nothing when there's nothing open to help with.
+ * The Home "Campus Help" preview strip — a discovery teaser for the full Campus
+ * Help product at /help. Shows a couple of open asks (urgent first, then newest)
+ * so students find the utility surface without it becoming a feed category. When
+ * nothing is open it renders a compact placeholder card (never a blank strip) so
+ * the surface stays discoverable with a direct "Ask for help" entry point.
+ *
+ * Privacy: reads the anonymity-masked help_request_feed view (author identity is
+ * already null for anonymous asks the viewer can't see) and never renders any
+ * author here anyway — the card shows only category/title/preview/count. Blocks,
+ * bans and reports are enforced by the view's RLS, same as the SOCIO feed.
  */
 export async function HomeHelpStrip() {
   const supabase = await createClient();
   const { data } = await supabase
     .from("help_request_feed")
     .select(
-      "id, title, category, urgency, status, response_count, is_mine, created_at"
+      "id, title, body, category, urgency, status, response_count, is_mine, created_at"
     )
     .eq("status", "open")
     .order("created_at", { ascending: false })
     .limit(15);
 
-  const rows = ((data ?? []) as HelpRequestRow[])
-    .filter((r) => !r.is_mine)
-    .sort((a, b) =>
-      compareSocio(
-        { urgency: a.urgency as HelpUrgency, created_at: a.created_at },
-        { urgency: b.urgency as HelpUrgency, created_at: b.created_at }
-      )
-    )
-    .slice(0, 6);
-
-  if (rows.length === 0) return null;
+  const rows = pickHelpPreview((data ?? []) as HelpRequestRow[], 3);
 
   return (
     <section className="mt-4">
@@ -45,33 +43,71 @@ export async function HomeHelpStrip() {
           See all <ArrowRight className="h-3 w-3" aria-hidden />
         </Link>
       </div>
-      <div className="flex gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {rows.map((r) => {
-          const cat = CATEGORY_META[r.category];
-          const CatIcon = cat?.icon ?? HandHeart;
-          return (
-            <Link key={r.id} href={`/help/${r.id}`} className="shrink-0">
-              <GlassCard className="flex w-44 flex-col p-3">
-                <div className="flex items-center gap-1.5">
-                  <span className="flex items-center gap-1 text-[11px] text-fg-muted">
-                    <CatIcon className="h-3.5 w-3.5" aria-hidden />
-                    {cat?.short ?? r.category}
-                  </span>
-                  {isUrgentRequest(r.urgency as HelpUrgency) && (
-                    <GlassChip tone="error" className="ml-auto py-0.5">
-                      Urgent
-                    </GlassChip>
-                  )}
-                </div>
-                <p className="mt-2 line-clamp-2 text-sm font-semibold">{r.title}</p>
-                <p className="mt-1 text-[11px] text-fg-muted">
-                  {r.response_count} response{r.response_count === 1 ? "" : "s"}
-                </p>
-              </GlassCard>
-            </Link>
-          );
-        })}
-      </div>
+
+      {rows.length === 0 ? (
+        <HelpStripEmpty />
+      ) : (
+        <div className="flex gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {rows.map((r) => {
+            const cat = CATEGORY_META[r.category];
+            const CatIcon = cat?.icon ?? HandHeart;
+            const urgent = isUrgentRequest(r.urgency as HelpUrgency);
+            return (
+              <Link key={r.id} href={`/help/${r.id}`} className="shrink-0">
+                <GlassCard className="flex h-full w-48 flex-col p-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="flex items-center gap-1 text-[11px] text-fg-muted">
+                      <CatIcon className="h-3.5 w-3.5" aria-hidden />
+                      {cat?.short ?? r.category}
+                    </span>
+                    {urgent && (
+                      <span className="ml-auto flex items-center gap-1 rounded-full bg-error px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                        <Zap className="h-2.5 w-2.5" aria-hidden /> Urgent
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-2 line-clamp-2 text-sm font-semibold">
+                    {r.title}
+                  </p>
+                  <p className="mt-1 line-clamp-2 text-[11px] text-fg-muted">
+                    {r.body}
+                  </p>
+                  <p className="mt-2 flex items-center gap-1 text-[11px] text-fg-muted">
+                    <MessageSquare className="h-3 w-3" aria-hidden />
+                    {r.response_count} response{r.response_count === 1 ? "" : "s"}
+                  </p>
+                </GlassCard>
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </section>
+  );
+}
+
+/**
+ * Placeholder shown when there are no open asks — a compact, single card that
+ * states the surface's purpose and drops the student straight into asking. Kept
+ * visually consistent with the strip cards (same glass card + icon language).
+ */
+function HelpStripEmpty() {
+  return (
+    <GlassCard className="flex items-center gap-3 p-3">
+      <span className="gradient-brand flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] shadow-[0_8px_24px_rgba(124,92,255,0.3)]">
+        <HandHeart className="h-5 w-5 text-white" aria-hidden />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[13px] leading-snug text-fg-muted">
+          Ask for notes, advice, lost items, sports, events, or quick campus help.
+        </p>
+      </div>
+      <Link
+        href="/help?tab=me"
+        className="gradient-brand shrink-0 rounded-full px-3.5 py-2 text-xs font-semibold text-white active:scale-95"
+      >
+        Ask for help
+      </Link>
+    </GlassCard>
   );
 }

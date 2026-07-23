@@ -21,9 +21,10 @@ export type SocioFilters = {
  * plus optional precise fields — deliberately not a top-left row of chips. Every
  * change is written to the URL so the server component re-queries.
  *
- * `basePath` + `keep` let the same control push to `/help` or to the embedded
- * `/profile?tab=help` variant: `keep` holds params that must survive every push
- * (e.g. `{ tab: "help" }` inside the profile) so we stay on the Help tab.
+ * `basePath` + `keep` keep the control host-agnostic: `keep` holds params that
+ * must survive every push. Campus Help lives only at `/help` now, so `keep` is
+ * empty there, but the plumbing stays so the shell can be hosted elsewhere
+ * without divergence.
  */
 export function HelpFilters({
   filters,

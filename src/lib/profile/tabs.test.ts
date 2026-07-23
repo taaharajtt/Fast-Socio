@@ -7,73 +7,50 @@ import {
 } from "./tabs";
 
 describe("profile tabs", () => {
-  it("is exactly posts / help / stats — no communities", () => {
-    expect(PROFILE_TABS).toEqual(["posts", "help", "stats"]);
+  it("is exactly posts / stats — no help, no communities", () => {
+    expect(PROFILE_TABS).toEqual(["posts", "stats"]);
+    expect(PROFILE_TABS).not.toContain("help");
     expect(PROFILE_TABS).not.toContain("communities");
   });
 
-  it("validates known tabs and rejects the retired communities tab", () => {
+  it("validates known tabs and rejects the retired help/communities tabs", () => {
     expect(isProfileTab("posts")).toBe(true);
-    expect(isProfileTab("help")).toBe(true);
     expect(isProfileTab("stats")).toBe(true);
+    expect(isProfileTab("help")).toBe(false);
     expect(isProfileTab("communities")).toBe(false);
     expect(isProfileTab("")).toBe(false);
     expect(isProfileTab(3)).toBe(false);
   });
 
-  it("renders Help/Stats only when their data is available on your own profile", () => {
-    expect(
-      availableProfileTabs({ help: true, stats: true, isOwnProfile: true })
-    ).toEqual(["posts", "help", "stats"]);
-    // Public profile: Posts-only (no help activity, no stats).
-    expect(
-      availableProfileTabs({ help: false, stats: false, isOwnProfile: false })
-    ).toEqual(["posts"]);
+  it("own profile shows Posts + Stats; a public profile is Posts-only", () => {
+    // Own profile passes stats data.
+    expect(availableProfileTabs({ stats: true })).toEqual(["posts", "stats"]);
+    // Public profile: no stats data → a single Posts tab (rendered with no
+    // switcher / underline by ProfileTabs).
+    expect(availableProfileTabs({ stats: false })).toEqual(["posts"]);
   });
 
-  it("never renders Help on someone else's profile, even if help data is supplied", () => {
-    // Defense in depth: isOwnProfile gates Help regardless of the `help` flag —
-    // another user's requests/offers/anonymous asks/resolved history must never
-    // be reachable through their public profile.
-    expect(
-      availableProfileTabs({ help: true, stats: false, isOwnProfile: false })
-    ).toEqual(["posts"]);
-    expect(
-      availableProfileTabs({ help: true, stats: true, isOwnProfile: false })
-    ).toEqual(["posts", "stats"]);
-  });
-
-  it("falls back to posts for the old communities tab and anything invalid", () => {
-    const own = availableProfileTabs({ help: true, stats: true, isOwnProfile: true });
+  it("falls back to posts for the old help/communities tabs and anything invalid", () => {
+    const own = availableProfileTabs({ stats: true });
+    expect(resolveInitialProfileTab("help", own)).toBe("posts");
     expect(resolveInitialProfileTab("communities", own)).toBe("posts");
     expect(resolveInitialProfileTab("garbage", own)).toBe("posts");
     expect(resolveInitialProfileTab(undefined, own)).toBe("posts");
   });
 
   it("honors a valid, available tab from the URL", () => {
-    const own = availableProfileTabs({ help: true, stats: true, isOwnProfile: true });
-    expect(resolveInitialProfileTab("help", own)).toBe("help");
+    const own = availableProfileTabs({ stats: true });
+    expect(resolveInitialProfileTab("posts", own)).toBe("posts");
     expect(resolveInitialProfileTab("stats", own)).toBe("stats");
   });
 
-  it("falls back when a tab is valid but not available on this profile", () => {
-    const publicProfile = availableProfileTabs({
-      help: false,
-      stats: false,
-      isOwnProfile: false,
-    });
-    expect(resolveInitialProfileTab("help", publicProfile)).toBe("posts");
+  it("a public profile visiting ?tab=stats or ?tab=help falls back to posts", () => {
+    // Public profile is Posts-only, so even the valid `stats` tab isn't
+    // available and resolves to Posts — as do the retired help/communities.
+    const publicProfile = availableProfileTabs({ stats: false });
+    expect(publicProfile).toEqual(["posts"]);
     expect(resolveInitialProfileTab("stats", publicProfile)).toBe("posts");
-  });
-
-  it("a public profile visiting ?tab=help falls back to posts even with stats enabled", () => {
-    // Mirrors /profile/[id]?tab=help for a stranger's profile that does show Stats.
-    const publicWithStats = availableProfileTabs({
-      help: false,
-      stats: true,
-      isOwnProfile: false,
-    });
-    expect(publicWithStats).toEqual(["posts", "stats"]);
-    expect(resolveInitialProfileTab("help", publicWithStats)).toBe("posts");
+    expect(resolveInitialProfileTab("help", publicProfile)).toBe("posts");
+    expect(resolveInitialProfileTab("communities", publicProfile)).toBe("posts");
   });
 });

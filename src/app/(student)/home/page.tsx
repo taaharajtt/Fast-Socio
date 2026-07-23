@@ -4,7 +4,6 @@ import { Activity, MapPinned } from "lucide-react";
 import { HomeFeed } from "@/components/feed/home-feed";
 import { FirstRunTour } from "@/components/tour/first-run-tour";
 import { NewFeaturesTour } from "@/components/tour/new-features-tour";
-import { EventsStrip } from "@/components/feed/events-strip";
 import { HomeHelpStrip } from "@/components/help/home-help-strip";
 import { HomeSocietyStrip } from "@/components/societies/home-society-strip";
 import { createClient } from "@/lib/supabase/server";
@@ -107,11 +106,7 @@ export default async function HomePage() {
 
       {/* Same DOM as before, but a client shell ties composer → feed so a new
           post appears via one targeted fetch instead of a full RSC refresh. */}
-      <HomeFeed
-        initialPosts={posts}
-        currentUserId={userId}
-        eventsStrip={<EventsStrip />}
-      />
+      <HomeFeed initialPosts={posts} currentUserId={userId} />
       {/* Guided tours (mutually exclusive). New accounts get the full first-run
           tour, gated per account via profiles.tour_seen_at; accounts that have
           already finished it get the release "what's new" tour instead, gated

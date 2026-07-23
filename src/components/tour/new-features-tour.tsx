@@ -37,10 +37,10 @@ const STEPS: Step[] = [
   },
   {
     icon: HandHeart,
-    title: "Help lives in Me",
-    body: "Campus Help moved into Me → Help. SOCIO is the campus-wide help feed; ME is where you ask, manage helpers, and keep your history.",
-    href: "/profile?tab=help",
-    cta: "Go to Help",
+    title: "Campus Help",
+    body: "Discover Campus Help from Home, or open the full page. SOCIO is the campus-wide help feed; ME is where you ask, manage helpers, and keep your history.",
+    href: "/help",
+    cta: "Open Campus Help",
   },
   {
     icon: Compass,

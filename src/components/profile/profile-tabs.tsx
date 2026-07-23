@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Award, ChevronRight } from "lucide-react";
-import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { PostCard } from "@/components/feed/post-card";
 import { levelProgress } from "@/lib/aura/levels";
@@ -35,81 +34,72 @@ export type ProfileStats = {
 
 const TAB_LABEL: Record<ProfileTab, string> = {
   posts: "Posts",
-  help: "Help",
   stats: "Stats",
 };
 
 /**
- * Posts | Help | Stats switcher on the profile screen. The old Communities tab
- * (a list of joined communities) was removed — the global Communities feature is
- * untouched. Help and Stats render only when their content is supplied, so a
- * public profile shows Posts alone while your own "Me" profile shows all three.
- * Posts render exactly like the home feed (full post cards); Help embeds the
- * complete Campus Help experience (SOCIO | ME) via the `helpContent` slot — a
- * server-rendered node passed down so a client tab switcher can host it; Stats
- * shows level/XP and activity counts.
+ * Posts | Stats switcher on your own profile. The profile is personal identity
+ * only now — Campus Help moved out entirely to its own /help product, and the
+ * joined-communities list was removed earlier (the global Communities feature is
+ * untouched). Stats renders only when its data is supplied, so a PUBLIC profile
+ * resolves to Posts alone and — being a single tab — renders with NO tab
+ * switcher and no purple underline, just the posts list. Posts render exactly
+ * like the home feed (full post cards); Stats shows level/XP and activity counts.
+ *
+ * Tab switching is pure client state (both tabs' data is already passed as
+ * props), so pressing a tab flips the active state instantly with no navigation
+ * or data-load wait.
  */
 export function ProfileTabs({
   posts,
   currentUserId,
-  helpContent,
   stats,
   initialTab,
-  isOwnProfile = false,
 }: {
   posts: FeedPost[];
   currentUserId?: string | null;
-  helpContent?: ReactNode;
   stats?: ProfileStats;
   initialTab?: string;
-  /**
-   * Gates the Help tab. Someone else's Campus Help activity (requests, offers,
-   * anonymous asks, resolved history) must never be reachable through their
-   * profile, so Help renders only when this is explicitly true — even if
-   * `helpContent` were ever passed by mistake on a public profile.
-   */
-  isOwnProfile?: boolean;
 }) {
-  const available = availableProfileTabs({
-    help: Boolean(helpContent),
-    stats: Boolean(stats),
-    isOwnProfile,
-  });
+  const available = availableProfileTabs({ stats: Boolean(stats) });
   const [tab, setTab] = useState<ProfileTab>(
     resolveInitialProfileTab(initialTab, available)
   );
   const [list, setList] = useState<FeedPost[]>(posts);
 
+  // A public profile has a single tab (Posts) — render it bare, with no tab
+  // switcher and no underline, so it reads as a plain posts page.
+  const showTabBar = available.length > 1;
+
   return (
     <div>
-      {/* Underlined switchable tabs (matches Ranks + Chat). */}
-      <div className="mb-4 flex border-b border-white/[0.08]">
-        {available.map((value) => {
-          const active = tab === value;
-          return (
-            <button
-              key={value}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => setTab(value)}
-              className={cn(
-                "relative flex flex-1 items-center justify-center pb-3 text-center text-[16px] font-semibold transition-colors",
-                active ? "text-fg" : "text-fg-muted hover:text-fg"
-              )}
-            >
-              {TAB_LABEL[value]}
-              {active && (
-                <span className="absolute inset-x-0 -bottom-px h-[3px] rounded-full bg-accent" />
-              )}
-            </button>
-          );
-        })}
-      </div>
+      {showTabBar && (
+        <div className="mb-4 flex border-b border-white/[0.08]">
+          {available.map((value) => {
+            const active = tab === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setTab(value)}
+                className={cn(
+                  "relative flex flex-1 items-center justify-center pb-3 text-center text-[16px] font-semibold transition-colors",
+                  active ? "text-fg" : "text-fg-muted hover:text-fg"
+                )}
+              >
+                {TAB_LABEL[value]}
+                {active && (
+                  <span className="absolute inset-x-0 -bottom-px h-[3px] rounded-full bg-accent" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {tab === "stats" && stats && <StatsPanel stats={stats} />}
-
-      {tab === "help" && helpContent}
 
       {tab === "posts" &&
         (list.length === 0 ? (

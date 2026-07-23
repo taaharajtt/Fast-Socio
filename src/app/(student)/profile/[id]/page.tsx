@@ -272,17 +272,12 @@ export default async function PublicProfilePage({
           <p className="mb-5 text-sm leading-relaxed text-fg">{profile.bio}</p>
         )}
 
-        {/* Public profile is Posts-only — no Help/Stats data is passed, and
-            isOwnProfile is explicitly gated to isSelf, so Help never renders and
-            a stray ?tab=help falls back to Posts. Even visiting your own id
-            through this route (isSelf=true) still passes no help data, so the
-            gate alone can never leak another user's Campus Help activity. */}
-        <ProfileTabs
-          posts={posts}
-          currentUserId={me}
-          initialTab={initialTab}
-          isOwnProfile={isSelf}
-        />
+        {/* Public profile is Posts-only — no Stats data is passed, so there's a
+            single tab and ProfileTabs renders it with NO tab switcher and no
+            underline (a plain posts page). Campus Help is not part of the profile
+            at all anymore; a stray ?tab=help / ?tab=stats / ?tab=communities
+            falls back to Posts. */}
+        <ProfileTabs posts={posts} currentUserId={me} initialTab={initialTab} />
       </main>
     </div>
   );

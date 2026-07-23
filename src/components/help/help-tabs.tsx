@@ -22,8 +22,8 @@ import { HelpTabSkeleton } from "@/components/help/help-tab-skeleton";
  * covers browser back/forward, which changes `active` without going through
  * `go()`.
  *
- * The hrefs are passed in so the same shell works at `/help` and embedded
- * inside `/profile?tab=help` (a different param scheme) without divergence.
+ * The hrefs are passed in so the shell stays host-agnostic (today both point at
+ * `/help`); it carries no assumption about its route.
  */
 export function HelpTabs({
   active,

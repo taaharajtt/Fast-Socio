@@ -16,13 +16,13 @@ function safeLike(input: string): string {
 /**
  * The complete Campus Help experience — the internal SOCIO | ME tabs, the SOCIO
  * public feed (urgent-boosted) with its top-right Filters, and the ME personal
- * area (ask / manage / approve / history). It is intentionally chrome-free (no
- * page title) so it can be mounted BOTH as the standalone `/help` route and
- * embedded inside Profile → Help without divergence.
+ * area (ask / manage / approve / history). It is its own product surface at
+ * `/help`, discovered from the Home preview strip; it is intentionally
+ * chrome-free (the page supplies its own header) and host-agnostic.
  *
  * All navigation (SOCIO⇄ME, filters) is URL-driven; the hosting page supplies
- * the hrefs + filter target so the same shell works under either route's param
- * scheme (`/help?tab=me` vs `/profile?tab=help&h=me`).
+ * the hrefs + filter target (today `/help?tab=me`), so the shell carries no
+ * assumption about its route and could be hosted elsewhere without divergence.
  */
 export async function CampusHelpShell({
   helpTab,
