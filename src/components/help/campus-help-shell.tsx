@@ -40,21 +40,22 @@ export async function CampusHelpShell({
   filterKeep: Record<string, string>;
 }) {
   const supabase = await createClient();
+  const content =
+    helpTab === "me" ? (
+      <MeSection supabase={supabase} />
+    ) : (
+      <SocioSection
+        supabase={supabase}
+        filters={filters}
+        filterBasePath={filterBasePath}
+        filterKeep={filterKeep}
+      />
+    );
 
   return (
-    <div>
-      <HelpTabs active={helpTab} socioHref={socioHref} meHref={meHref} />
-      {helpTab === "me" ? (
-        <MeSection supabase={supabase} />
-      ) : (
-        <SocioSection
-          supabase={supabase}
-          filters={filters}
-          filterBasePath={filterBasePath}
-          filterKeep={filterKeep}
-        />
-      )}
-    </div>
+    <HelpTabs active={helpTab} socioHref={socioHref} meHref={meHref}>
+      {content}
+    </HelpTabs>
   );
 }
 

@@ -32,9 +32,9 @@ export default async function DiscoverPage({
         <h1 className="text-lg font-bold tracking-tight">Discover</h1>
       </header>
 
-      <DiscoverModeTabs current={mode} />
-
-      {mode === "socio" ? <SocioDeck /> : <PostModeSection mode={mode as PostMode} />}
+      <DiscoverModeTabs current={mode}>
+        {mode === "socio" ? <SocioDeck /> : <PostModeSection mode={mode as PostMode} />}
+      </DiscoverModeTabs>
     </main>
   );
 }
