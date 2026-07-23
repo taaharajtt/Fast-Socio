@@ -13,25 +13,13 @@ import {
 
 type Result = { ok: true } | { ok: false; error: string };
 
-/** Clamp a client-supplied semester to the DB's smallint 1–12 range (or null). */
-function cleanSemester(v: number | null | undefined): number | null {
-  if (v == null || `${v}` === "") return null;
-  const n = Math.floor(Number(v));
-  if (!Number.isFinite(n) || n < 1 || n > 12) return null;
-  return n;
-}
-
 export type CreateHelpInput = {
   title: string;
   body: string;
   category: string;
   /** Single urgent toggle; mapped onto the urgency text column server-side. */
   isUrgent: boolean;
-  department?: string | null;
-  semester?: number | null;
-  courseCode?: string | null;
   isAnonymous?: boolean;
-  allowDms?: boolean;
 };
 
 /**
@@ -59,17 +47,20 @@ export async function createHelpRequest(
   if (!allowed)
     return { error: "You've posted a lot of requests today. Try again later." };
 
+  // Semester/school/department/course are no longer collected on the form; they
+  // are shown from the seeker's profile at read time (help_request_feed derives
+  // author_school + author_semester). We pass nulls for the retained columns.
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("create_help_request", {
     p_title: title,
     p_body: body,
     p_category: input.category as HelpCategory,
     p_urgency: urgency,
-    p_department: input.department ?? null,
-    p_semester: cleanSemester(input.semester),
-    p_course_code: input.courseCode ?? null,
+    p_department: null,
+    p_semester: null,
+    p_course_code: null,
     p_is_anonymous: Boolean(input.isAnonymous),
-    p_allow_dms: input.allowDms ?? true,
+    p_allow_dms: true,
   });
   if (error) return { error: error.message };
 
@@ -102,9 +93,9 @@ export async function updateHelpRequest(
     p_body: body,
     p_category: input.category as HelpCategory,
     p_urgency: urgency,
-    p_department: input.department ?? null,
-    p_semester: cleanSemester(input.semester),
-    p_course_code: input.courseCode ?? null,
+    p_department: null,
+    p_semester: null,
+    p_course_code: null,
   });
   if (error) return { ok: false, error: error.message };
   revalidatePath(`/help/${id}`);
@@ -136,17 +127,22 @@ export async function reopenRequest(id: string): Promise<Result> {
   return { ok: true };
 }
 
-/** Respond with an offer ("I can help") or a written answer. */
+/**
+ * Respond to a help request with a written answer. Optionally anonymous — the
+ * helper's identity is then hidden from the seeker (shown as school + semester
+ * only); the helper_id is preserved server-side for Aura/permissions.
+ */
 export async function respondToHelp(
   requestId: string,
   body: string,
-  kind: "offer" | "answer"
+  kind: "offer" | "answer",
+  isAnonymous = false
 ): Promise<Result> {
   const uid = await getAuthUserId();
   if (!uid) return { ok: false, error: "Not signed in." };
   const text = body.trim();
   if (kind === "answer" && text.length === 0)
-    return { ok: false, error: "Write your answer first." };
+    return { ok: false, error: "Write your response first." };
   if (text.length > 2000) return { ok: false, error: "That response is too long." };
 
   const allowed = await checkRateLimit("help_respond", 40, 60 * 60);
@@ -157,10 +153,36 @@ export async function respondToHelp(
     p_request_id: requestId,
     p_body: text || null,
     p_kind: kind,
+    p_is_anonymous: Boolean(isAnonymous),
   });
   if (error) return { ok: false, error: error.message };
   revalidatePath(`/help/${requestId}`);
   revalidatePath("/help");
+  return { ok: true };
+}
+
+/**
+ * The seeker replies to one helper's response on their own request. Owner-only
+ * (enforced in reply_to_help_response); only that helper (and the seeker/admin)
+ * can read it back. Passing an empty body clears the reply.
+ */
+export async function replyToResponse(
+  responseId: string,
+  requestId: string,
+  body: string
+): Promise<Result> {
+  const uid = await getAuthUserId();
+  if (!uid) return { ok: false, error: "Not signed in." };
+  const text = body.trim();
+  if (text.length > 1000) return { ok: false, error: "That reply is too long." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("reply_to_help_response", {
+    p_response_id: responseId,
+    p_body: text || null,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/help/${requestId}`);
   return { ok: true };
 }
 

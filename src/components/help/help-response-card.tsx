@@ -7,15 +7,15 @@ import {
   Award,
   Trash2,
   Flag,
-  HandHeart,
   Check,
   X,
   MessageCircle,
+  CornerDownRight,
 } from "lucide-react";
 import { AppImage } from "@/components/ui/app-image";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/time";
-import { resolveHelpAuthor } from "@/lib/help/logic";
+import { resolveHelpResponseAuthor } from "@/lib/help/logic";
 import type { HelpResponseRow } from "@/lib/help/types";
 import {
   selectHelper,
@@ -23,42 +23,48 @@ import {
   acceptHelpOffer,
   declineHelpOffer,
   openHelpChat,
+  replyToResponse,
 } from "@/app/(student)/help/actions";
 import { HelpReportSheet } from "./help-report-sheet";
 
 /**
- * One response in a request thread. Two overlapping owner tools:
- *  • Approve / decline — opens (or declines) a private chat with this helper.
- *    Approving reveals identity only through the chat, so an anonymous asker
- *    stays anonymous everywhere else.
- *  • Select & thank — the gratitude loop: marks the response as the one that
- *    solved it, resolves the request, and awards Aura.
- * The response's own author can delete it (until selected) or, once approved,
- * message the asker back. Everyone else can report it.
+ * One response in a request thread. What renders depends on who's looking — and
+ * the DB view (mig 0109) only ever hands this component a row the viewer is
+ * allowed to see (the seeker, this response's own author, or an admin):
+ *  • Seeker: approve/decline (opens a private chat), select & thank (the
+ *    gratitude loop → resolve + Aura), and reply to this helper.
+ *  • Helper (own response): delete it (until selected), message once approved,
+ *    and read the seeker's reply to them.
+ * An anonymous helper is shown as "Anonymous helper · School · Nth Semester";
+ * the seeker still selects/thanks by response id, so anonymity never blocks it.
  */
 export function HelpResponseCard({
   response,
   requestId,
   viewerCanSelect,
+  viewerCanReply,
 }: {
   response: HelpResponseRow;
   requestId: string;
   viewerCanSelect: boolean;
+  viewerCanReply: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [reporting, setReporting] = useState(false);
+  const [replyOpen, setReplyOpen] = useState(false);
+  const [replyText, setReplyText] = useState(response.seeker_reply ?? "");
 
-  const author = response.author_is_op_anon
-    ? { anonymous: true, name: "Original poster", href: null, avatarUrl: null }
-    : resolveHelpAuthor({
-        isAnonymous: false,
-        authorId: response.author_id,
-        authorName: response.author_name,
-        authorUsername: response.author_username,
-        authorAvatarUrl: response.author_avatar_url,
-      });
+  const author = resolveHelpResponseAuthor({
+    authorIsAnon: response.author_is_anon,
+    authorId: response.author_id,
+    authorName: response.author_name,
+    authorUsername: response.author_username,
+    authorAvatarUrl: response.author_avatar_url,
+    authorSchool: response.author_school,
+    authorSemester: response.author_semester,
+  });
 
   const isOwner = response.viewer_owns_request;
   const accepted = response.status === "accepted";
@@ -83,6 +89,18 @@ export function HelpResponseCard({
     });
   }
 
+  function sendReply() {
+    setError(null);
+    start(async () => {
+      const res = await replyToResponse(response.id, requestId, replyText);
+      if (!res.ok) setError(res.error);
+      else {
+        setReplyOpen(false);
+        router.refresh();
+      }
+    });
+  }
+
   return (
     <div
       className={cn(
@@ -100,28 +118,30 @@ export function HelpResponseCard({
             <AppImage src={author.avatarUrl} alt="" sizes="28px" />
           )}
         </span>
-        {author.href ? (
-          <Link href={author.href} className="truncate text-sm font-semibold text-fg">
-            {author.name}
-          </Link>
-        ) : (
-          <span className="truncate text-sm font-semibold text-fg">{author.name}</span>
-        )}
-        {response.kind === "offer" && !response.body && (
-          <span className="flex items-center gap-1 text-xs text-aura">
-            <HandHeart className="h-3.5 w-3.5" aria-hidden /> offered to help
-          </span>
-        )}
+        <div className="min-w-0 flex-1">
+          {author.href ? (
+            <Link href={author.href} className="block truncate text-sm font-semibold text-fg">
+              {author.name}
+            </Link>
+          ) : (
+            <span className="block truncate text-sm font-semibold text-fg">
+              {author.name}
+            </span>
+          )}
+          {author.meta && (
+            <span className="block truncate text-xs text-fg-muted">{author.meta}</span>
+          )}
+        </div>
         {response.is_selected ? (
-          <span className="ml-auto flex items-center gap-1 rounded-full bg-success/20 px-2 py-0.5 text-xs font-semibold text-success">
+          <span className="flex shrink-0 items-center gap-1 rounded-full bg-success/20 px-2 py-0.5 text-xs font-semibold text-success">
             <Award className="h-3.5 w-3.5" aria-hidden /> Thanked
           </span>
         ) : accepted ? (
-          <span className="ml-auto flex items-center gap-1 rounded-full bg-aura/20 px-2 py-0.5 text-xs font-semibold text-aura">
+          <span className="flex shrink-0 items-center gap-1 rounded-full bg-aura/20 px-2 py-0.5 text-xs font-semibold text-aura">
             <Check className="h-3.5 w-3.5" aria-hidden /> Approved
           </span>
         ) : (
-          <span className="ml-auto text-xs text-fg-muted">
+          <span className="shrink-0 text-xs text-fg-muted">
             {timeAgo(response.created_at)}
           </span>
         )}
@@ -133,9 +153,27 @@ export function HelpResponseCard({
         </p>
       )}
 
+      {/* Seeker's reply to this helper — visible to the two parties + admin. */}
+      {response.seeker_reply && (
+        <div className="mt-2.5 flex gap-2 rounded-[12px] bg-white/[0.04] p-2.5">
+          <CornerDownRight
+            className="mt-0.5 h-3.5 w-3.5 shrink-0 text-fg-muted"
+            aria-hidden
+          />
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-fg-muted">
+              {isOwner ? "Your reply" : "Reply from the poster"}
+            </p>
+            <p className="mt-0.5 whitespace-pre-wrap text-sm text-fg">
+              {response.seeker_reply}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Action row */}
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
-        {/* Owner: approve / decline a pending offer */}
+        {/* Seeker: approve / decline a pending offer */}
         {isOwner && pendingOffer && (
           <>
             <button
@@ -173,7 +211,7 @@ export function HelpResponseCard({
           <span className="text-xs text-fg-muted">Declined</span>
         )}
 
-        {/* Owner: mark this as the response that solved it (resolve + thank) */}
+        {/* Seeker: mark this as the response that solved it (resolve + thank) */}
         {viewerCanSelect && !response.is_selected && (
           <button
             type="button"
@@ -182,6 +220,19 @@ export function HelpResponseCard({
             className="flex items-center gap-1.5 rounded-full bg-success/15 px-3 py-1.5 text-xs font-semibold text-success transition-colors disabled:opacity-60"
           >
             <Award className="h-3.5 w-3.5" aria-hidden /> Select &amp; thank
+          </button>
+        )}
+
+        {/* Seeker: reply to this helper */}
+        {viewerCanReply && (
+          <button
+            type="button"
+            onClick={() => setReplyOpen((v) => !v)}
+            disabled={pending}
+            className="flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs font-medium text-fg-muted transition-colors hover:text-fg disabled:opacity-60"
+          >
+            <CornerDownRight className="h-3.5 w-3.5" aria-hidden />
+            {response.seeker_reply ? "Edit reply" : "Reply"}
           </button>
         )}
 
@@ -208,6 +259,37 @@ export function HelpResponseCard({
           </button>
         )}
       </div>
+
+      {/* Seeker reply composer (compact) */}
+      {viewerCanReply && replyOpen && (
+        <div className="mt-2.5 rounded-[12px] bg-white/[0.04] p-2.5">
+          <textarea
+            value={replyText}
+            onChange={(e) => setReplyText(e.target.value.slice(0, 1000))}
+            placeholder="Reply to this helper…"
+            rows={2}
+            className="w-full resize-none bg-transparent text-sm text-fg outline-none placeholder:text-fg-muted"
+          />
+          <div className="mt-1.5 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setReplyOpen(false)}
+              className="rounded-full px-3 py-1.5 text-xs font-medium text-fg-muted hover:text-fg"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={sendReply}
+              disabled={pending}
+              className="gradient-brand ml-auto rounded-full px-4 py-1.5 text-xs font-semibold text-white active:scale-95 disabled:opacity-50"
+            >
+              {pending ? "…" : "Send reply"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {error && <p className="mt-2 text-xs text-error">{error}</p>}
 
       <HelpReportSheet

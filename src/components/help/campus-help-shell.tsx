@@ -6,7 +6,7 @@ import { HelpCard } from "@/components/help/help-card";
 import { MyHelpPanel } from "@/components/help/my-help-panel";
 import { compareSocio, type HelpUrgency } from "@/lib/help/logic";
 import type { HelpTab } from "@/lib/help/constants";
-import type { HelpRequestRow } from "@/lib/help/types";
+import { HELP_REQUEST_COLUMNS, type HelpRequestRow } from "@/lib/help/types";
 
 /** Neutralize characters that would break PostgREST's or()/ilike grammar. */
 function safeLike(input: string): string {
@@ -75,7 +75,7 @@ async function SocioSection({
 
   let query = supabase
     .from("help_request_feed")
-    .select("*")
+    .select(HELP_REQUEST_COLUMNS)
     .eq("status", "open")
     .eq("is_mine", false);
 
@@ -93,7 +93,7 @@ async function SocioSection({
     .limit(60);
 
   // Urgent unresolved asks float to the top, then newest.
-  const rows = [...((data ?? []) as HelpRequestRow[])].sort((a, b) =>
+  const rows = [...((data ?? []) as unknown as HelpRequestRow[])].sort((a, b) =>
     compareSocio(
       { urgency: a.urgency as HelpUrgency, created_at: a.created_at },
       { urgency: b.urgency as HelpUrgency, created_at: b.created_at }
@@ -133,10 +133,10 @@ async function MeSection({
 }) {
   const { data } = await supabase
     .from("help_request_feed")
-    .select("*")
+    .select(HELP_REQUEST_COLUMNS)
     .eq("is_mine", true)
     .order("created_at", { ascending: false })
     .limit(100);
 
-  return <MyHelpPanel rows={(data ?? []) as HelpRequestRow[]} />;
+  return <MyHelpPanel rows={(data ?? []) as unknown as HelpRequestRow[]} />;
 }

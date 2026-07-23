@@ -21,6 +21,15 @@ import {
   canTransitionOffer,
   shouldMaskAuthor,
   resolveHelpAuthor,
+  resolveHelpResponseAuthor,
+  helpAuthorMeta,
+  semesterLabel,
+  canMarkHelpResolved,
+  canReopenHelpRequest,
+  canViewAllHelpResponses,
+  canViewOwnHelpResponse,
+  canSelectAndThank,
+  canReplyToResponse,
   type HelpUrgency,
   type HelpStatus,
 } from "./logic";
@@ -251,5 +260,121 @@ describe("anonymous display behavior", () => {
     expect(d.anonymous).toBe(false);
     expect(d.name).toBe("My Name");
     expect(d.href).toBe("/profile/me");
+  });
+
+  it("shows school + semester even when the author is masked to Anonymous", () => {
+    const d = resolveHelpAuthor({
+      isAnonymous: true,
+      authorId: null,
+      authorName: null,
+      authorUsername: null,
+      authorAvatarUrl: null,
+      authorSchool: "Fast School of Computing",
+      authorSemester: 5,
+    });
+    expect(d.anonymous).toBe(true);
+    expect(d.name).toBe("Anonymous");
+    expect(d.meta).toBe("Fast School of Computing · 5th Semester");
+  });
+});
+
+describe("author meta formatting", () => {
+  it("labels ordinal semesters and the alumni sentinel", () => {
+    expect(semesterLabel(1)).toBe("1st Semester");
+    expect(semesterLabel(3)).toBe("3rd Semester");
+    expect(semesterLabel(5)).toBe("5th Semester");
+    expect(semesterLabel(13)).toBe("Alumni");
+  });
+
+  it("joins school and semester, tolerating either being missing", () => {
+    expect(helpAuthorMeta("Fast School of Computing", 4)).toBe(
+      "Fast School of Computing · 4th Semester"
+    );
+    expect(helpAuthorMeta("Fast School of Computing", null)).toBe(
+      "Fast School of Computing"
+    );
+    expect(helpAuthorMeta(null, 4)).toBe("4th Semester");
+    expect(helpAuthorMeta(null, null)).toBeNull();
+  });
+});
+
+describe("anonymous helper display", () => {
+  it("hides a masked helper as 'Anonymous helper' with only school + semester", () => {
+    const d = resolveHelpResponseAuthor({
+      authorIsAnon: true,
+      authorId: null,
+      authorName: null,
+      authorUsername: null,
+      authorAvatarUrl: null,
+      authorSchool: "Fast School of Engineering",
+      authorSemester: 7,
+    });
+    expect(d.anonymous).toBe(true);
+    expect(d.name).toBe("Anonymous helper");
+    expect(d.href).toBeNull();
+    expect(d.avatarUrl).toBeNull();
+    expect(d.meta).toBe("Fast School of Engineering · 7th Semester");
+  });
+
+  it("shows a non-anonymous helper's real identity and profile link", () => {
+    const d = resolveHelpResponseAuthor({
+      authorIsAnon: false,
+      authorId: "helper-1",
+      authorName: "Bilal Ahmed",
+      authorUsername: "i219999",
+      authorAvatarUrl: "https://example.test/b.png",
+      authorSchool: "Fast School of Computing",
+      authorSemester: 6,
+    });
+    expect(d.anonymous).toBe(false);
+    expect(d.name).toBe("Bilal Ahmed");
+    expect(d.href).toBe("/profile/helper-1");
+  });
+});
+
+describe("id-based role permissions", () => {
+  const seeker = "seeker-1";
+  const helper = "helper-1";
+  const openMine = { author_id: seeker, is_mine: true, status: "open" as HelpStatus };
+  const resolvedMine = {
+    author_id: seeker,
+    is_mine: true,
+    status: "resolved" as HelpStatus,
+  };
+  // A request the viewer doesn't own: an anonymous ask masks author_id to null.
+  const notMine = { author_id: null, is_mine: false, status: "open" as HelpStatus };
+
+  it("only the seeker marks their own open request resolved", () => {
+    expect(canMarkHelpResolved(seeker, openMine)).toBe(true);
+    expect(canMarkHelpResolved(seeker, resolvedMine)).toBe(false); // already resolved
+    expect(canMarkHelpResolved(helper, notMine)).toBe(false);
+  });
+
+  it("only the seeker reopens their own resolved request", () => {
+    expect(canReopenHelpRequest(seeker, resolvedMine)).toBe(true);
+    expect(canReopenHelpRequest(seeker, openMine)).toBe(false); // still open
+    expect(canReopenHelpRequest(helper, notMine)).toBe(false);
+  });
+
+  it("only the seeker (or admin) sees the full response list", () => {
+    expect(canViewAllHelpResponses(seeker, openMine)).toBe(true);
+    expect(canViewAllHelpResponses(helper, notMine)).toBe(false);
+    expect(canViewAllHelpResponses(helper, notMine, true)).toBe(true); // admin
+  });
+
+  it("a helper may view only their OWN response", () => {
+    expect(canViewOwnHelpResponse({ is_mine: true, is_selected: false })).toBe(true);
+    expect(canViewOwnHelpResponse({ is_mine: false, is_selected: false })).toBe(false);
+  });
+
+  it("only the seeker (or admin) selects/thanks a helper", () => {
+    expect(canSelectAndThank(seeker, openMine)).toBe(true);
+    expect(canSelectAndThank(helper, notMine)).toBe(false);
+    expect(canSelectAndThank(helper, notMine, true)).toBe(true); // admin
+  });
+
+  it("only the seeker replies to responses on their own request", () => {
+    expect(canReplyToResponse(seeker, openMine)).toBe(true);
+    expect(canReplyToResponse(helper, notMine)).toBe(false);
   });
 });

@@ -11,9 +11,15 @@ import {
   resolveHelpAuthor,
   canRespond,
   canSelectHelper,
+  canReplyToResponse,
   isUrgentRequest,
 } from "@/lib/help/logic";
-import type { HelpRequestRow, HelpResponseRow } from "@/lib/help/types";
+import {
+  HELP_REQUEST_COLUMNS,
+  HELP_RESPONSE_COLUMNS,
+  type HelpRequestRow,
+  type HelpResponseRow,
+} from "@/lib/help/types";
 import { HelpOwnerControls } from "@/components/help/help-owner-controls";
 import { HelpResponseComposer } from "@/components/help/help-response-composer";
 import { HelpResponseCard } from "@/components/help/help-response-card";
@@ -30,19 +36,23 @@ export default async function HelpDetailPage({
 
   const supabase = await createClient();
   const [{ data: reqRow }, { data: me }] = await Promise.all([
-    supabase.from("help_request_feed").select("*").eq("id", id).maybeSingle(),
+    supabase
+      .from("help_request_feed")
+      .select(HELP_REQUEST_COLUMNS)
+      .eq("id", id)
+      .maybeSingle(),
     supabase.from("profiles").select("admin_role").eq("id", uid).single(),
   ]);
   if (!reqRow) notFound();
 
-  const req = reqRow as HelpRequestRow;
+  const req = reqRow as unknown as HelpRequestRow;
   const { data: respRows } = await supabase
     .from("help_response_feed")
-    .select("*")
+    .select(HELP_RESPONSE_COLUMNS)
     .eq("request_id", id)
     .order("is_selected", { ascending: false })
     .order("created_at", { ascending: true });
-  const responses = (respRows ?? []) as HelpResponseRow[];
+  const responses = (respRows ?? []) as unknown as HelpResponseRow[];
 
   const isAdmin = Boolean(me?.admin_role);
   const rel = { isOwner: req.is_mine, isAdmin };
@@ -54,18 +64,27 @@ export default async function HelpDetailPage({
     authorName: req.author_name,
     authorUsername: req.author_username,
     authorAvatarUrl: req.author_avatar_url,
+    authorSchool: req.author_school,
+    authorSemester: req.author_semester,
   });
-  const meta = [
-    req.course_code,
-    req.department,
-    req.semester ? `Semester ${req.semester}` : null,
-  ].filter(Boolean);
+  // School + semester come from the seeker's profile (shown even when anonymous).
+  const meta = author.meta ? [author.meta] : [];
 
   const showComposer = canRespond(req.status, {
     signedIn: true,
     isAuthor: req.is_mine,
   });
   const viewerCanSelect = canSelectHelper(rel);
+  const viewerCanReply = canReplyToResponse(uid, {
+    author_id: req.author_id,
+    is_mine: req.is_mine,
+    status: req.status,
+  });
+  // Response visibility (mig 0109 already filters rows at the DB): the seeker and
+  // admins see the full list; a helper sees only their own row; a plain viewer
+  // gets none, so we hide the section from them entirely.
+  const isSeekerOrAdmin = req.is_mine || isAdmin;
+  const showResponses = isSeekerOrAdmin || responses.length > 0;
 
   return (
     <main className="mx-auto w-full max-w-md px-5 py-6">
@@ -153,37 +172,45 @@ export default async function HelpDetailPage({
         />
       )}
 
-      {/* Respond */}
+      {/* Respond (viewers & helpers on an open request that isn't theirs) */}
       {showComposer && (
         <section className="mt-5">
           <h3 className="mb-2 text-sm font-semibold text-fg">Offer help</h3>
           <HelpResponseComposer requestId={req.id} />
+          <p className="mt-2 text-xs text-fg-muted">
+            Only the poster can see your response.
+          </p>
         </section>
       )}
 
-      {/* Responses */}
-      <section className="mt-5">
-        <h3 className="mb-2 text-sm font-semibold text-fg">
-          Responses ({responses.length})
-        </h3>
-        {responses.length === 0 ? (
-          <p className="glass rounded-[14px] px-4 py-6 text-center text-sm text-fg-muted">
-            No responses yet.
-            {showComposer && " Be the first to help."}
-          </p>
-        ) : (
-          <div className="space-y-2.5">
-            {responses.map((r) => (
-              <HelpResponseCard
-                key={r.id}
-                response={r}
-                requestId={req.id}
-                viewerCanSelect={viewerCanSelect}
-              />
-            ))}
-          </div>
-        )}
-      </section>
+      {/* Responses — the seeker's private inbox, or the helper's own response.
+          Plain viewers never see this section (they receive no rows). */}
+      {showResponses && (
+        <section className="mt-5">
+          <h3 className="mb-2 text-sm font-semibold text-fg">
+            {isSeekerOrAdmin
+              ? `Responses (${req.response_count})`
+              : "Your response"}
+          </h3>
+          {responses.length === 0 ? (
+            <p className="glass rounded-[14px] px-4 py-6 text-center text-sm text-fg-muted">
+              No responses yet.
+            </p>
+          ) : (
+            <div className="space-y-2.5">
+              {responses.map((r) => (
+                <HelpResponseCard
+                  key={r.id}
+                  response={r}
+                  requestId={req.id}
+                  viewerCanSelect={viewerCanSelect}
+                  viewerCanReply={viewerCanReply}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
     </main>
   );
 }

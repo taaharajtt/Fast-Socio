@@ -160,6 +160,89 @@ export function canSelectHelper(rel: ViewerRel): boolean {
   return rel.isOwner || rel.isAdmin;
 }
 
+// ---------------------------------------------------------------------------
+// Id-based permission helpers. These take the current user's id and a minimal
+// request/response shape, so a caller (server action, page) can decide access
+// without first assembling a ViewerRel. They mirror the RPC guards in mig 0102 /
+// 0109 exactly — the DB remains the real enforcement, these just keep the UI and
+// the server-side gates honest and testable.
+// ---------------------------------------------------------------------------
+
+/** Minimal request shape the id-based helpers need. */
+export type OwnedRequest = {
+  author_id: string | null;
+  is_mine: boolean;
+  status: HelpStatus;
+};
+
+/** Minimal response shape the id-based helpers need. */
+export type OwnedResponse = {
+  is_mine: boolean;
+  is_selected: boolean;
+};
+
+/**
+ * Is this user the seeker (owner) of the request? Uses is_mine when present
+ * (the feed view computes it against auth.uid()); falls back to comparing ids.
+ * author_id may be null on an anonymous ask the viewer can't see — in which case
+ * they are definitionally not the owner.
+ */
+function ownsRequest(userId: string | null, req: OwnedRequest): boolean {
+  if (req.is_mine) return true;
+  return Boolean(userId && req.author_id && req.author_id === userId);
+}
+
+/** Only the help seeker may mark their own OPEN request resolved. */
+export function canMarkHelpResolved(
+  userId: string | null,
+  req: OwnedRequest
+): boolean {
+  return ownsRequest(userId, req) && req.status === "open";
+}
+
+/** Only the help seeker may reopen their own RESOLVED request. */
+export function canReopenHelpRequest(
+  userId: string | null,
+  req: OwnedRequest
+): boolean {
+  return ownsRequest(userId, req) && req.status === "resolved";
+}
+
+/**
+ * Who may see the full response list: the help seeker (their private inbox) or
+ * an admin. Helpers and viewers may not — they never see other people's
+ * responses.
+ */
+export function canViewAllHelpResponses(
+  userId: string | null,
+  req: OwnedRequest,
+  isAdmin = false
+): boolean {
+  return ownsRequest(userId, req) || isAdmin;
+}
+
+/** A helper may always view their OWN response (and nobody else's). */
+export function canViewOwnHelpResponse(resp: OwnedResponse): boolean {
+  return resp.is_mine;
+}
+
+/** Only the help seeker (or an admin) may select/thank a helper. */
+export function canSelectAndThank(
+  userId: string | null,
+  req: OwnedRequest,
+  isAdmin = false
+): boolean {
+  return ownsRequest(userId, req) || isAdmin;
+}
+
+/** Only the help seeker may reply to a response on their own request. */
+export function canReplyToResponse(
+  userId: string | null,
+  req: OwnedRequest
+): boolean {
+  return ownsRequest(userId, req);
+}
+
 /**
  * A signed-in student may respond to an OPEN request that isn't their own.
  * (The author "helping" their own request is nonsensical and is also blocked in
@@ -200,6 +283,9 @@ export type HelpAuthorFields = {
   authorName: string | null;
   authorUsername: string | null;
   authorAvatarUrl: string | null;
+  /** Non-identifying facts, shown even for anonymous authors. */
+  authorSchool?: string | null;
+  authorSemester?: number | null;
 };
 
 export type HelpAuthorDisplay = {
@@ -209,14 +295,46 @@ export type HelpAuthorDisplay = {
   avatarUrl: string | null;
   /** Profile link, or null when there is no visible author to link to. */
   href: string | null;
+  /** School name (profiles.department), or null. */
+  school: string | null;
+  /** Derived current semester (1–8, 13 = alumni), or null. */
+  semester: number | null;
+  /** "School · Nth Semester" — the only line shown for an anonymous author. */
+  meta: string | null;
 };
+
+const ALUMNI_SEMESTER = 13;
+
+/** "5" → "5th Semester"; 13 → "Alumni". Kept local so logic.ts stays dependency-free. */
+export function semesterLabel(n: number): string {
+  if (n === ALUMNI_SEMESTER) return "Alumni";
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]} Semester`;
+}
+
+/** Compose the non-identifying "School · Nth Semester" line (either part optional). */
+export function helpAuthorMeta(
+  school: string | null | undefined,
+  semester: number | null | undefined
+): string | null {
+  const parts: string[] = [];
+  if (school) parts.push(school);
+  if (semester != null) parts.push(semesterLabel(semester));
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
 
 /**
  * Normalize the (possibly DB-masked) author fields into what the card/detail
  * renders. When identity is hidden the fields arrive as null, so a null name is
  * treated as anonymous regardless of the flag — the view is authoritative.
+ * School + semester are non-identifying and carried through in both cases, so an
+ * anonymous author still shows "School · Nth Semester".
  */
 export function resolveHelpAuthor(f: HelpAuthorFields): HelpAuthorDisplay {
+  const school = f.authorSchool ?? null;
+  const semester = f.authorSemester ?? null;
+  const meta = helpAuthorMeta(school, semester);
   const hidden = f.isAnonymous && !f.authorId;
   if (hidden || !f.authorName) {
     return {
@@ -225,6 +343,9 @@ export function resolveHelpAuthor(f: HelpAuthorFields): HelpAuthorDisplay {
       username: null,
       avatarUrl: null,
       href: null,
+      school,
+      semester,
+      meta,
     };
   }
   return {
@@ -233,5 +354,50 @@ export function resolveHelpAuthor(f: HelpAuthorFields): HelpAuthorDisplay {
     username: f.authorUsername,
     avatarUrl: f.authorAvatarUrl,
     href: f.authorId ? `/profile/${f.authorId}` : null,
+    school,
+    semester,
+    meta,
+  };
+}
+
+/**
+ * Response-author display. A response's helper is masked by the DB view when
+ * they responded anonymously (author_is_anon = true → id/name/avatar arrive as
+ * null); we surface "Anonymous helper" with the same school/semester line. The
+ * seeker still selects/thanks by response id, so anonymity never blocks the loop.
+ */
+export function resolveHelpResponseAuthor(f: {
+  authorIsAnon: boolean;
+  authorId: string | null;
+  authorName: string | null;
+  authorUsername: string | null;
+  authorAvatarUrl: string | null;
+  authorSchool?: string | null;
+  authorSemester?: number | null;
+}): HelpAuthorDisplay {
+  const school = f.authorSchool ?? null;
+  const semester = f.authorSemester ?? null;
+  const meta = helpAuthorMeta(school, semester);
+  if (f.authorIsAnon || !f.authorName) {
+    return {
+      anonymous: true,
+      name: "Anonymous helper",
+      username: null,
+      avatarUrl: null,
+      href: null,
+      school,
+      semester,
+      meta,
+    };
+  }
+  return {
+    anonymous: false,
+    name: f.authorName,
+    username: f.authorUsername,
+    avatarUrl: f.authorAvatarUrl,
+    href: f.authorId ? `/profile/${f.authorId}` : null,
+    school,
+    semester,
+    meta,
   };
 }

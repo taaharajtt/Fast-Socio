@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { HelpComposer } from "@/components/help/help-composer";
 
@@ -9,21 +8,7 @@ export default async function NewHelpPage() {
   const uid = await getAuthUserId();
   if (!uid) redirect("/login");
 
-  const supabase = await createClient();
-  // Prefill department/semester from the profile so the common case is one tap.
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("department, semester")
-    .eq("id", uid)
-    .single();
-
-  return (
-    <HelpComposer
-      defaults={{
-        department: profile?.department ?? null,
-        semester:
-          typeof profile?.semester === "number" ? profile.semester : null,
-      }}
-    />
-  );
+  // Semester/school/department/course are shown from the profile at read time,
+  // so the composer collects only title, body, category, and the two toggles.
+  return <HelpComposer />;
 }

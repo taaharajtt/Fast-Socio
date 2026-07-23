@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { ChevronLeft, Zap } from "lucide-react";
+import { ChevronLeft, Zap, EyeOff } from "lucide-react";
 import { GlassButton, GlassCard, GlassInput } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { CATEGORY_ORDER, CATEGORY_META } from "@/lib/help/constants";
@@ -24,25 +24,19 @@ export type ComposerInitial = {
   body: string;
   category: HelpCategory;
   urgency: HelpUrgency;
-  department: string | null;
-  semester: number | null;
-  course_code: string | null;
   is_anonymous: boolean;
-  allow_dms: boolean;
 };
 
 /**
  * Create/edit form for a help request. One component, two modes: `initial`
- * present = editing an existing open request; absent = creating a new one with
- * the viewer's profile department/semester prefilled.
+ * present = editing an existing open request; absent = creating a new one.
+ *
+ * The form collects only title, body, category, and two capsule toggles (urgent
+ * / anonymous). Semester, school/department and course are NOT collected — they
+ * are shown from the seeker's profile at read time — so there is nothing here to
+ * edit for those.
  */
-export function HelpComposer({
-  defaults,
-  initial,
-}: {
-  defaults: { department: string | null; semester: number | null };
-  initial?: ComposerInitial;
-}) {
+export function HelpComposer({ initial }: { initial?: ComposerInitial }) {
   const router = useRouter();
   const editing = Boolean(initial);
 
@@ -54,15 +48,7 @@ export function HelpComposer({
   const [isUrgent, setIsUrgent] = useState(
     initial ? isUrgentRequest(initial.urgency) : false
   );
-  const [department, setDepartment] = useState(
-    initial?.department ?? defaults.department ?? ""
-  );
-  const [semester, setSemester] = useState(
-    (initial?.semester ?? defaults.semester ?? "").toString()
-  );
-  const [courseCode, setCourseCode] = useState(initial?.course_code ?? "");
   const [anonymous, setAnonymous] = useState(initial?.is_anonymous ?? false);
-  const [allowDms, setAllowDms] = useState(initial?.allow_dms ?? true);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -80,11 +66,7 @@ export function HelpComposer({
       body,
       category,
       isUrgent,
-      department: department.trim() || null,
-      semester: semester.trim() ? Number(semester) : null,
-      courseCode: courseCode.trim() || null,
       isAnonymous: anonymous,
-      allowDms,
     };
     start(async () => {
       if (editing && initial) {
@@ -172,104 +154,29 @@ export function HelpComposer({
             />
           </div>
 
-          {/* Single urgent toggle — pressing it flags the request as urgent so it
-              gets boosted to the top of SOCIO. */}
-          <button
-            type="button"
-            role="switch"
-            aria-checked={isUrgent}
-            onClick={() => setIsUrgent((v) => !v)}
-            className={cn(
-              "flex w-full items-center gap-3 rounded-[12px] p-3 text-left transition-colors",
-              isUrgent ? "bg-error/15 ring-1 ring-error/40" : "glass"
-            )}
-          >
-            <Zap
-              className={cn("h-5 w-5 shrink-0", isUrgent ? "text-error" : "text-fg-muted")}
-              aria-hidden
+          {/* Compact capsule toggles: urgent (boosts to top of SOCIO) and
+              anonymous (hides your name/photo; only school + semester show). */}
+          <div className="flex flex-wrap gap-2">
+            <CapsuleToggle
+              active={isUrgent}
+              onClick={() => setIsUrgent((v) => !v)}
+              icon={<Zap className="h-4 w-4" aria-hidden />}
+              label="Urgent"
+              activeClass="bg-error text-white"
             />
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-medium text-fg">
-                Mark as urgent
-              </span>
-              <span className="block text-xs text-fg-muted">
-                Time-sensitive asks get boosted to the top of SOCIO.
-              </span>
-            </span>
-            <span
-              className={cn(
-                "relative h-6 w-11 shrink-0 rounded-full transition-colors",
-                isUrgent ? "bg-error" : "bg-white/15"
-              )}
-            >
-              <span
-                className={cn(
-                  "absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform",
-                  isUrgent ? "translate-x-[22px]" : "translate-x-0.5"
-                )}
-              />
-            </span>
-          </button>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-2">
-              <label htmlFor="h-dept" className="text-sm font-medium">
-                Department
-              </label>
-              <GlassInput
-                id="h-dept"
-                placeholder="e.g. CS"
-                value={department}
-                onChange={(e) => setDepartment(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="h-course" className="text-sm font-medium">
-                Course
-              </label>
-              <GlassInput
-                id="h-course"
-                placeholder="e.g. CS2001"
-                value={courseCode}
-                onChange={(e) => setCourseCode(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Semester (optional)</label>
-            <div className="flex flex-wrap gap-1.5">
-              {["1", "2", "3", "4", "5", "6", "7", "8"].map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setSemester(semester === s ? "" : s)}
-                  className={cn(
-                    "h-9 w-9 rounded-full text-sm font-medium transition-colors",
-                    semester === s ? "bg-aura text-white" : "glass text-fg-muted"
-                  )}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Privacy toggles */}
-          <div className="space-y-2">
-            <ToggleRow
-              label="Post anonymously"
-              hint="Your name and photo stay hidden from everyone but admins."
-              checked={anonymous}
-              onChange={setAnonymous}
-            />
-            <ToggleRow
-              label="Allow direct messages"
-              hint="Let helpers reach you in chat about this request."
-              checked={allowDms}
-              onChange={setAllowDms}
+            <CapsuleToggle
+              active={anonymous}
+              onClick={() => setAnonymous((v) => !v)}
+              icon={<EyeOff className="h-4 w-4" aria-hidden />}
+              label="Anonymous"
+              activeClass="bg-aura text-white"
             />
           </div>
+          <p className="text-xs text-fg-muted">
+            {anonymous
+              ? "Only your school and semester will show. Your name and photo stay hidden."
+              : "Your name and photo will be shown on this request."}
+          </p>
 
           <GlassButton
             type="submit"
@@ -290,42 +197,33 @@ export function HelpComposer({
   );
 }
 
-function ToggleRow({
+/** A small pill-shaped toggle button with a clear active state. */
+function CapsuleToggle({
+  active,
+  onClick,
+  icon,
   label,
-  hint,
-  checked,
-  onChange,
+  activeClass,
 }: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
   label: string;
-  hint: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
+  activeClass: string;
 }) {
   return (
     <button
       type="button"
       role="switch"
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className="glass flex w-full items-center gap-3 rounded-[12px] p-3 text-left"
+      aria-checked={active}
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-semibold transition-all active:scale-95",
+        active ? activeClass : "glass text-fg-muted hover:text-fg"
+      )}
     >
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-medium text-fg">{label}</span>
-        <span className="block text-xs text-fg-muted">{hint}</span>
-      </span>
-      <span
-        className={cn(
-          "relative h-6 w-11 shrink-0 rounded-full transition-colors",
-          checked ? "bg-aura" : "bg-white/15"
-        )}
-      >
-        <span
-          className={cn(
-            "absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform",
-            checked ? "translate-x-[22px]" : "translate-x-0.5"
-          )}
-        />
-      </span>
+      {icon}
+      {label}
     </button>
   );
 }
