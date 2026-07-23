@@ -9,13 +9,17 @@ import type { FeedPost } from "@/lib/feed/types";
  * Client shell tying the composer to the feed so a new post appears by fetching
  * ONE feed page and prepending it — instead of router.refresh(), which re-ran
  * the whole layout + page on the server (seconds) to show one new row.
+ * `belowComposer` is a server-rendered slot (the Campus Help strip) placed
+ * directly under the composer so the composer reads first on the page.
  */
 export function HomeFeed({
   initialPosts,
   currentUserId,
+  belowComposer,
 }: {
   initialPosts: FeedPost[];
   currentUserId?: string | null;
+  belowComposer?: React.ReactNode;
 }) {
   const [refreshToken, setRefreshToken] = useState(0);
 
@@ -26,6 +30,7 @@ export function HomeFeed({
         <div data-tour="composer">
           <PostComposer onPosted={() => setRefreshToken((t) => t + 1)} />
         </div>
+        {belowComposer}
       </div>
       <div className="mt-2">
         <FeedList

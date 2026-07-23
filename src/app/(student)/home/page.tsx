@@ -97,16 +97,21 @@ export default async function HomePage() {
         </div>
       </header>
 
-      {/* Campus Help discovery strip — a utility surface, not a feed category
-          (rendered above the feed; renders nothing when nothing is open). */}
+      {/* Society discovery strip — a utility surface, not a feed category
+          (renders nothing when nothing is open). */}
       <div className="px-4">
-        <HomeHelpStrip />
         <HomeSocietyStrip />
       </div>
 
-      {/* Same DOM as before, but a client shell ties composer → feed so a new
-          post appears via one targeted fetch instead of a full RSC refresh. */}
-      <HomeFeed initialPosts={posts} currentUserId={userId} />
+      {/* A client shell ties composer → feed so a new post appears via one
+          targeted fetch instead of a full RSC refresh. The Campus Help discovery
+          strip sits in the belowComposer slot so the composer reads first, then
+          a gap, then Campus Help (its own <section className="mt-4">). */}
+      <HomeFeed
+        initialPosts={posts}
+        currentUserId={userId}
+        belowComposer={<HomeHelpStrip />}
+      />
       {/* Guided tours (mutually exclusive). New accounts get the full first-run
           tour, gated per account via profiles.tour_seen_at; accounts that have
           already finished it get the release "what's new" tour instead, gated
