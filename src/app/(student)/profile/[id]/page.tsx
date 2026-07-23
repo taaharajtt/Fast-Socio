@@ -111,7 +111,7 @@ export default async function PublicProfilePage({
     );
   }
 
-  const [{ data: postRows }, { count: matchCount }, badges] = await Promise.all([
+  const [{ data: postRows }, { data: matchCount }, badges] = await Promise.all([
     // Anonymous posts must NEVER appear on a profile — listing them here would
     // attribute the post to this account and defeat anonymity (the feed_posts
     // view only masks the author for non-admins, so filtering on the surface is
@@ -123,10 +123,12 @@ export default async function PublicProfilePage({
       .eq("is_anonymous", false)
       .order("created_at", { ascending: false })
       .limit(30),
-    supabase
-      .from("matches")
-      .select("id", { count: "exact", head: true })
-      .or(`user_low.eq.${id},user_high.eq.${id}`),
+    // A plain count query here is RLS-scoped to the VIEWER, not `id` — it can
+    // only see rows where the viewer is also a participant, so it silently
+    // collapses to 0 or 1 (the viewer's own match with this person, if any)
+    // instead of this person's real total. get_match_count is a SECURITY
+    // DEFINER RPC that returns just the aggregate count, bypassing that.
+    supabase.rpc("get_match_count", { p_user_id: id }),
     getEarnedBadges(supabase, id),
   ]);
 

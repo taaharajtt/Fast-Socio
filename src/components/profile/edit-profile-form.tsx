@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Camera } from "lucide-react";
-import { GlassButton, GlassCard, GlassInput } from "@/components/ui";
+import { Camera, Check, Loader2 } from "lucide-react";
+import { GlassCard, GlassInput } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { updateProfile } from "@/app/(student)/profile/actions";
@@ -60,16 +60,22 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
   const [bio, setBio] = useState(initial.bio);
   const [error, setError] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
+  // The baseline changes are compared against: starts as the loaded profile,
+  // then advances to whatever was last WRITTEN by autosave. `dirty` therefore
+  // means "different from what's actually saved right now", not "different
+  // from page load" — otherwise a successful save would never clear it.
+  const [savedSnapshot, setSavedSnapshot] = useState(initial);
+  const [justSaved, setJustSaved] = useState(false);
 
   const dirty =
-    fullName !== initial.fullName ||
-    avatarUrl !== initial.avatarUrl ||
-    coverUrl !== initial.coverUrl ||
-    department !== initial.department ||
-    gender !== initial.gender ||
-    bio !== initial.bio ||
-    interests.length !== initial.interests.length ||
-    interests.some((t) => !initial.interests.includes(t));
+    fullName !== savedSnapshot.fullName ||
+    avatarUrl !== savedSnapshot.avatarUrl ||
+    coverUrl !== savedSnapshot.coverUrl ||
+    department !== savedSnapshot.department ||
+    gender !== savedSnapshot.gender ||
+    bio !== savedSnapshot.bio ||
+    interests.length !== savedSnapshot.interests.length ||
+    interests.some((t) => !savedSnapshot.interests.includes(t));
 
   const valid =
     fullName.trim().length >= 2 &&
@@ -124,31 +130,66 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
     );
   }
 
-  function cancel() {
-    if (dirty && !window.confirm("Discard changes?")) return;
-    router.push("/profile");
-  }
-
-  function save() {
-    setError(null);
-    startSaving(async () => {
-      const res = await updateProfile({
-        fullName,
-        department,
-        gender,
-        interests,
-        bio,
-        avatarUrl,
-        coverUrl,
+  // Autosave: 900ms after the last change to any tracked field, if the form is
+  // dirty (relative to what's actually saved) and valid, write it — no manual
+  // Save button. Skips while an avatar upload is still in flight (coverUrl only
+  // ever changes to its FINAL url once CoverUpload's own upload finishes, so it
+  // doesn't need the same guard). The setState calls all live inside the timer
+  // callback, never in the effect body itself, so this isn't the disallowed
+  // "setState synchronously in an effect" pattern.
+  useEffect(() => {
+    if (!dirty || !valid || uploading || saving) return;
+    const t = setTimeout(() => {
+      setError(null);
+      startSaving(async () => {
+        const res = await updateProfile({
+          fullName,
+          department,
+          gender,
+          interests,
+          bio,
+          avatarUrl,
+          coverUrl,
+        });
+        if ("error" in res) {
+          setError(res.error);
+          return;
+        }
+        setSavedSnapshot({
+          fullName,
+          avatarUrl,
+          coverUrl,
+          department,
+          gender,
+          interests,
+          bio,
+        });
+        setJustSaved(true);
+        router.refresh();
       });
-      if ("error" in res) {
-        setError(res.error);
-        return;
-      }
-      router.push("/profile");
-      router.refresh();
-    });
-  }
+    }, 900);
+    return () => clearTimeout(t);
+  }, [
+    fullName,
+    avatarUrl,
+    coverUrl,
+    department,
+    gender,
+    interests,
+    bio,
+    uploading,
+    dirty,
+    valid,
+    saving,
+    router,
+  ]);
+
+  // "Saved" capsule fades on its own after a beat.
+  useEffect(() => {
+    if (!justSaved) return;
+    const t = setTimeout(() => setJustSaved(false), 1800);
+    return () => clearTimeout(t);
+  }, [justSaved]);
 
   const initials =
     fullName
@@ -308,18 +349,28 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
 
       {error && <p className="text-sm text-error">{error}</p>}
 
-      <div className="flex gap-3">
-        <GlassButton variant="glass" size="lg" onClick={cancel} disabled={saving}>
-          Cancel
-        </GlassButton>
-        <GlassButton
-          size="lg"
-          className="flex-1"
-          onClick={save}
-          disabled={!valid || !dirty || uploading || saving}
-        >
-          {saving ? "Saving…" : "Save changes"}
-        </GlassButton>
+      {/* Autosave status — a small floating capsule instead of a Save button.
+          Bottom-centered, above the bottom nav; fades in/out with opacity so it
+          never causes layout shift. */}
+      <div
+        role="status"
+        aria-live="polite"
+        className={cn(
+          "gradient-brand pointer-events-none fixed bottom-[max(5.5rem,calc(env(safe-area-inset-bottom)+5.5rem))] left-1/2 z-20 -translate-x-1/2 rounded-full px-4 py-2 text-xs font-semibold text-white shadow-[0_8px_24px_rgba(124,92,255,0.4)] transition-opacity duration-300",
+          saving || justSaved ? "opacity-100" : "opacity-0"
+        )}
+      >
+        {saving ? (
+          <span className="flex items-center gap-1.5">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+            Saving changes…
+          </span>
+        ) : (
+          <span className="flex items-center gap-1.5">
+            <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden />
+            Changes saved
+          </span>
+        )}
       </div>
     </div>
   );

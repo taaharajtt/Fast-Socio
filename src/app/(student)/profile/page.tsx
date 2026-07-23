@@ -29,7 +29,7 @@ export default async function ProfilePage({
   const [
     { data: profile },
     { data: postRows },
-    { count: matchCount },
+    { data: matchCount },
     { data: commRows },
     { count: postCount },
     { count: eventCount },
@@ -52,10 +52,10 @@ export default async function ProfilePage({
       .eq("is_anonymous", false)
       .order("created_at", { ascending: false })
       .limit(30),
-    supabase
-      .from("matches")
-      .select("id", { count: "exact", head: true })
-      .or(`user_low.eq.${me},user_high.eq.${me}`),
+    // Own matches: RLS on `matches` already lets you see every row you're a
+    // party to, so a direct count is accurate here — but the same RPC used on
+    // public profiles works just as well and keeps both pages consistent.
+    supabase.rpc("get_match_count", { p_user_id: me }),
     supabase
       .from("community_members")
       .select("community:communities(id, name, member_count, status)")

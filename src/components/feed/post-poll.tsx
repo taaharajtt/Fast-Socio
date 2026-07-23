@@ -86,7 +86,9 @@ export function PostPoll({ pollId }: { pollId: string }) {
               aria-pressed={picked}
               className="relative block w-full overflow-hidden rounded-[10px] bg-bg-elevated px-3 py-2.5 text-left text-sm transition-transform active:scale-[0.99] disabled:opacity-70"
             >
-              {/* Fill bar sits behind the label, sized to the option's share. */}
+              {/* Fill bar sits behind the label, sized to the option's share.
+                  inset-y-0 stretches to whatever height the button ends up at,
+                  so a wrapped multi-line label is still covered end to end. */}
               <span
                 aria-hidden
                 className={cn(
@@ -95,20 +97,26 @@ export function PostPoll({ pollId }: { pollId: string }) {
                 )}
                 style={{ width: `${share}%` }}
               />
-              <span className="relative flex items-center gap-1.5">
-                <span className="min-w-0 flex-1 truncate font-medium text-fg">
-                  {o.label}
+              {/* Label wraps onto multiple lines instead of truncating (it used
+                  to `truncate` to one line and clip anything longer), with the
+                  tally/check moved to their own row underneath so a long label
+                  has room to grow. */}
+              <span className="relative flex flex-col gap-1">
+                <span className="flex items-start gap-1.5">
+                  <span className="min-w-0 flex-1 whitespace-pre-wrap break-words font-medium text-fg">
+                    {o.label}
+                  </span>
+                  {picked && (
+                    <Check
+                      className="mt-0.5 h-4 w-4 shrink-0 text-accent"
+                      strokeWidth={3}
+                      aria-hidden
+                    />
+                  )}
                 </span>
-                {picked && (
-                  <Check
-                    className="h-4 w-4 shrink-0 text-accent"
-                    strokeWidth={3}
-                    aria-hidden
-                  />
-                )}
                 {/* Show the raw tally next to the share — a percentage alone
                     hides whether "50%" means 1 vote or 100. */}
-                <span className="shrink-0 text-xs font-semibold tabular-nums text-fg-muted">
+                <span className="text-xs font-semibold tabular-nums text-fg-muted">
                   {o.votes} {o.votes === 1 ? "vote" : "votes"} · {share}%
                 </span>
               </span>
