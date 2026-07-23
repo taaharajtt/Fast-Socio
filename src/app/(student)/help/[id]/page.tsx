@@ -6,7 +6,11 @@ import { AppImage } from "@/components/ui/app-image";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { timeAgo, absoluteTime } from "@/lib/time";
-import { CATEGORY_META, STATUS_META } from "@/lib/help/constants";
+import {
+  CATEGORY_META,
+  STATUS_META,
+  HELP_MODERATOR_USERNAME,
+} from "@/lib/help/constants";
 import {
   resolveHelpAuthor,
   canRespond,
@@ -41,7 +45,7 @@ export default async function HelpDetailPage({
       .select(HELP_REQUEST_COLUMNS)
       .eq("id", id)
       .maybeSingle(),
-    supabase.from("profiles").select("admin_role").eq("id", uid).single(),
+    supabase.from("profiles").select("username").eq("id", uid).single(),
   ]);
   if (!reqRow) notFound();
 
@@ -54,8 +58,11 @@ export default async function HelpDetailPage({
     .order("created_at", { ascending: true });
   const responses = (respRows ?? []) as unknown as HelpResponseRow[];
 
-  const isAdmin = Boolean(me?.admin_role);
-  const rel = { isOwner: req.is_mine, isAdmin };
+  // Help moderation is scoped to the demoadmin account only (mig 0110), NOT to
+  // every app admin — so other super-admins see Help exactly like a student.
+  // rel.isAdmin here means "has the Help moderator override".
+  const isHelpModerator = me?.username === HELP_MODERATOR_USERNAME;
+  const rel = { isOwner: req.is_mine, isAdmin: isHelpModerator };
   const cat = CATEGORY_META[req.category];
   const CatIcon = cat?.icon;
   const author = resolveHelpAuthor({
@@ -80,11 +87,11 @@ export default async function HelpDetailPage({
     is_mine: req.is_mine,
     status: req.status,
   });
-  // Response visibility (mig 0109 already filters rows at the DB): the seeker and
-  // admins see the full list; a helper sees only their own row; a plain viewer
-  // gets none, so we hide the section from them entirely.
-  const isSeekerOrAdmin = req.is_mine || isAdmin;
-  const showResponses = isSeekerOrAdmin || responses.length > 0;
+  // Response visibility (mig 0110 filters rows at the DB): the seeker and the
+  // Help moderator see the full list; a helper sees only their own row; a plain
+  // viewer gets none, so we hide the section from them entirely.
+  const isSeekerOrModerator = req.is_mine || isHelpModerator;
+  const showResponses = isSeekerOrModerator || responses.length > 0;
 
   return (
     <main className="mx-auto w-full max-w-md px-5 py-6">
@@ -164,7 +171,7 @@ export default async function HelpDetailPage({
         </div>
       </GlassCard>
 
-      {(req.is_mine || isAdmin) && (
+      {(req.is_mine || isHelpModerator) && (
         <HelpOwnerControls
           requestId={req.id}
           status={req.status}
@@ -188,7 +195,7 @@ export default async function HelpDetailPage({
       {showResponses && (
         <section className="mt-5">
           <h3 className="mb-2 text-sm font-semibold text-fg">
-            {isSeekerOrAdmin
+            {isSeekerOrModerator
               ? `Responses (${req.response_count})`
               : "Your response"}
           </h3>

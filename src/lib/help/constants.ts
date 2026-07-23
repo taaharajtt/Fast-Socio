@@ -72,6 +72,14 @@ export const STATUS_META: Record<HelpStatus, { label: string; tone: ChipTone }> 
 };
 
 /**
+ * Campus Help moderation is scoped to this single account (mig 0110), NOT to
+ * every app admin. Other super-admins keep their /admin dashboard but behave
+ * like a normal student inside Help. The DB (is_help_moderator) is the real
+ * enforcement; this constant only drives which controls the UI bothers to show.
+ */
+export const HELP_MODERATOR_USERNAME = "demoadmin";
+
+/**
  * The two Help tabs, styled like the Ranks page (SOCIO = the public help feed,
  * default; ME = your own asks, responses, and history).
  */
