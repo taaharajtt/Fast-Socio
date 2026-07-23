@@ -73,7 +73,7 @@ export function ProfileTabs({
 
   return (
     <div>
-      {showTabBar && (
+      {showTabBar ? (
         <div className="mb-4 flex border-b border-white/[0.08]">
           {available.map((value) => {
             const active = tab === value;
@@ -97,6 +97,13 @@ export function ProfileTabs({
             );
           })}
         </div>
+      ) : (
+        // A public profile has just the one Posts tab — no switcher to render,
+        // but the section still needs its own label with real breathing room
+        // between the bio above and the first post below.
+        <p className="mb-6 mt-2 text-center text-[16px] font-semibold text-fg">
+          Posts
+        </p>
       )}
 
       {tab === "stats" && stats && <StatsPanel stats={stats} />}

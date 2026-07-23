@@ -8,12 +8,11 @@ import { HELP_TABS, type HelpTab } from "@/lib/help/constants";
 import { HelpTabSkeleton } from "@/components/help/help-tab-skeleton";
 
 /**
- * SOCIO | ME switcher — a compact, cardless pill segmented control (not an
- * underline), deliberately smaller and quieter than the top-level Profile tabs
- * so it reads as secondary when embedded inside Profile → Help. Active pill is
- * a soft purple fill; inactive is muted text on a transparent/subtle surface.
+ * SOCIO | ME switcher — full-width underlined text tabs with a purple active
+ * underline over a hairline, matching the Leaderboard tab style (Leaderboard |
+ * Department Rankings) instead of the earlier compact pill control.
  *
- * Tapping a pill flips its active state INSTANTLY (local `optimistic` state) —
+ * Tapping a tab flips its active state INSTANTLY (local `optimistic` state) —
  * it doesn't wait for the server round-trip — while `children` (the previous
  * tab's server-rendered content, still what's actually in the tree) is swapped
  * for a shimmer skeleton until the new content arrives. `optimistic` re-syncs
@@ -56,10 +55,7 @@ export function HelpTabs({
 
   return (
     <div>
-      <div
-        role="tablist"
-        className="mb-5 flex w-fit gap-1 rounded-full bg-white/[0.04] p-1"
-      >
+      <div role="tablist" className="mb-5 flex border-b border-white/[0.08]">
         {HELP_TABS.map((t) => {
           const isActive = optimistic === t.key;
           return (
@@ -70,13 +66,14 @@ export function HelpTabs({
               aria-selected={isActive}
               onClick={() => go(t.key, t.key === "socio" ? socioHref : meHref)}
               className={cn(
-                "rounded-full px-4 py-1.5 text-[13px] font-semibold tracking-wide transition-colors",
-                isActive
-                  ? "bg-accent/15 text-accent"
-                  : "text-fg-muted hover:text-fg"
+                "relative flex-1 pb-3 text-center text-[16px] font-semibold transition-colors",
+                isActive ? "text-fg" : "text-fg-muted hover:text-fg"
               )}
             >
               {t.label}
+              {isActive && (
+                <span className="absolute inset-x-0 -bottom-px h-[3px] rounded-full bg-accent" />
+              )}
             </button>
           );
         })}
