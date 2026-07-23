@@ -113,4 +113,23 @@ export default withSentryConfig(withPWA(nextConfig), {
   webpack: { treeshake: { removeDebugLogging: true } },
   // Upload source maps for the client bundle's dynamic imports too.
   widenClientFileUpload: true,
+  // RES/Lighthouse perf pass: the Sentry client SDK was the single largest
+  // chunk in `rootMainFiles` (~474 KB raw) — it loads on EVERY page and was the
+  // dominant Total-Blocking-Time / bundle cost across the whole app. Tree-shake
+  // out the parts we don't use so error reporting (the reason Sentry is here at
+  // all — see instrumentation-client.ts) stays, but the dead weight drops:
+  //   - Session Replay: never initialised (privacy: we don't record the DOM of
+  //     an app full of DMs/profiles). Safe to strip entirely.
+  //   - Performance tracing: we keep server-side tracing via env-driven
+  //     tracesSampleRate, but the browser BrowserTracing instrumentation is the
+  //     biggest slice of the client bundle and buys little for a small campus
+  //     PWA. Deliberate trade for TBT; flip `excludeTracing` back to re-enable.
+  //   - Debug statements: production never needs them.
+  bundleSizeOptimizations: {
+    excludeReplayShadowDom: true,
+    excludeReplayIframe: true,
+    excludeReplayWorker: true,
+    excludeTracing: true,
+    excludeDebugStatements: true,
+  },
 });

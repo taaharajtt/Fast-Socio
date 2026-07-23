@@ -4,6 +4,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
+import { MotionReduced } from "@/components/ui/motion-reduced";
 import { Megaphone, X } from "lucide-react";
 import { dismissAnnouncements } from "@/app/(student)/activity/actions";
 
@@ -86,6 +87,7 @@ export function AnnouncementModal({
   const isLast = index === announcements.length - 1;
 
   return createPortal(
+    <MotionReduced>
     <AnimatePresence>
       {open && (
         <>
@@ -162,7 +164,8 @@ export function AnnouncementModal({
           </div>
         </>
       )}
-    </AnimatePresence>,
+    </AnimatePresence>
+    </MotionReduced>,
     document.body
   );
 }

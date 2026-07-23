@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
+import { MotionReduced } from "@/components/ui/motion-reduced";
 import { cn } from "@/lib/utils";
 
 type GlassSheetProps = {
@@ -129,6 +130,7 @@ export function GlassSheet({
   if (!mounted) return null;
 
   return createPortal(
+    <MotionReduced>
     <AnimatePresence>
       {open && (
         <>
@@ -185,7 +187,8 @@ export function GlassSheet({
           </motion.div>
         </>
       )}
-    </AnimatePresence>,
+    </AnimatePresence>
+    </MotionReduced>,
     document.body
   );
 }

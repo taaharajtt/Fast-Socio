@@ -1,7 +1,9 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { GlassButton, GlassCard, GlassInput } from "@/components/ui";
+import { GlassButton } from "@/components/ui/glass-button";
+import { GlassCard } from "@/components/ui/glass-card";
+import { GlassInput } from "@/components/ui/glass-input";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { saveOnboardingStep, saveProfile, type OnboardingDraft } from "./actions";

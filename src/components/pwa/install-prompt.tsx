@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
+import { PlusSquare, Share } from "lucide-react";
 import { GlassButton, GlassCard, GlassSheet } from "@/components/ui";
 import {
   isIOS,
@@ -165,11 +166,21 @@ export function InstallPrompt() {
         </p>
         <ol className="mt-5 space-y-4">
           <Step n={1}>
-            Tap the <strong>Share</strong> button in Safari&rsquo;s toolbar (the
-            square with an arrow pointing up).
+            Tap the{" "}
+            <Share
+              className="mx-0.5 inline-block h-4 w-4 -translate-y-px align-middle text-accent"
+              aria-hidden
+            />{" "}
+            <strong>Share</strong> button in Safari&rsquo;s toolbar (the square
+            with an arrow pointing up).
           </Step>
           <Step n={2}>
-            Scroll down and choose <strong>Add to Home Screen</strong>.
+            Scroll down and choose{" "}
+            <PlusSquare
+              className="mx-0.5 inline-block h-4 w-4 -translate-y-px align-middle text-accent"
+              aria-hidden
+            />{" "}
+            <strong>Add to Home Screen</strong>.
           </Step>
           <Step n={3}>
             Tap <strong>Add</strong> — FAST SOCIO now opens full-screen and can

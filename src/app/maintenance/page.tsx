@@ -1,5 +1,5 @@
 import { Wrench } from "lucide-react";
-import { GlassCard } from "@/components/ui";
+import { GlassCard } from "@/components/ui/glass-card";
 import { SignOutButton } from "@/components/sign-out-button";
 import { getMaintenanceState } from "@/lib/flags";
 

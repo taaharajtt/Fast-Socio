@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import {
   RanksTabs,
   type StudentRow,
@@ -15,10 +16,9 @@ type RpcDeptRow = {
 
 export default async function LeaderboardPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const me = user!.id;
+  // Verified locally from the JWT — no Auth API round trip (layout already
+  // gated this route; RLS scopes every query below).
+  const me = (await getAuthUserId())!;
 
   const [{ data: deptData }, { data: boardData }] = await Promise.all([
     supabase.rpc("get_department_rivalry"),

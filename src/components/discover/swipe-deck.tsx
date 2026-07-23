@@ -9,6 +9,7 @@ import {
 } from "framer-motion";
 import { Heart, X, MessageCircle, RotateCcw, Flag, Info, Zap } from "lucide-react";
 import { GlassButton, GlassChip, GlassSheet, GlassInput } from "@/components/ui";
+import { MotionReduced } from "@/components/ui/motion-reduced";
 import { VerifiedBadge } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { AppImage } from "@/components/ui/app-image";
@@ -151,6 +152,7 @@ export function SwipeDeck({
   }
 
   return (
+    <MotionReduced>
     <div className="relative flex flex-1 flex-col">
       <div className="relative mx-auto aspect-[3/4.4] w-full max-w-sm flex-1">
         {deck
@@ -229,6 +231,7 @@ export function SwipeDeck({
         <MatchOverlay name={matchName} onClose={() => setMatchName(null)} />
       )}
     </div>
+    </MotionReduced>
   );
 }
 

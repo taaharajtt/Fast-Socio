@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import { timeAgo } from "@/lib/time";
 import {
   notificationView,
@@ -80,10 +81,9 @@ function summarize(item: FeedItem, actorName: string | null): string {
 
 export default async function ActivityPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const me = user!.id;
+  // Verified locally from the JWT — no Auth API round trip (layout already
+  // gated this route; RLS scopes every query below).
+  const me = (await getAuthUserId())!;
 
   // Messages and message requests live in Chat, not Activity — they only fire as
   // mobile push. Admin broadcasts (type 'announcement') are delivered as a

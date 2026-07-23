@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Plus, Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import { eventBadge } from "@/lib/events/format";
 import { EventsBrowser, type EventVM } from "@/components/events/events-browser";
 
@@ -19,10 +20,9 @@ type EventRow = {
 
 export default async function EventsPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const me = user!.id;
+  // Verified locally from the JWT — no Auth API round trip (the layout has
+  // already gated this route; RLS scopes every query below).
+  const me = (await getAuthUserId())!;
 
   const [{ data: rows }, { data: meProfile }] = await Promise.all([
     supabase

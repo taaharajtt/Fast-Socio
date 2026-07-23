@@ -1,7 +1,6 @@
 "use client";
 
 import { ThemeProvider as NextThemesProvider } from "next-themes";
-import { MotionConfig } from "framer-motion";
 
 /**
  * App-wide theme provider. Dark is the primary identity (UI Spec §2.1);
@@ -9,9 +8,13 @@ import { MotionConfig } from "framer-motion";
  * override persisted. Uses the class strategy (html.dark / html.light)
  * that the design tokens in globals.css are built around.
  *
- * MotionConfig reducedMotion="user" (P6-04) makes every framer-motion animation
- * honour the OS "reduce motion" preference — transform/layout animations are
- * reduced for users with vestibular sensitivity (WCAG 2.3.3).
+ * NOTE: framer-motion's `MotionConfig reducedMotion="user"` (P6-04, WCAG 2.3.3)
+ * used to live here, which pulled framer-motion into the shared every-page
+ * bundle — including public/auth pages (/login, /signup) that render no motion
+ * at all. It now lives inside each framer component (glass-sheet, swipe-deck,
+ * announcement-modal) via <MotionReduced>, so the reduced-motion policy is
+ * unchanged wherever framer actually renders, but pages with no motion no longer
+ * download it. See src/components/ui/motion-reduced.tsx.
  */
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   return (
@@ -21,7 +24,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       enableSystem
       disableTransitionOnChange
     >
-      <MotionConfig reducedMotion="user">{children}</MotionConfig>
+      {children}
     </NextThemesProvider>
   );
 }

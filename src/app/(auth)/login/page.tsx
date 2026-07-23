@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { GlassButton, GlassInput } from "@/components/ui";
+import { GlassButton } from "@/components/ui/glass-button";
+import { GlassInput } from "@/components/ui/glass-input";
 import { createClient } from "@/lib/supabase/client";
 
 /**

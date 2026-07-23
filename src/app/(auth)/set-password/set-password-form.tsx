@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { GlassButton, GlassInput } from "@/components/ui";
+import { GlassButton } from "@/components/ui/glass-button";
+import { GlassInput } from "@/components/ui/glass-input";
 import { createClient } from "@/lib/supabase/client";
 import { passwordError, PASSWORD_MIN_LENGTH } from "@/lib/auth/password";
 

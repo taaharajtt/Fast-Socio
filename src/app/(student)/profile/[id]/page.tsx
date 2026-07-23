@@ -7,6 +7,7 @@ import { ProfileActionsMenu } from "@/components/profile/profile-actions-menu";
 import { BadgeStrip } from "@/components/profile/badge-strip";
 import { getEarnedBadges } from "@/lib/badges";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import { AppImage } from "@/components/ui/app-image";
 import { OnlineDot } from "@/components/ui/badges";
 import { deptMeta } from "@/lib/leaderboard/departments";
@@ -25,10 +26,9 @@ export default async function PublicProfilePage({
   const { id } = await params;
   const { tab: initialTab } = await searchParams;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const me = user!.id;
+  // Verified locally from the JWT — no Auth API round trip (layout already
+  // gated this route; RLS scopes every query below).
+  const me = (await getAuthUserId())!;
   const isSelf = id === me;
 
   const [{ data: profile }, { data: presence }] = await Promise.all([
