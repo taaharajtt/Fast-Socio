@@ -221,8 +221,11 @@ function StudentBoard({
   }
   return (
     <>
+      {/* Always "Top 10" — the label is about rank (1..10), not row count.
+          Ties can make `rows.length` exceed 10 (e.g. two people sharing #10),
+          so counting rows here would misleadingly read "Top 13". */}
       <p className="mb-1 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-disabled">
-        Top {rows.length} {span}
+        Top 10 {span}
       </p>
       <div className="divide-y divide-white/[0.06]">
         {rows.map((r) => {

@@ -62,9 +62,15 @@ export default async function LeaderboardPage() {
         Who&rsquo;s running campus this week?
       </p>
 
-      {/* Leaderboard shows the top 10 students; the full board still feeds the
+      {/* Leaderboard shows every student whose (dense) rank is <= 10 — not the
+          first 10 physical rows, which could cut a tied group in half. The
+          full board (`students`, up to 50 rows) still feeds the
           department-rivalry aura derivation above. */}
-      <RanksTabs students={students.slice(0, 10)} depts={depts} meId={me} />
+      <RanksTabs
+        students={students.filter((s) => s.rank <= 10)}
+        depts={depts}
+        meId={me}
+      />
     </main>
   );
 }
