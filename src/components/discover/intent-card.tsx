@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   BookOpen,
   Building2,
@@ -17,6 +18,8 @@ import {
 } from "lucide-react";
 import { AppImage } from "@/components/ui/app-image";
 import { VerifiedBadge } from "@/components/ui";
+import { semesterLabel } from "@/lib/profile/constants";
+import { resolvePlace } from "@/lib/map/places";
 import { MODE_META } from "@/lib/smart-match/modes";
 import { safeMatchingDisplay, displayableUrl, formatWhen } from "@/lib/smart-match/display";
 import { KIND_CAPSULE, SWIPE_CTA, type DiscoverSwipeCard } from "@/lib/discover/cards";
@@ -42,13 +45,75 @@ export function IntentCardBody({
   const post = card.post;
   const meta = MODE_META[post.mode];
   const Icon = meta.icon;
+  const isHackathon = post.mode === "hackathon_team";
+  const isProjectPartner = post.mode === "project_partner";
+  const isFyp = post.mode === "fyp_teammate";
+  const isSports = post.mode === "sports";
+  const isRecruitment = post.mode === "recruitment";
+  const mapPlace = isSports ? resolvePlace(post.place) : null;
+  const recruitmentLink = isRecruitment ? displayableUrl(post.recruitmentUrl) : null;
   // "place"/"when" and "people" already have their own dedicated rows below
   // (the location/time strip and the top-right "N needed" pill) — dropping
-  // them here avoids saying the same thing twice.
-  const rows = safeMatchingDisplay(post.mode, post).filter(
-    (r) => !["place", "when", "people"].includes(r.key)
+  // them here avoids saying the same thing twice. Hackathon, Project
+  // Partner, FYP, and Recruitment cards use their own fixed hierarchies and
+  // don't render these generic meta rows at all (see the mode branches below).
+  const dropKeys = isHackathon
+    ? ["place", "when", "people", "hack", "team"]
+    : ["place", "when", "people"];
+  const rows = safeMatchingDisplay(post.mode, post).filter((r) => !dropKeys.includes(r.key));
+  const hackathonLink = displayableUrl(post.hackathonUrl);
+  const link = hackathonLink ?? displayableUrl(post.portfolioUrl);
+
+  const titleLine = (
+    <h2 className="text-[21px] font-bold leading-tight">{post.title}</h2>
   );
-  const link = displayableUrl(post.hackathonUrl) ?? displayableUrl(post.portfolioUrl);
+
+  // Recruitment leads with the author (who's recruiting) before the title, so
+  // the society/event anchor badge sits with it — every other mode leads with
+  // the title.
+  const authorPreview = (
+    <>
+      <div className="flex items-center gap-2.5">
+        <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-bg-elevated ring-2 ring-white/10">
+          {post.authorAvatar && (
+            <AppImage
+              src={post.authorAvatar}
+              alt={post.authorName ?? ""}
+              sizes="36px"
+              draggable={false}
+            />
+          )}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="flex items-center gap-1 truncate text-[13px] font-semibold">
+            {post.authorName ?? "Student"}
+            {post.authorVerified && <VerifiedBadge size={13} />}
+          </p>
+          <p className="truncate text-[11px] text-fg-muted">
+            {[
+              post.authorDepartment,
+              post.authorSemester ? `Sem ${post.authorSemester}` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        </div>
+        {post.authorAura > 0 && (
+          <span className="flex shrink-0 items-center gap-1 rounded-full bg-black/30 px-2 py-1">
+            <Zap className="h-3 w-3 text-gold-text" aria-hidden />
+            <span className="text-[11px] font-semibold text-gold-text">
+              {post.authorAura.toLocaleString()}
+            </span>
+          </span>
+        )}
+      </div>
+      {isRecruitment && (post.societyName || post.eventTitle) && (
+        <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-white/[0.06] px-2.5 py-1 text-[11px] font-semibold text-fg-muted">
+          {post.societyName ? "🏛" : "🎉"} {post.societyName ?? post.eventTitle}
+        </span>
+      )}
+    </>
+  );
 
   return (
     <div className="relative h-full w-full rounded-3xl bg-gradient-to-br from-accent/70 via-aura/30 to-transparent p-[1.5px] shadow-[0_0_32px_-8px_rgba(124,58,237,0.35)]">
@@ -70,73 +135,141 @@ export function IntentCardBody({
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-3 px-5 pb-5 pt-4">
-          <h2 className="text-[21px] font-bold leading-tight">{post.title}</h2>
-
-          {/* Author preview */}
-          <div className="flex items-center gap-2.5">
-            <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-bg-elevated ring-2 ring-white/10">
-              {post.authorAvatar && (
-                <AppImage
-                  src={post.authorAvatar}
-                  alt={post.authorName ?? ""}
-                  sizes="36px"
-                  draggable={false}
-                />
-              )}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="flex items-center gap-1 truncate text-[13px] font-semibold">
-                {post.authorName ?? "Student"}
-                {post.authorVerified && <VerifiedBadge size={13} />}
-              </p>
-              <p className="truncate text-[11px] text-fg-muted">
-                {[
-                  post.authorDepartment,
-                  post.authorSemester ? `Sem ${post.authorSemester}` : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </p>
-            </div>
-            {post.authorAura > 0 && (
-              <span className="flex shrink-0 items-center gap-1 rounded-full bg-black/30 px-2 py-1">
-                <Zap className="h-3 w-3 text-gold-text" aria-hidden />
-                <span className="text-[11px] font-semibold text-gold-text">
-                  {post.authorAura.toLocaleString()}
-                </span>
-              </span>
-            )}
-          </div>
-
-          {post.description && (
-            <p className="line-clamp-3 text-[15px] leading-snug text-fg-muted">
-              {post.description}
-            </p>
+          {isRecruitment ? (
+            <>
+              {authorPreview}
+              {titleLine}
+            </>
+          ) : (
+            <>
+              {titleLine}
+              {authorPreview}
+            </>
           )}
 
-          <ReasonChips reasons={card.reasons} />
-
-          {/* Sports plans live or die on where and when. */}
-          {(post.place || post.scheduledAt) && (
-            <div className="flex flex-wrap gap-3 text-[13px] font-medium">
-              {post.place && (
-                <span className="inline-flex items-center gap-1.5">
-                  <MapPin className="h-3.5 w-3.5 text-aura" aria-hidden />
-                  {post.place}
-                </span>
+          {isHackathon ? (
+            <>
+              {(post.hackathonName || hackathonLink) && (
+                <div className="flex items-center justify-between gap-2 rounded-xl bg-white/[0.05] px-3 py-2.5">
+                  <span className="truncate text-[14px] font-semibold text-fg">
+                    {post.hackathonName}
+                  </span>
+                  {hackathonLink && (
+                    <a
+                      href={hackathonLink}
+                      target="_blank"
+                      rel="noopener noreferrer nofollow"
+                      onPointerDownCapture={(e) => e.stopPropagation()}
+                      className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-aura"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                      Hackathon site
+                    </a>
+                  )}
+                </div>
               )}
-              {post.scheduledAt && (
-                <span className="inline-flex items-center gap-1.5">
+            </>
+          ) : isProjectPartner ? (
+            <>
+              {(post.semester != null || post.degree) && (
+                <div className="flex flex-wrap items-center gap-2">
+                  {post.semester != null && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-3 py-1 text-[12px] font-semibold text-fg">
+                      <CalendarClock className="h-3.5 w-3.5 text-aura" aria-hidden />
+                      {semesterLabel(post.semester)}
+                    </span>
+                  )}
+                  {post.degree && (
+                    <span className="gradient-brand inline-flex items-center gap-1 rounded-full px-3 py-1 text-[12px] font-bold text-white">
+                      {post.degree}
+                    </span>
+                  )}
+                </div>
+              )}
+              {post.courseCode && (
+                <p className="flex items-center gap-1.5 text-[13px] font-medium text-fg-muted">
+                  <BookOpen className="h-3.5 w-3.5 text-aura" aria-hidden />
+                  Course: {post.courseCode}
+                </p>
+              )}
+            </>
+          ) : isFyp ? (
+            <>
+              {post.description && (
+                <p className="line-clamp-4 text-[15px] leading-snug text-fg-muted">
+                  {post.description}
+                </p>
+              )}
+            </>
+          ) : isRecruitment ? (
+            <>
+              {post.description && (
+                <p className="line-clamp-4 text-[15px] leading-snug text-fg-muted">
+                  {post.description}
+                </p>
+              )}
+              {recruitmentLink && (
+                <a
+                  href={recruitmentLink}
+                  target="_blank"
+                  rel="noopener noreferrer nofollow"
+                  onPointerDownCapture={(e) => e.stopPropagation()}
+                  className="gradient-brand inline-flex w-fit items-center gap-1.5 rounded-full px-4 py-2 text-[13px] font-bold text-white shadow-[0_2px_10px_-2px_rgba(124,58,237,0.6)]"
+                >
+                  Apply via Form <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                </a>
+              )}
+              {post.deadline && (
+                <p className="flex items-center gap-1.5 text-[13px] font-medium text-fg-muted">
                   <CalendarClock className="h-3.5 w-3.5 text-aura" aria-hidden />
-                  {formatWhen(post.scheduledAt)}
-                </span>
+                  Apply by {formatWhen(post.deadline)}
+                </p>
               )}
-            </div>
+            </>
+          ) : (
+            <>
+              {post.description && (
+                <p className="line-clamp-3 text-[15px] leading-snug text-fg-muted">
+                  {post.description}
+                </p>
+              )}
+
+              <ReasonChips reasons={card.reasons} />
+
+              {/* Sports plans live or die on where and when. */}
+              {(post.place || post.scheduledAt) && (
+                <div className="flex flex-wrap gap-3 text-[13px] font-medium">
+                  {post.place && (
+                    <span className="inline-flex items-center gap-1.5">
+                      <MapPin className="h-3.5 w-3.5 text-aura" aria-hidden />
+                      {post.place}
+                    </span>
+                  )}
+                  {post.scheduledAt && (
+                    <span className="inline-flex items-center gap-1.5">
+                      <CalendarClock className="h-3.5 w-3.5 text-aura" aria-hidden />
+                      {formatWhen(post.scheduledAt)}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {isSports && post.place && (
+                <Link
+                  href={`/map?place=${encodeURIComponent(mapPlace?.id ?? post.place)}`}
+                  onPointerDownCapture={(e) => e.stopPropagation()}
+                  className="inline-flex w-fit items-center gap-1.5 rounded-full bg-white/[0.06] px-3 py-1.5 text-[13px] font-semibold text-aura"
+                >
+                  <MapPin className="h-3.5 w-3.5" aria-hidden />
+                  Show on map 📍
+                </Link>
+              )}
+
+              <MetaRows rows={rows} />
+            </>
           )}
 
-          <MetaRows rows={rows} />
-
-          {post.skillsNeeded.length > 0 && (
+          {!isProjectPartner && !isRecruitment && post.skillsNeeded.length > 0 && (
             <SkillChips
               caption={
                 post.mode === "contributor" ? "Skills offered" : "Skills needed"
@@ -149,7 +282,7 @@ export function IntentCardBody({
             <TeamRow members={post.teamMembers} />
           )}
 
-          {link && (
+          {!isHackathon && !isProjectPartner && link && (
             <a
               href={link}
               target="_blank"

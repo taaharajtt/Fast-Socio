@@ -316,3 +316,21 @@ export function searchPlaces(
     .sort((a, b) => b.score - a.score)
     .map((r) => r.p);
 }
+
+/**
+ * Resolve a place ID, exact name, or alias to its `CampusPlace` — used both to
+ * turn a Sports post's free-text `place` into a map deep link (Discover →
+ * Map) and to read that link back (`?place=` → the matching pin). Returns
+ * null rather than falling back to a fuzzy search: an unrecognized custom
+ * spot name should have no map link, not a misleading nearest match.
+ */
+export function resolvePlace(query: string | null | undefined): CampusPlace | null {
+  const q = (query ?? "").trim().toLowerCase();
+  if (!q) return null;
+  return (
+    CAMPUS_MAP_PLACES.find((p) => p.id === q) ??
+    CAMPUS_MAP_PLACES.find((p) => p.name.toLowerCase() === q) ??
+    CAMPUS_MAP_PLACES.find((p) => p.aliases.some((a) => a.toLowerCase() === q)) ??
+    null
+  );
+}

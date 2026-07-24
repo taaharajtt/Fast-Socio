@@ -47,6 +47,7 @@ export function CampusMapViewer({
   onSelectPlace,
   focusSignal,
   controlsBottomInset = 0,
+  activeCounts = {},
 }: {
   className?: string;
   places: CampusPlace[];
@@ -56,6 +57,8 @@ export function CampusMapViewer({
   focusSignal: number;
   /** Extra px to lift the zoom controls (e.g. to clear the detail card). */
   controlsBottomInset?: number;
+  /** Open Sports plan count per place id — shown as a small badge on the pin. */
+  activeCounts?: Record<string, number>;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [container, setContainer] = useState<Size>({ w: 0, h: 0 });
@@ -303,6 +306,7 @@ export function CampusMapViewer({
                 selected={place.id === selectedId}
                 invScale={1 / effScale}
                 onSelect={onSelectPlace}
+                activeCount={activeCounts[place.id] ?? 0}
               />
             ))}
         </div>
@@ -362,11 +366,14 @@ function MapPinMarker({
   selected,
   invScale,
   onSelect,
+  activeCount = 0,
 }: {
   place: CampusPlace;
   selected: boolean;
   invScale: number;
   onSelect: (id: string) => void;
+  /** Open Sports plans tagged to this pin — rendered as a small count badge. */
+  activeCount?: number;
 }) {
   const meta = PLACE_TYPE_META[place.type];
   const Icon = meta.icon ?? DEFAULT_PLACE_ICON;
@@ -386,19 +393,29 @@ function MapPinMarker({
       className="absolute flex flex-col items-center focus:outline-none"
     >
       {/* Dot (anchored on the point). */}
-      <span
-        className={cn(
-          "flex items-center justify-center rounded-full border-2 border-white/90 shadow-md transition-transform",
-          selected ? "h-7 w-7 ring-2 ring-white" : "h-5 w-5",
-          "hover:scale-110"
+      <span className="relative flex items-center justify-center">
+        <span
+          className={cn(
+            "flex items-center justify-center rounded-full border-2 border-white/90 shadow-md transition-transform",
+            selected ? "h-7 w-7 ring-2 ring-white" : "h-5 w-5",
+            "hover:scale-110"
+          )}
+          style={{ backgroundColor: meta.color }}
+        >
+          <Icon
+            className={cn("text-white", selected ? "h-4 w-4" : "h-3 w-3")}
+            strokeWidth={2.4}
+            aria-hidden
+          />
+        </span>
+        {activeCount > 0 && (
+          <span
+            aria-label={`${activeCount} active ${activeCount === 1 ? "game" : "games"}`}
+            className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-error px-1 text-[9px] font-bold text-white ring-1 ring-white/80"
+          >
+            {activeCount}
+          </span>
         )}
-        style={{ backgroundColor: meta.color }}
-      >
-        <Icon
-          className={cn("text-white", selected ? "h-4 w-4" : "h-3 w-3")}
-          strokeWidth={2.4}
-          aria-hidden
-        />
       </span>
       {/* Label. */}
       <span

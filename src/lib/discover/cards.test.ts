@@ -27,6 +27,7 @@ const viewer: SmartMatchViewer = {
   graduationYear: 2027,
   interests: ["nlp", "startups"],
   skills: ["react", "supabase"],
+  degree: null,
 };
 
 function makePost(mode: PostMode, over: Partial<SmartMatchPost> = {}): SmartMatchPost {
@@ -60,6 +61,7 @@ function makePost(mode: PostMode, over: Partial<SmartMatchPost> = {}): SmartMatc
     skillLevel: null,
     availability: null,
     portfolioUrl: null,
+    recruitmentUrl: null,
     deadline: null,
     expiresAt: null,
     societyId: null,

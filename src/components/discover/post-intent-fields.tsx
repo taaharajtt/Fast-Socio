@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { X } from "lucide-react";
+import { useRef, useState } from "react";
+import { Plus, X } from "lucide-react";
 import { GlassInput } from "@/components/ui";
 import { TeamMemberMentions } from "@/components/discover/team-member-mentions";
+import { ALL_DEGREES, getDegreesForSchool } from "@/lib/profile/constants";
+import { CAMPUS_MAP_PLACES } from "@/lib/map/places";
 import type { FieldSpec } from "@/lib/smart-match/modes";
 import type { TeamMember } from "@/lib/smart-match/types";
 
@@ -48,6 +50,17 @@ export function FormField({
     return (
       <Field label={field.label} help={field.help}>
         <TeamMemberMentions value={team} onChange={onTeam} />
+      </Field>
+    );
+  }
+  if (field.type === "place") {
+    return (
+      <Field label={field.label} help={field.help}>
+        <CampusPlaceField
+          value={typeof value === "string" ? value : ""}
+          onChange={onChange}
+          placeholder={field.placeholder}
+        />
       </Field>
     );
   }
@@ -118,7 +131,11 @@ export function FormField({
   );
 }
 
-/** Chip input: type + Enter/comma to add, backspace to remove the last. */
+/**
+ * Chip input rendered as glass capsules with an inline "+ Add" capsule
+ * trigger: click it to reveal the entry box, Enter/comma commits a skill as
+ * its own removable pill, blur or Escape collapses back to just the trigger.
+ */
 export function TagInput({
   value,
   onChange,
@@ -129,6 +146,8 @@ export function TagInput({
   placeholder?: string;
 }) {
   const [draft, setDraft] = useState("");
+  const [adding, setAdding] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   function commit() {
     const t = draft.trim().replace(/,$/, "");
@@ -138,39 +157,139 @@ export function TagInput({
   }
 
   return (
-    <div>
-      {value.length > 0 && (
-        <div className="mb-2 flex flex-wrap gap-2">
-          {value.map((t) => (
-            <span
-              key={t}
-              className="glass inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs"
-            >
-              {t}
-              <button
-                type="button"
-                onClick={() => onChange(value.filter((v) => v !== t))}
-                aria-label={`Remove ${t}`}
-                className="text-fg-muted hover:text-fg"
-              >
-                <X className="h-3 w-3" aria-hidden />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-      <GlassInput
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === ",") {
-            e.preventDefault();
+    <div className="flex flex-wrap items-center gap-2">
+      {value.map((t) => (
+        <span
+          key={t}
+          className="glass inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs"
+        >
+          {t}
+          <button
+            type="button"
+            onClick={() => onChange(value.filter((v) => v !== t))}
+            aria-label={`Remove ${t}`}
+            className="text-fg-muted hover:text-fg"
+          >
+            <X className="h-3 w-3" aria-hidden />
+          </button>
+        </span>
+      ))}
+      {adding ? (
+        <GlassInput
+          ref={inputRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === ",") {
+              e.preventDefault();
+              commit();
+            } else if (e.key === "Backspace" && !draft && value.length) {
+              onChange(value.slice(0, -1));
+            } else if (e.key === "Escape") {
+              setDraft("");
+              setAdding(false);
+            }
+          }}
+          onBlur={() => {
             commit();
-          } else if (e.key === "Backspace" && !draft && value.length) {
-            onChange(value.slice(0, -1));
+            setAdding(false);
+          }}
+          placeholder={placeholder}
+          data-no-drag
+          className="!w-auto min-w-[140px] flex-1"
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => {
+            setAdding(true);
+            requestAnimationFrame(() => inputRef.current?.focus());
+          }}
+          className="glass inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium text-fg-muted hover:text-fg"
+        >
+          <Plus className="h-3 w-3" aria-hidden />
+          Add skill
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Single-select degree capsule row, shown only when the author's profile has
+ * no `degree` on file — degrees are scoped to their school (`DEGREES_BY_SCHOOL`)
+ * and fall back to the full list when the school isn't recognized.
+ */
+export function DegreeCapsulePicker({
+  school,
+  value,
+  onChange,
+}: {
+  school: string | null;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const scoped = getDegreesForSchool(school);
+  const options = scoped.length ? scoped : ALL_DEGREES;
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map((d) => (
+        <button
+          key={d}
+          type="button"
+          onClick={() => onChange(d)}
+          aria-pressed={value === d}
+          className={
+            value === d
+              ? "gradient-brand rounded-full px-3 py-1.5 text-xs font-bold text-white"
+              : "glass rounded-full px-3 py-1.5 text-xs font-medium text-fg-muted hover:text-fg"
           }
-        }}
-        onBlur={commit}
+        >
+          {d}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Sports "Where" field: tap a known campus sports spot (from `CAMPUS_MAP_PLACES`)
+ * to fill the text box, or just type a custom spot name — the value is always
+ * a plain string (the place's name when tapped), so `resolvePlace` can turn it
+ * back into a map pin later without a separate place-id column.
+ */
+export function CampusPlaceField({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  const sportsPlaces = CAMPUS_MAP_PLACES.filter((p) => p.type === "sports");
+  return (
+    <div>
+      <div className="mb-2 flex flex-wrap gap-2">
+        {sportsPlaces.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => onChange(p.name)}
+            aria-pressed={value === p.name}
+            className={
+              value === p.name
+                ? "gradient-brand rounded-full px-3 py-1.5 text-xs font-bold text-white"
+                : "glass rounded-full px-3 py-1.5 text-xs font-medium text-fg-muted hover:text-fg"
+            }
+          >
+            {p.shortLabel}
+          </button>
+        ))}
+      </div>
+      <GlassInput
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         data-no-drag
       />

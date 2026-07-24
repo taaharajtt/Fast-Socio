@@ -57,6 +57,7 @@ function makePost(mode: PostMode, over: Partial<SmartMatchPost> = {}): SmartMatc
     skillLevel: null,
     availability: null,
     portfolioUrl: null,
+    recruitmentUrl: null,
     deadline: null,
     expiresAt: null,
     societyId: null,
@@ -80,6 +81,7 @@ const viewer: SmartMatchViewer = {
   graduationYear: 2027,
   interests: ["nlp", "startups"],
   skills: ["react", "supabase"],
+  degree: null,
 };
 
 const NOW = new Date("2026-07-21T12:00:00Z").getTime();
@@ -117,10 +119,10 @@ describe("discover kinds", () => {
     expect(isPostMode("socio")).toBe(false);
   });
 
-  it("only Project + Hackathon use team-member mentions", () => {
+  it("Project, Hackathon, and FYP use team-member mentions", () => {
     expect(modeUsesTeamMembers("project_partner")).toBe(true);
     expect(modeUsesTeamMembers("hackathon_team")).toBe(true);
-    expect(modeUsesTeamMembers("fyp_teammate")).toBe(false);
+    expect(modeUsesTeamMembers("fyp_teammate")).toBe(true);
     expect(modeUsesTeamMembers("sports")).toBe(false);
   });
 });
@@ -129,22 +131,22 @@ describe("discover kinds", () => {
 // Validation + payload
 // ---------------------------------------------------------------------------
 describe("payload building", () => {
-  it("folds project fields onto the jsonb payload, deduping tags", () => {
+  it("folds project fields onto the jsonb payload", () => {
     const payload = buildPostPayload("project_partner", {
       title: " Need a 4th ",
       course_code: "CS-302",
-      people_needed: "1",
-      skills_needed: ["React", "react", "Node"],
-      description: "",
       team_members: ["ignored"],
+      semester: "6",
+      degree: "CS",
     });
     expect(payload.title).toBe("Need a 4th");
     expect(payload.course_code).toBe("CS-302");
-    expect(payload.people_needed).toBe("1");
-    expect(payload.skills_needed).toEqual(["React", "Node"]);
-    expect(payload.description).toBeNull();
     // 'mentions' fields never enter the payload.
     expect(payload.team_members).toBeUndefined();
+    // Semester/degree are auto-bound from the profile, not a generic field
+    // spec, so buildPostPayload folds them on as a project_partner special case.
+    expect(payload.semester).toBe("6");
+    expect(payload.degree).toBe("CS");
   });
 
   it("sanitizes hackathon_url to https-only", () => {
@@ -165,15 +167,13 @@ describe("required-field validation", () => {
   it("flags missing required project fields", () => {
     const r = validatePostInput("project_partner", { title: "x" });
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.missing).toContain("Skills you need");
+    if (!r.ok) expect(r.missing).toContain("Course Name");
   });
 
   it("passes a complete project request", () => {
     const r = validatePostInput("project_partner", {
       title: "x",
       course_code: "CS-302",
-      people_needed: "1",
-      skills_needed: ["React"],
     });
     expect(r.ok).toBe(true);
   });
@@ -185,6 +185,10 @@ describe("required-field validation", () => {
     const ok = validatePostInput("recruitment", {
       title: "x",
       roles_needed: ["decor"],
+      description: "Help us run the gala.",
+      recruitment_url: "https://forms.google.com/x",
+      people_needed: "5",
+      deadline: "2026-08-01T00:00",
       society_id: "soc-1",
     });
     expect(ok.ok).toBe(true);

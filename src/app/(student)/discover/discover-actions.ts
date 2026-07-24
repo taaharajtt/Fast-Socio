@@ -46,7 +46,7 @@ async function getDiscoverViewer(): Promise<SmartMatchViewer | null> {
   const supabase = await createClient();
   const { data: prof } = await supabase
     .from("profiles")
-    .select("username, department, graduation_year, interests, skills, semester")
+    .select("username, department, graduation_year, interests, skills, semester, degree")
     .eq("id", uid)
     .maybeSingle();
   if (!prof) return null;
@@ -66,6 +66,7 @@ async function getDiscoverViewer(): Promise<SmartMatchViewer | null> {
     graduationYear: (prof.graduation_year as number | null) ?? null,
     interests: (prof.interests as string[] | null) ?? [],
     skills: (prof.skills as string[] | null) ?? [],
+    degree: (prof.degree as string | null) ?? null,
   };
 }
 
@@ -99,6 +100,7 @@ type PostRow = {
   skill_level: string | null;
   availability: string | null;
   portfolio_url: string | null;
+  recruitment_url: string | null;
   deadline: string | null;
   expires_at: string | null;
   society_id: string | null;
@@ -151,6 +153,7 @@ function mapPost(r: PostRow): SmartMatchPost {
     skillLevel: r.skill_level,
     availability: r.availability,
     portfolioUrl: r.portfolio_url,
+    recruitmentUrl: r.recruitment_url,
     deadline: r.deadline,
     expiresAt: r.expires_at,
     societyId: r.society_id,
@@ -180,17 +183,29 @@ function mapPost(r: PostRow): SmartMatchPost {
 export async function getDiscoverIntents({
   cursor = null,
   limit = 40,
+  modes = INTENT_KINDS,
 }: {
   cursor?: string | null;
   limit?: number;
+  modes?: readonly PostMode[];
 } = {}): Promise<SmartMatchPost[]> {
   const supabase = await createClient();
   const { data } = await supabase.rpc("get_unified_discover_feed", {
-    p_modes: [...INTENT_KINDS],
+    p_modes: [...modes],
     p_limit: Math.max(1, Math.min(limit, 80)),
     p_before: cursor,
   });
   return ((data as PostRow[]) ?? []).map(mapPost);
+}
+
+/**
+ * Open Sports plans for the Campus Map's "active games" display (M0). Reuses
+ * the same definer feed as Discover, so it's subject to the same privacy
+ * rules — notably it excludes the caller's OWN sports plan, same as Discover
+ * never shows you your own card.
+ */
+export async function getActiveSportsPlans(): Promise<SmartMatchPost[]> {
+  return getDiscoverIntents({ modes: ["sports"], limit: 80 });
 }
 
 /** SOCIO swipe candidates. Preserves the original deck behaviour verbatim. */

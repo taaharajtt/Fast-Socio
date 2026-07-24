@@ -106,6 +106,17 @@ export function buildPostPayload(mode: PostMode, values: PostFormValues): PostPa
     payload.society_id = asScalar(values.society_id);
     payload.event_id = asScalar(values.event_id);
   }
+  // Project Partner/FYP Teammate auto-bind semester/degree from the author's
+  // own profile instead of asking for them (set by the form, not a generic
+  // field spec).
+  if (mode === "project_partner" || mode === "fyp_teammate") {
+    payload.semester = asScalar(values.semester);
+    payload.degree = asScalar(values.degree);
+  }
+  // Sports auto-binds semester the same way.
+  if (mode === "sports") {
+    payload.semester = asScalar(values.semester);
+  }
   return payload;
 }
 
@@ -153,6 +164,7 @@ const CAMEL: Record<string, string> = {
   preferred_commitment: "preferredCommitment",
   skill_level: "skillLevel",
   portfolio_url: "portfolioUrl",
+  recruitment_url: "recruitmentUrl",
 };
 
 /** True when every required field for the mode has a value. Pure + tested. */

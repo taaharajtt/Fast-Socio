@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { ChevronDown } from "lucide-react";
 import { GlassButton } from "@/components/ui";
-import { Field, FormField } from "@/components/discover/post-intent-fields";
+import { DegreeCapsulePicker, Field, FormField } from "@/components/discover/post-intent-fields";
 import { modeMeta, type PostMode } from "@/lib/smart-match/modes";
 import { postToFormValues, type PostFormValues } from "@/lib/smart-match/validate";
 import {
@@ -71,9 +71,20 @@ function DiscoverPostFormBody({
 }) {
   const meta = modeMeta(kind);
   const [values, setValues] = useState<PostFormValues>(() => {
-    if (editing) return postToFormValues(kind, editing as unknown as Record<string, unknown>);
-    const init: PostFormValues = {};
-    if (viewer.semester) init.semester = String(viewer.semester);
+    const init: PostFormValues = editing
+      ? postToFormValues(kind, editing as unknown as Record<string, unknown>)
+      : {};
+    if (!editing && viewer.semester) init.semester = String(viewer.semester);
+    // Project Partner/FYP Teammate/Sports auto-bind semester (and, for
+    // Project Partner/FYP Teammate, degree) from the profile — these aren't
+    // in the mode's field spec, so they're never seeded above.
+    if (kind === "project_partner" || kind === "fyp_teammate") {
+      init.semester = String(editing?.semester ?? viewer.semester ?? "");
+      init.degree = editing?.degree ?? viewer.degree ?? "";
+    }
+    if (kind === "sports") {
+      init.semester = String(editing?.semester ?? viewer.semester ?? "");
+    }
     return init;
   });
   const [team, setTeam] = useState<TeamMember[]>(editing?.teamMembers ?? []);
@@ -166,6 +177,16 @@ function DiscoverPostFormBody({
               onTeam={setTeam}
             />
           ))}
+
+          {(kind === "project_partner" || kind === "fyp_teammate") && !viewer.degree && (
+            <Field label="Degree" help="We couldn't find a degree on your profile — pick yours.">
+              <DegreeCapsulePicker
+                school={viewer.department}
+                value={typeof values.degree === "string" ? values.degree : ""}
+                onChange={(v) => set("degree", v)}
+              />
+            </Field>
+          )}
 
           {advanced.length > 0 && (
             <div>

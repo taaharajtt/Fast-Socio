@@ -2,7 +2,7 @@ import {
   Heart,
   FolderKanban,
   GraduationCap,
-  Code2,
+  Sparkles,
   Dumbbell,
   Megaphone,
   HandHeart,
@@ -58,7 +58,8 @@ export type FieldType =
   | "number"
   | "datetime"
   | "url"
-  | "mentions";
+  | "mentions"
+  | "place";
 
 export type FieldSpec = {
   key: string;
@@ -123,17 +124,9 @@ export const MODE_META: Record<PostMode, ModeMeta> = {
       },
       {
         key: "course_code",
-        label: "Course",
+        label: "Course Name",
         type: "text",
         placeholder: "e.g. CS-302 Databases",
-        required: true,
-      },
-      {
-        key: "people_needed",
-        label: "People still needed",
-        type: "number",
-        placeholder: "e.g. 1",
-        help: "3 booked, need a 4th? Enter 1.",
         required: true,
       },
       {
@@ -142,29 +135,11 @@ export const MODE_META: Record<PostMode, ModeMeta> = {
         type: "mentions",
         help: "Tag the people already on the team.",
       },
-      {
-        key: "skills_needed",
-        label: "Skills you need",
-        type: "tags",
-        placeholder: "React, Supabase, Figma",
-        required: true,
-      },
-      {
-        key: "description",
-        label: "What you're building",
-        type: "textarea",
-        placeholder: "A sentence about the project…",
-      },
-      DEGREE,
-      SEMESTER,
-      {
-        key: "meeting_preference",
-        label: "Meeting preference",
-        type: "text",
-        placeholder: "e.g. on-campus, evenings",
-        advanced: true,
-      },
-      { key: "deadline", label: "Deadline", type: "datetime", advanced: true },
+      // School, semester, and degree are auto-bound from the author's own
+      // profile (see discover-post-form.tsx) rather than declared here — this
+      // mode never shows them as inputs, so they're never in MODE_META.fields.
+      // buildPostPayload injects them onto the payload as a project_partner
+      // special case, mirroring how recruitment's society/event anchor works.
     ],
   },
   fyp_teammate: {
@@ -179,48 +154,50 @@ export const MODE_META: Record<PostMode, ModeMeta> = {
     fields: [
       {
         key: "title",
-        label: "FYP title / idea",
+        label: "FYP Title / Idea",
         type: "text",
         placeholder: "e.g. On-device sign-language translator",
         required: true,
       },
       {
         key: "description",
-        label: "Idea vision",
+        label: "Idea Vision (150 words)",
         type: "textarea",
-        placeholder: "Where you want to take it…",
-        required: true,
-      },
-      {
-        key: "interests",
-        label: "Domains",
-        type: "tags",
-        placeholder: "NLP, IoT, fintech",
+        placeholder: "Describe the scope, problem statement, and goals for the FYP…",
         required: true,
       },
       {
         key: "skills_needed",
-        label: "Skills you need",
+        label: "Skills needed",
         type: "tags",
         placeholder: "backend, research, hardware",
         required: true,
       },
       {
-        key: "preferred_commitment",
-        label: "Commitment",
-        type: "select",
-        options: ["casual", "serious", "all-in"],
-        advanced: true,
+        key: "people_needed",
+        label: "People needed",
+        type: "number",
+        placeholder: "e.g. 2",
+        required: true,
       },
-      DEGREE,
-      SEMESTER,
+      {
+        key: "team_members",
+        label: "Current team members",
+        type: "mentions",
+        help: "Tag the people already on the FYP team",
+      },
+      // School, semester, and degree are auto-bound from the author's own
+      // profile (see discover-post-form.tsx) rather than declared here — this
+      // mode never shows them as inputs. buildPostPayload injects
+      // semester/degree onto the payload as an fyp_teammate special case,
+      // same pattern as project_partner.
     ],
   },
   hackathon_team: {
     mode: "hackathon_team",
     label: "Hackathon Team",
     tagline: "Complete your team for a specific hackathon.",
-    icon: Code2,
+    icon: Sparkles,
     createLabel: "Create a hackathon team request",
     formTitle: "Build a hackathon team",
     cta: "Request to Join",
@@ -235,7 +212,7 @@ export const MODE_META: Record<PostMode, ModeMeta> = {
       },
       {
         key: "hackathon_name",
-        label: "Hackathon",
+        label: "Hackathon Name",
         type: "text",
         placeholder: "e.g. NaSCon 2026",
         required: true,
@@ -250,7 +227,7 @@ export const MODE_META: Record<PostMode, ModeMeta> = {
       },
       {
         key: "skills_needed",
-        label: "Skills you need",
+        label: "Skills needed",
         type: "tags",
         placeholder: "Next.js, Python, ML",
         required: true,
@@ -262,27 +239,17 @@ export const MODE_META: Record<PostMode, ModeMeta> = {
         help: "Tag the people already on the team.",
       },
       {
-        key: "roles_needed",
-        label: "Roles needed",
-        type: "tags",
-        placeholder: "backend, designer, PM",
-        advanced: true,
+        key: "semester",
+        label: "Semester (optional)",
+        type: "number",
+        placeholder: "1–12",
       },
       {
         key: "hackathon_url",
-        label: "Hackathon link",
+        label: "Link to the hackathon",
         type: "url",
         placeholder: "https://…",
-        advanced: true,
       },
-      {
-        key: "description",
-        label: "Details",
-        type: "textarea",
-        placeholder: "The idea, the vibe, anything useful…",
-        advanced: true,
-      },
-      { key: "deadline", label: "Event / signup date", type: "datetime", advanced: true },
     ],
   },
   sports: {
@@ -297,21 +264,21 @@ export const MODE_META: Record<PostMode, ModeMeta> = {
     fields: [
       {
         key: "title",
-        label: "Sport / activity",
+        label: "Sport / Activity",
         type: "text",
-        placeholder: "e.g. Football, Badminton, Gym",
+        placeholder: "e.g. Futsal match 5v5",
         required: true,
       },
       {
         key: "place",
         label: "Where",
-        type: "text",
-        placeholder: "e.g. Main ground, Gym block",
+        type: "place",
+        placeholder: "Select campus spot (e.g. Futsal Ground)",
         required: true,
       },
       {
         key: "scheduled_at",
-        label: "When",
+        label: "Date & Time",
         type: "datetime",
         required: true,
       },
@@ -319,23 +286,19 @@ export const MODE_META: Record<PostMode, ModeMeta> = {
         key: "people_needed",
         label: "People needed",
         type: "number",
-        placeholder: "e.g. 4",
-        advanced: true,
-      },
-      {
-        key: "skill_level",
-        label: "Skill level",
-        type: "select",
-        options: ["any", "beginner", "intermediate", "advanced"],
-        advanced: true,
+        placeholder: "e.g. 3",
+        required: true,
       },
       {
         key: "description",
-        label: "Notes",
+        label: "Details / Description",
         type: "textarea",
-        placeholder: "Anything to know…",
-        advanced: true,
+        placeholder: "Bring non-marking shoes, extra water…",
       },
+      // School and semester are auto-bound from the author's own profile
+      // (see discover-post-form.tsx) rather than declared here — this mode
+      // never shows them as inputs. buildPostPayload injects semester onto
+      // the payload as a sports special case, same pattern as project_partner.
     ],
   },
   recruitment: {
@@ -352,7 +315,7 @@ export const MODE_META: Record<PostMode, ModeMeta> = {
         key: "title",
         label: "What you're recruiting for",
         type: "text",
-        placeholder: "e.g. Volunteers for our tech gala",
+        placeholder: "e.g. Volunteers for Tech Gala 2026",
         required: true,
       },
       {
@@ -364,25 +327,26 @@ export const MODE_META: Record<PostMode, ModeMeta> = {
       },
       {
         key: "description",
-        label: "Details",
+        label: "Description",
         type: "textarea",
-        placeholder: "What contributors will do…",
+        placeholder: "What contributors will do, expectations, and perks…",
+        required: true,
       },
       {
-        key: "skills_needed",
-        label: "Helpful skills",
-        type: "tags",
-        placeholder: "design, social media, video",
-        advanced: true,
+        key: "recruitment_url",
+        label: "Google Form / Application Link",
+        type: "url",
+        placeholder: "https://forms.google.com/…",
+        required: true,
       },
       {
         key: "people_needed",
         label: "People needed",
         type: "number",
-        placeholder: "e.g. 6",
-        advanced: true,
+        placeholder: "e.g. 5",
+        required: true,
       },
-      { key: "deadline", label: "Apply by", type: "datetime", advanced: true },
+      { key: "deadline", label: "Application Deadline", type: "datetime", required: true },
     ],
   },
   contributor: {
@@ -464,5 +428,7 @@ export function modeLabel(mode: DiscoverMode): string {
 
 /** Modes whose forms include the team-member mention picker. */
 export function modeUsesTeamMembers(mode: PostMode): boolean {
-  return mode === "project_partner" || mode === "hackathon_team";
+  return (
+    mode === "project_partner" || mode === "hackathon_team" || mode === "fyp_teammate"
+  );
 }

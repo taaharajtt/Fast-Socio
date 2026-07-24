@@ -48,6 +48,8 @@ export type SmartMatchPost = {
   availability: string | null;
   /** https-only portfolio link on contributor cards. */
   portfolioUrl: string | null;
+  /** https-only Google Form / application link on recruitment cards. */
+  recruitmentUrl: string | null;
   deadline: string | null;
   /** When set and past, the post has aged out of the feed. */
   expiresAt: string | null;
@@ -77,6 +79,7 @@ export type SmartMatchViewer = {
   graduationYear: number | null;
   interests: string[];
   skills: string[];
+  degree: string | null;
 };
 
 /** A single privacy-safe meta row rendered on a card. */

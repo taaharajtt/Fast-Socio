@@ -1,16 +1,19 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search, X } from "lucide-react";
+import { Search, Trophy, X } from "lucide-react";
 import { SegmentedPills, type PillOption } from "@/components/ui/segmented-pills";
 import { CampusMapViewer } from "@/components/map/campus-map-viewer";
 import {
   CAMPUS_MAP_PLACES,
   PLACE_TYPE_META,
+  resolvePlace,
   searchPlaces,
   type CampusPlace,
   type PlaceType,
 } from "@/lib/map/places";
+import { formatWhen } from "@/lib/smart-match/display";
+import type { SmartMatchPost } from "@/lib/smart-match/types";
 
 type Filter = "all" | PlaceType;
 
@@ -43,12 +46,26 @@ const DETAIL_INSET = 120;
  * Selecting a place (from a pin tap or a search result) centers + zooms to it
  * and opens the detail card. Filters narrow both the visible pins and the
  * search results. Zoom-to-fit, pan and the zoom controls are unchanged.
+ *
+ * `initialPlace` is a Discover "Show on map" deep link (an id, name, or
+ * alias) — resolved once, at mount, into the matching pin's selection so the
+ * viewer opens already centered on it. `sportsByPlace` is the open Sports
+ * plans tagged to each pin, keyed by place id, so a sports spot's detail card
+ * can show "N active games" without a separate DB relationship.
  */
-export function CampusMapExperience() {
+export function CampusMapExperience({
+  initialPlace = null,
+  sportsByPlace = {},
+}: {
+  initialPlace?: string | null;
+  sportsByPlace?: Record<string, SmartMatchPost[]>;
+} = {}) {
   const [query, setQuery] = useState("");
   const [resultsOpen, setResultsOpen] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(
+    () => resolvePlace(initialPlace)?.id ?? null
+  );
   const [focusSignal, setFocusSignal] = useState(0);
 
   // Type filter feeds both the pins on the map and the search corpus.
@@ -69,6 +86,14 @@ export function CampusMapExperience() {
     () => CAMPUS_MAP_PLACES.find((p) => p.id === selectedId) ?? null,
     [selectedId]
   );
+
+  const activeCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const [placeId, plans] of Object.entries(sportsByPlace)) {
+      if (plans.length) counts[placeId] = plans.length;
+    }
+    return counts;
+  }, [sportsByPlace]);
 
   const selectPlace = (id: string) => {
     setSelectedId(id);
@@ -154,10 +179,12 @@ export function CampusMapExperience() {
           onSelectPlace={selectPlace}
           focusSignal={focusSignal}
           controlsBottomInset={selectedPlace ? DETAIL_INSET : 0}
+          activeCounts={activeCounts}
         />
         {selectedPlace && (
           <PlaceDetailCard
             place={selectedPlace}
+            plans={sportsByPlace[selectedPlace.id] ?? []}
             onClose={() => setSelectedId(null)}
           />
         )}
@@ -202,9 +229,12 @@ function ResultRow({
 
 function PlaceDetailCard({
   place,
+  plans,
   onClose,
 }: {
   place: CampusPlace;
+  /** Open Sports plans tagged to this pin (Discover → Map). */
+  plans: SmartMatchPost[];
   onClose: () => void;
 }) {
   const meta = PLACE_TYPE_META[place.type];
@@ -213,7 +243,7 @@ function PlaceDetailCard({
     <div
       role="dialog"
       aria-label={`${place.name} details`}
-      className="absolute inset-x-3 bottom-3 z-20 rounded-2xl border border-white/10 bg-card/95 p-4 shadow-2xl backdrop-blur"
+      className="absolute inset-x-3 bottom-3 z-20 max-h-[min(60vh,320px)] overflow-y-auto rounded-2xl border border-white/10 bg-card/95 p-4 shadow-2xl backdrop-blur"
     >
       <div className="flex items-start gap-3">
         <span
@@ -236,6 +266,30 @@ function PlaceDetailCard({
         </button>
       </div>
       <p className="mt-2 text-sm text-fg-muted">{place.description}</p>
+
+      {plans.length > 0 && (
+        <div className="mt-3 border-t border-white/10 pt-3">
+          <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-fg-muted">
+            <Trophy className="h-3.5 w-3.5" aria-hidden />
+            {plans.length} active {plans.length === 1 ? "game" : "games"}
+          </p>
+          <ul className="space-y-2">
+            {plans.map((p) => (
+              <li key={p.id} className="rounded-xl bg-white/[0.05] px-3 py-2">
+                <p className="truncate text-sm font-semibold text-fg">{p.title}</p>
+                <p className="text-xs text-fg-muted">
+                  {[
+                    p.scheduledAt ? formatWhen(p.scheduledAt) : null,
+                    p.peopleNeeded != null ? `${p.peopleNeeded} needed` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
