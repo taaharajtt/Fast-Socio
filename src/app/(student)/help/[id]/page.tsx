@@ -163,12 +163,14 @@ export default async function HelpDetailPage({
           </div>
         </div>
 
-        <div className="mt-4 flex items-center gap-4 border-t border-white/[0.06] pt-3 text-sm text-fg-muted">
-          <span className="flex items-center gap-1.5">
-            <MessageSquare className="h-4 w-4" aria-hidden />
-            {req.response_count} response{req.response_count === 1 ? "" : "s"}
-          </span>
-        </div>
+        {isSeekerOrModerator && (
+          <div className="mt-4 flex items-center gap-4 border-t border-white/[0.06] pt-3 text-sm text-fg-muted">
+            <span className="flex items-center gap-1.5">
+              <MessageSquare className="h-4 w-4" aria-hidden />
+              {req.response_count} response{req.response_count === 1 ? "" : "s"}
+            </span>
+          </div>
+        )}
       </GlassCard>
 
       {(req.is_mine || isHelpModerator) && (

@@ -7,9 +7,6 @@ import {
   Award,
   Trash2,
   Flag,
-  Check,
-  X,
-  MessageCircle,
   CornerDownRight,
 } from "lucide-react";
 import { AppImage } from "@/components/ui/app-image";
@@ -20,9 +17,6 @@ import type { HelpResponseRow } from "@/lib/help/types";
 import {
   selectHelper,
   deleteResponse,
-  acceptHelpOffer,
-  declineHelpOffer,
-  openHelpChat,
   replyToResponse,
 } from "@/app/(student)/help/actions";
 import { HelpReportSheet } from "./help-report-sheet";
@@ -31,10 +25,11 @@ import { HelpReportSheet } from "./help-report-sheet";
  * One response in a request thread. What renders depends on who's looking — and
  * the DB view (mig 0109) only ever hands this component a row the viewer is
  * allowed to see (the seeker, this response's own author, or an admin):
- *  • Seeker: approve/decline (opens a private chat), select & thank (the
- *    gratitude loop → resolve + Aura), and reply to this helper.
- *  • Helper (own response): delete it (until selected), message once approved,
- *    and read the seeker's reply to them.
+ *  • Seeker: select & thank (the gratitude loop → resolve + Aura, awards the
+ *    helper only), and reply to this helper. No DMs — responses/replies are
+ *    the only communication channel.
+ *  • Helper (own response): delete it (until selected), and read the seeker's
+ *    reply to them.
  * An anonymous helper is shown as "Anonymous helper · School · Nth Semester";
  * the seeker still selects/thanks by response id, so anonymity never blocks it.
  */
@@ -67,9 +62,6 @@ export function HelpResponseCard({
   });
 
   const isOwner = response.viewer_owns_request;
-  const accepted = response.status === "accepted";
-  const declined = response.status === "declined";
-  const pendingOffer = response.status === "pending";
 
   function run(fn: () => Promise<{ ok: true } | { ok: false; error: string }>) {
     setError(null);
@@ -77,15 +69,6 @@ export function HelpResponseCard({
       const res = await fn();
       if (!res.ok) setError(res.error);
       else router.refresh();
-    });
-  }
-
-  function chat() {
-    setError(null);
-    start(async () => {
-      const res = await openHelpChat(response.id);
-      // Success redirects server-side; only an error returns here.
-      if (res?.error) setError(res.error);
     });
   }
 
@@ -107,9 +90,7 @@ export function HelpResponseCard({
         "rounded-[14px] p-3.5",
         response.is_selected
           ? "bg-success/10 ring-1 ring-success/40"
-          : accepted
-            ? "bg-aura/10 ring-1 ring-aura/30"
-            : "glass"
+          : "glass"
       )}
     >
       <div className="flex items-center gap-2">
@@ -135,10 +116,6 @@ export function HelpResponseCard({
         {response.is_selected ? (
           <span className="flex shrink-0 items-center gap-1 rounded-full bg-success/20 px-2 py-0.5 text-xs font-semibold text-success">
             <Award className="h-3.5 w-3.5" aria-hidden /> Thanked
-          </span>
-        ) : accepted ? (
-          <span className="flex shrink-0 items-center gap-1 rounded-full bg-aura/20 px-2 py-0.5 text-xs font-semibold text-aura">
-            <Check className="h-3.5 w-3.5" aria-hidden /> Approved
           </span>
         ) : (
           <span className="shrink-0 text-xs text-fg-muted">
@@ -171,46 +148,9 @@ export function HelpResponseCard({
         </div>
       )}
 
-      {/* Action row */}
+      {/* Action row — the seeker gets exactly two actions here: select & thank,
+          and reply. No DMs; responses/replies are the only communication. */}
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
-        {/* Seeker: approve / decline a pending offer */}
-        {isOwner && pendingOffer && (
-          <>
-            <button
-              type="button"
-              onClick={() => run(() => acceptHelpOffer(response.id, requestId))}
-              disabled={pending}
-              className="flex items-center gap-1.5 rounded-full bg-aura/15 px-3 py-1.5 text-xs font-semibold text-aura transition-colors disabled:opacity-60"
-            >
-              <Check className="h-3.5 w-3.5" aria-hidden /> Approve &amp; chat
-            </button>
-            <button
-              type="button"
-              onClick={() => run(() => declineHelpOffer(response.id, requestId))}
-              disabled={pending}
-              className="flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs font-medium text-fg-muted transition-colors hover:text-error disabled:opacity-60"
-            >
-              <X className="h-3.5 w-3.5" aria-hidden /> Decline
-            </button>
-          </>
-        )}
-
-        {/* Either party can open the chat once approved */}
-        {accepted && (isOwner || response.is_mine) && (
-          <button
-            type="button"
-            onClick={chat}
-            disabled={pending}
-            className="gradient-brand flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-white transition-all active:scale-95 disabled:opacity-60"
-          >
-            <MessageCircle className="h-3.5 w-3.5" aria-hidden /> Message
-          </button>
-        )}
-
-        {declined && isOwner && (
-          <span className="text-xs text-fg-muted">Declined</span>
-        )}
-
         {/* Seeker: mark this as the response that solved it (resolve + thank) */}
         {viewerCanSelect && !response.is_selected && (
           <button

@@ -79,10 +79,12 @@ export function HelpCard({ req }: { req: HelpRequestRow }) {
             <span className="font-medium text-fg">{author.name}</span>
             {author.meta && <span className="text-fg-muted"> · {author.meta}</span>}
           </span>
-          <span className="ml-auto flex shrink-0 items-center gap-1">
-            <MessageSquare className="h-3.5 w-3.5" aria-hidden />
-            {req.response_count}
-          </span>
+          {req.is_mine && (
+            <span className="ml-auto flex shrink-0 items-center gap-1">
+              <MessageSquare className="h-3.5 w-3.5" aria-hidden />
+              {req.response_count}
+            </span>
+          )}
         </div>
       </GlassCard>
     </Link>

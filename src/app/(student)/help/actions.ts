@@ -217,64 +217,6 @@ export async function selectHelper(
   return { ok: true };
 }
 
-/**
- * Approve a helper's offer (request owner only). This does NOT resolve the
- * request — it unlocks a chat between the asker and this helper and notifies
- * them. Identity is revealed only through the chat, so an anonymous asker stays
- * anonymous everywhere else.
- */
-export async function acceptHelpOffer(
-  responseId: string,
-  requestId: string
-): Promise<Result> {
-  const uid = await getAuthUserId();
-  if (!uid) return { ok: false, error: "Not signed in." };
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("accept_help_offer", {
-    p_response_id: responseId,
-  });
-  if (error) return { ok: false, error: error.message };
-  revalidatePath(`/help/${requestId}`);
-  revalidatePath("/help");
-  return { ok: true };
-}
-
-/** Decline a helper's offer (request owner only, pending offers only). */
-export async function declineHelpOffer(
-  responseId: string,
-  requestId: string
-): Promise<Result> {
-  const uid = await getAuthUserId();
-  if (!uid) return { ok: false, error: "Not signed in." };
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("decline_help_offer", {
-    p_response_id: responseId,
-  });
-  if (error) return { ok: false, error: error.message };
-  revalidatePath(`/help/${requestId}`);
-  return { ok: true };
-}
-
-/**
- * Open the chat unlocked by an approved offer. Everything — resolving the other
- * party, the accepted-offer gate, and the block check — happens inside
- * open_help_conversation, so an anonymous asker's id never reaches the helper's
- * client. Redirects into the conversation.
- */
-export async function openHelpChat(
-  responseId: string
-): Promise<{ error: string } | void> {
-  const uid = await getAuthUserId();
-  if (!uid) return { error: "Not signed in." };
-
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("open_help_conversation", {
-    p_response_id: responseId,
-  });
-  if (error || !data) return { error: error?.message ?? "Could not open chat." };
-  redirect(`/chat/${data as string}`);
-}
-
 /** Follow a request to get updates. Idempotent (self-only via RLS). */
 export async function followRequest(requestId: string): Promise<Result> {
   const uid = await getAuthUserId();

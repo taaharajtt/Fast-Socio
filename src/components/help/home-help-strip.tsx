@@ -72,10 +72,12 @@ export async function HomeHelpStrip() {
                   <p className="mt-1 line-clamp-2 text-[11px] text-fg-muted">
                     {r.body}
                   </p>
-                  <p className="mt-2 flex items-center gap-1 text-[11px] text-fg-muted">
-                    <MessageSquare className="h-3 w-3" aria-hidden />
-                    {r.response_count} response{r.response_count === 1 ? "" : "s"}
-                  </p>
+                  {r.is_mine && (
+                    <p className="mt-2 flex items-center gap-1 text-[11px] text-fg-muted">
+                      <MessageSquare className="h-3 w-3" aria-hidden />
+                      {r.response_count} response{r.response_count === 1 ? "" : "s"}
+                    </p>
+                  )}
                 </GlassCard>
               </Link>
             );
