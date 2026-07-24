@@ -86,16 +86,29 @@ export function scorePost(
     });
   }
 
+  // On a contributor card `skillsNeeded` holds the skills the author OFFERS,
+  // not skills they want — so the overlap means "we work in the same area",
+  // and the chip copy has to flip accordingly.
   const skillFit = overlap(viewer.skills, post.skillsNeeded);
   if (skillFit.length) {
     raw += Math.min(skillFit.length, 4) * 8;
-    reasons.unshift({
-      key: "skill",
-      label:
-        skillFit.length === 1
-          ? `They need ${skillFit[0]} — you have it`
-          : `You have ${skillFit.length} skills they need`,
-    });
+    reasons.unshift(
+      mode === "contributor"
+        ? {
+            key: "skill",
+            label:
+              skillFit.length === 1
+                ? `Offers ${skillFit[0]}`
+                : `Offers ${skillFit.length} skills you work with`,
+          }
+        : {
+            key: "skill",
+            label:
+              skillFit.length === 1
+                ? `They need ${skillFit[0]} — you have it`
+                : `You have ${skillFit.length} skills they need`,
+          }
+    );
   }
 
   // People-needed urgency ("3 booked, need a 4th").
@@ -182,6 +195,21 @@ export function scorePost(
         raw += 8;
         reasons.push({ key: "society", label: "A society you follow" });
       }
+      break;
+    }
+    case "contributor": {
+      // A contributor is useful when the roles they want match what the viewer
+      // (often a society/event organizer) tends to need.
+      const roleFit = overlap(viewer.skills, post.rolesNeeded);
+      if (roleFit.length) {
+        raw += Math.min(roleFit.length, 2) * 6;
+        reasons.unshift({ key: "role", label: `Wants to do ${roleFit[0]}` });
+      }
+      if (post.availability) {
+        raw += 4;
+        reasons.push({ key: "avail", label: `Free ${post.availability}` });
+      }
+      if (post.portfolioUrl) raw += 3;
       break;
     }
   }

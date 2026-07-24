@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { AppImage } from "@/components/ui/app-image";
 import { GlassInput } from "@/components/ui";
-import { searchTeammates } from "@/app/(student)/discover/smart-match-actions";
+import { searchTeammates } from "@/app/(student)/discover/discover-actions";
 import type { TeamMember } from "@/lib/smart-match/types";
 
 /**

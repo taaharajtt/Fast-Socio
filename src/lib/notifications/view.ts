@@ -161,12 +161,12 @@ export function notificationView(
     case "matching_request":
       return {
         text: `${who} wants to connect`,
-        href: data.mode ? `/discover?mode=${data.mode}` : "/discover",
+        href: "/discover",
       };
     case "matching_accepted":
       return {
         text: `${who} accepted your request 🎉`,
-        href: data.mode ? `/discover?mode=${data.mode}` : "/discover",
+        href: "/discover",
       };
     case "message":
       return {
@@ -296,17 +296,17 @@ export function notificationView(
     case "smart_match_application":
       return {
         text: `${who} wants to join your post`,
-        href: data.mode ? `/discover?mode=${data.mode}` : "/discover",
+        href: "/discover",
       };
     case "smart_match_accepted":
       return {
         text: `${who} accepted your request 🎉`,
-        href: data.mode ? `/discover?mode=${data.mode}` : "/discover",
+        href: "/discover",
       };
     case "smart_match_mention":
       return {
         text: `${who} tagged you as a teammate`,
-        href: data.mode ? `/discover?mode=${data.mode}` : "/discover",
+        href: "/discover",
       };
     default:
       return { text: "New notification", href: "/home" };

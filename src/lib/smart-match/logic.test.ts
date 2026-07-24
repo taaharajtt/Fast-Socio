@@ -2,8 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   DISCOVER_MODES,
   POST_MODES,
-  DEFAULT_DISCOVER_MODE,
-  DISCOVER_TABS,
+  DISCOVER_KINDS,
   isDiscoverMode,
   isPostMode,
   modeLabel,
@@ -34,6 +33,7 @@ function makePost(mode: PostMode, over: Partial<SmartMatchPost> = {}): SmartMatc
     authorId: "a1",
     authorName: "Aisha",
     authorAvatar: null,
+    authorUsername: "i221234",
     authorDepartment: "Computer Science",
     authorSemester: 5,
     authorGraduationYear: 2027,
@@ -55,7 +55,10 @@ function makePost(mode: PostMode, over: Partial<SmartMatchPost> = {}): SmartMatc
     meetingPreference: null,
     preferredCommitment: null,
     skillLevel: null,
+    availability: null,
+    portfolioUrl: null,
     deadline: null,
+    expiresAt: null,
     societyId: null,
     societyName: null,
     eventId: null,
@@ -84,22 +87,22 @@ const NOW = new Date("2026-07-21T12:00:00Z").getTime();
 // ---------------------------------------------------------------------------
 // Modes
 // ---------------------------------------------------------------------------
-describe("discover modes", () => {
-  it("keeps SOCIO as the default and first tab", () => {
-    expect(DEFAULT_DISCOVER_MODE).toBe("socio");
+describe("discover kinds", () => {
+  it("keeps SOCIO as a first-class kind", () => {
     expect(DISCOVER_MODES[0]).toBe("socio");
-    expect(DISCOVER_TABS[0].mode).toBe("socio");
-    expect(DISCOVER_TABS[0].label).toBe("SOCIO");
+    expect(DISCOVER_KINDS[0].mode).toBe("socio");
+    expect(DISCOVER_KINDS[0].label).toBe("SOCIO");
     expect(modeLabel("socio")).toBe("SOCIO");
   });
 
-  it("has exactly the five focused post modes and drops the old ones", () => {
+  it("has exactly the six post kinds and drops the old ones", () => {
     expect(POST_MODES).toEqual([
       "project_partner",
       "fyp_teammate",
       "hackathon_team",
       "sports",
       "recruitment",
+      "contributor",
     ]);
     for (const gone of ["date", "study", "event_buddy", "mentor", "commute"]) {
       expect(isPostMode(gone)).toBe(false);
@@ -282,6 +285,18 @@ describe("scorePost", () => {
     );
   });
 
+  it("flips the skill chip copy for a contributor card", () => {
+    const post = makePost("contributor", { skillsNeeded: ["React"] });
+    const { reasons } = scorePost("contributor", viewer, post, NOW);
+    expect(reasons[0].key).toBe("skill");
+    expect(reasons[0].label).toBe("Offers react");
+    // A request card keeps the "they need it, you have it" framing.
+    const req = makePost("project_partner", { skillsNeeded: ["React"] });
+    expect(scorePost("project_partner", viewer, req, NOW).reasons[0].label).toContain(
+      "need"
+    );
+  });
+
   it("recognizes a fillable role in hackathon + recruitment", () => {
     const hack = makePost("hackathon_team", { rolesNeeded: ["react", "pm"] });
     expect(scorePost("hackathon_team", viewer, hack, NOW).reasons[0].key).toBe("role");
@@ -324,6 +339,20 @@ describe("safeMatchingDisplay", () => {
     expect(blob).not.toContain("aisha");
     expect(blob).not.toContain("gender");
     expect(rows.some((r) => r.label.includes("ACM"))).toBe(true);
+  });
+
+  it("reads a contributor card as an offer, never as a request", () => {
+    const post = makePost("contributor", {
+      title: "Photographer, free most evenings",
+      skillsNeeded: ["photography"],
+      rolesNeeded: ["media team"],
+      availability: "weekends",
+    });
+    const rows = safeMatchingDisplay("contributor", post);
+    const blob = JSON.stringify(rows).toLowerCase();
+    expect(blob).toContain("photography");
+    expect(blob).toContain("open to: media team");
+    expect(blob).not.toContain("needs:");
   });
 
   it("shows the sport, place and time for a sports plan", () => {

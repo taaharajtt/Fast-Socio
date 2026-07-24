@@ -5,20 +5,25 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { isPostMode, type PostMode } from "@/lib/smart-match/modes";
 import {
-  isPostMode,
-  type PostMode,
-} from "@/lib/smart-match/modes";
+  DEFAULT_DISCOVER_FILTER,
+  filterPostModes,
+  isDiscoverFilter,
+  type DiscoverFilter,
+} from "@/lib/discover/filters";
 import {
   buildPostPayload,
   validatePostInput,
   normalizeSkills,
   type PostFormValues,
 } from "@/lib/smart-match/validate";
+import type { DiscoverProfile } from "@/lib/profile/types";
 import type {
-  DiscoverModeData,
+  DiscoverFeedData,
   IncomingApplication,
   MyPost,
+  PostStatus,
   RecruitAnchor,
   SmartMatchPost,
   SmartMatchViewer,
@@ -28,15 +33,15 @@ import type {
 type Result = { ok: true } | { ok: false; error: string };
 
 // ---------------------------------------------------------------------------
-// Server actions for the five focused post modes. SOCIO (the swipe deck) keeps
-// using discover/actions.ts + get_discover_candidates untouched. Every cross-
-// user read of other people's posts goes exclusively through the
-// get_smart_match_posts SECURITY DEFINER RPC; writes go through the definer
-// create/respond RPCs (mig 0105).
+// Server actions for the unified Discover feed. Every cross-user read of other
+// people's opportunity posts goes exclusively through the
+// get_unified_discover_feed SECURITY DEFINER RPC (migs 0105 + 0110); every
+// write goes through the definer create/update/respond RPCs. SOCIO keeps its
+// own untouched path: get_discover_candidates + discover/actions.ts.
 // ---------------------------------------------------------------------------
 
 /** The viewer facts scoring needs from their own profile. Server-only. */
-async function getSmartMatchViewer(): Promise<SmartMatchViewer | null> {
+async function getDiscoverViewer(): Promise<SmartMatchViewer | null> {
   const uid = await getAuthUserId();
   if (!uid) return null;
   const supabase = await createClient();
@@ -71,6 +76,7 @@ type PostRow = {
   author_id: string;
   author_name: string | null;
   author_avatar: string | null;
+  author_username: string | null;
   author_department: string | null;
   author_semester: number | null;
   author_graduation_year: number | null;
@@ -92,7 +98,10 @@ type PostRow = {
   meeting_preference: string | null;
   preferred_commitment: string | null;
   skill_level: string | null;
+  availability: string | null;
+  portfolio_url: string | null;
   deadline: string | null;
+  expires_at: string | null;
   society_id: string | null;
   society_name: string | null;
   event_id: string | null;
@@ -119,6 +128,7 @@ function mapPost(r: PostRow): SmartMatchPost {
     authorId: r.author_id,
     authorName: r.author_name,
     authorAvatar: r.author_avatar,
+    authorUsername: r.author_username,
     authorDepartment: r.author_department,
     authorSemester: r.author_semester,
     authorGraduationYear: r.author_graduation_year,
@@ -140,7 +150,10 @@ function mapPost(r: PostRow): SmartMatchPost {
     meetingPreference: r.meeting_preference,
     preferredCommitment: r.preferred_commitment,
     skillLevel: r.skill_level,
+    availability: r.availability,
+    portfolioUrl: r.portfolio_url,
     deadline: r.deadline,
+    expiresAt: r.expires_at,
     societyId: r.society_id,
     societyName: r.society_name,
     eventId: r.event_id,
@@ -160,18 +173,45 @@ function mapPost(r: PostRow): SmartMatchPost {
   };
 }
 
-/** Eligible open posts in `mode` (unscored — scored client-side in TS). */
-export async function getSmartMatchPosts(
-  mode: PostMode,
-  limit = 40
-): Promise<SmartMatchPost[]> {
-  if (!isPostMode(mode)) return [];
+/**
+ * One page of the unified feed. `filter` narrows the kinds server-side (so a
+ * chip can top itself up without pulling every kind); `cursor` is the
+ * created_at of the last row already on screen. Scoring/ranking is TS.
+ */
+export async function getUnifiedDiscoverFeed({
+  filter = DEFAULT_DISCOVER_FILTER,
+  cursor = null,
+  limit = 40,
+}: {
+  filter?: DiscoverFilter;
+  cursor?: string | null;
+  limit?: number;
+} = {}): Promise<SmartMatchPost[]> {
+  const f: DiscoverFilter = isDiscoverFilter(filter)
+    ? filter
+    : DEFAULT_DISCOVER_FILTER;
+  const modes = filterPostModes(f);
+  // A SOCIO-only view has no opportunity posts to fetch.
+  if (modes.length === 0) return [];
+
   const supabase = await createClient();
-  const { data } = await supabase.rpc("get_smart_match_posts", {
-    p_mode: mode,
-    p_limit: limit,
+  const { data } = await supabase.rpc("get_unified_discover_feed", {
+    p_modes: f === DEFAULT_DISCOVER_FILTER ? null : modes,
+    p_limit: Math.max(1, Math.min(limit, 80)),
+    p_before: cursor,
   });
   return ((data as PostRow[]) ?? []).map(mapPost);
+}
+
+/** SOCIO swipe candidates. Preserves the original deck behaviour verbatim. */
+export async function getSocioSwipeCandidates(
+  limit = 20
+): Promise<DiscoverProfile[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("get_discover_candidates", {
+    p_limit: limit,
+  });
+  return (data as DiscoverProfile[]) ?? [];
 }
 
 /** Societies / events the viewer may recruit for (recruitment create anchor). */
@@ -213,36 +253,115 @@ async function getRecruitAnchors(uid: string): Promise<RecruitAnchor[]> {
   return anchors;
 }
 
-/** Everything the secondary board needs for one mode. */
-export async function getDiscoverModeData(
-  mode: PostMode
-): Promise<DiscoverModeData | null> {
-  if (!isPostMode(mode)) return null;
+/** Everything the unified feed needs on first render. */
+export async function getDiscoverFeedData(): Promise<DiscoverFeedData | null> {
   const uid = await getAuthUserId();
   if (!uid) return null;
-  const viewer = await getSmartMatchViewer();
+  const viewer = await getDiscoverViewer();
   if (!viewer) return null;
   const supabase = await createClient();
 
-  const [posts, { data: mine }] = await Promise.all([
-    getSmartMatchPosts(mode, 40),
+  // RLS lets a user read their OWN posts directly (the definer feed RPC
+  // deliberately excludes them), so own cards are fetched here and merged into
+  // the same feed — that's what gives them Edit/Close instead of a CTA.
+  const [others, { data: mine }, { data: myProfile }] = await Promise.all([
+    getUnifiedDiscoverFeed({ limit: 60 }),
     supabase
       .from("smart_match_posts")
-      .select("id, mode, title, status, people_needed, created_at")
+      .select("*")
       .eq("author_id", uid)
-      .eq("mode", mode)
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .limit(50),
+    supabase
+      .from("profiles")
+      .select("full_name, username, avatar_url, department, graduation_year, verified, aura_score")
+      .eq("id", uid)
+      .maybeSingle(),
   ]);
 
-  const myRows = (mine ?? []) as Array<{
-    id: string;
-    mode: string;
-    title: string;
-    status: "open" | "closed";
-    people_needed: number | null;
-    created_at: string;
-  }>;
-  const myPostIds = myRows.map((r) => r.id);
+  const myRows = (mine ?? []) as Array<Record<string, unknown>>;
+  const myPostIds = myRows.map((r) => r.id as string);
+
+  // My own open posts, shaped exactly like feed rows.
+  const myTeamByPost = new Map<string, TeamMember[]>();
+  if (myPostIds.length) {
+    const { data: tms } = await supabase
+      .from("smart_match_team_members")
+      .select("post_id, user_id")
+      .in("post_id", myPostIds);
+    const rows = (tms ?? []) as Array<{ post_id: string; user_id: string }>;
+    const memberIds = [...new Set(rows.map((r) => r.user_id))];
+    const { data: memberProfiles } = memberIds.length
+      ? await supabase
+          .from("profiles")
+          .select("id, full_name, username, avatar_url")
+          .in("id", memberIds)
+      : { data: [] as unknown[] };
+    const byId = new Map(
+      (memberProfiles ?? []).map((p) => {
+        const m = p as {
+          id: string;
+          full_name: string | null;
+          username: string | null;
+          avatar_url: string | null;
+        };
+        return [
+          m.id,
+          {
+            id: m.id,
+            username: m.username,
+            fullName: m.full_name,
+            avatarUrl: m.avatar_url,
+          } satisfies TeamMember,
+        ];
+      })
+    );
+    for (const r of rows) {
+      const member = byId.get(r.user_id);
+      if (!member) continue;
+      myTeamByPost.set(r.post_id, [...(myTeamByPost.get(r.post_id) ?? []), member]);
+    }
+  }
+
+  const me = (myProfile ?? {}) as {
+    full_name?: string | null;
+    username?: string | null;
+    avatar_url?: string | null;
+    department?: string | null;
+    graduation_year?: number | null;
+    verified?: boolean | null;
+    aura_score?: number | null;
+  };
+
+  const myFeedPosts: SmartMatchPost[] = myRows
+    .filter((r) => r.status === "open")
+    .map((r) => {
+      const team = myTeamByPost.get(r.id as string) ?? [];
+      return {
+        ...mapPost({
+          ...(r as unknown as PostRow),
+          author_name: me.full_name ?? null,
+          author_avatar: me.avatar_url ?? null,
+          author_username: me.username ?? null,
+          author_department: me.department ?? null,
+          author_semester: viewer.semester,
+          author_graduation_year: me.graduation_year ?? null,
+          author_verified: me.verified ?? false,
+          author_aura: me.aura_score ?? 0,
+          society_name: null,
+          event_title: null,
+          team_members: null,
+          team_member_count: team.length,
+          mutual_communities: 0,
+          application_count: 0,
+          my_application_status: null,
+          my_application_id: null,
+        }),
+        teamMembers: team,
+      };
+    });
+
+  const posts = [...others, ...myFeedPosts];
 
   // Incoming applications on my own posts (author view). RLS lets the post
   // author read these; we join applicant profiles for display.
@@ -262,7 +381,9 @@ export async function getDiscoverModeData(
       status: IncomingApplication["status"];
       created_at: string;
     }>;
-    const titleById = new Map(myRows.map((r) => [r.id, r.title]));
+    const titleById = new Map(
+      myRows.map((r) => [r.id as string, r.title as string])
+    );
     const applicantIds = [...new Set(appRows.map((a) => a.applicant_id))];
     const { data: profs } = applicantIds.length
       ? await supabase
@@ -305,19 +426,23 @@ export async function getDiscoverModeData(
   }
 
   const myPosts: MyPost[] = myRows.map((r) => ({
-    id: r.id,
+    id: r.id as string,
     mode: r.mode as PostMode,
-    title: r.title,
-    status: r.status,
-    peopleNeeded: r.people_needed,
-    createdAt: r.created_at,
-    pendingCount: pendingByPost.get(r.id) ?? 0,
+    title: r.title as string,
+    status: r.status as PostStatus,
+    peopleNeeded: (r.people_needed as number | null) ?? null,
+    createdAt: r.created_at as string,
+    pendingCount: pendingByPost.get(r.id as string) ?? 0,
   }));
 
-  const recruitAnchors =
-    mode === "recruitment" ? await getRecruitAnchors(uid) : [];
-
-  return { viewer, posts, myPosts, incoming, recruitAnchors };
+  return {
+    now: Date.now(),
+    viewer,
+    posts,
+    myPosts,
+    incoming,
+    recruitAnchors: await getRecruitAnchors(uid),
+  };
 }
 
 /** Search onboarded, non-banned students to tag as current team members. */
@@ -350,17 +475,17 @@ export async function searchTeammates(query: string): Promise<TeamMember[]> {
     }));
 }
 
-/** Create a post for a mode. Self-write via the definer RPC. */
-export async function createSmartMatchPost(
-  mode: PostMode,
+/** Create a post of `kind`. Self-write via the definer RPC. */
+export async function createDiscoverPost(
+  kind: PostMode,
   values: PostFormValues,
   teamMemberIds: string[] = []
 ): Promise<Result> {
-  if (!isPostMode(mode)) return { ok: false, error: "Invalid mode." };
+  if (!isPostMode(kind)) return { ok: false, error: "Invalid post type." };
   const uid = await getAuthUserId();
   if (!uid) return { ok: false, error: "Not signed in." };
 
-  const check = validatePostInput(mode, values);
+  const check = validatePostInput(kind, values);
   if (!check.ok)
     return { ok: false, error: `Please fill in: ${check.missing.join(", ")}.` };
 
@@ -369,8 +494,8 @@ export async function createSmartMatchPost(
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("create_smart_match_post", {
-    p_mode: mode,
-    p_payload: buildPostPayload(mode, values),
+    p_mode: kind,
+    p_payload: buildPostPayload(kind, values),
     p_team_member_ids: teamMemberIds.slice(0, 20),
   });
   if (error) return { ok: false, error: friendly(error.message) };
@@ -379,20 +504,20 @@ export async function createSmartMatchPost(
 }
 
 /** Update one of the caller's own posts. */
-export async function updateSmartMatchPost(
-  id: string,
-  mode: PostMode,
+export async function updateDiscoverPost(
+  postId: string,
+  kind: PostMode,
   values: PostFormValues,
   teamMemberIds: string[] | null = null
 ): Promise<Result> {
-  if (!isPostMode(mode)) return { ok: false, error: "Invalid mode." };
-  const check = validatePostInput(mode, values);
+  if (!isPostMode(kind)) return { ok: false, error: "Invalid post type." };
+  const check = validatePostInput(kind, values);
   if (!check.ok)
     return { ok: false, error: `Please fill in: ${check.missing.join(", ")}.` };
   const supabase = await createClient();
   const { error } = await supabase.rpc("update_smart_match_post", {
-    p_id: id,
-    p_payload: buildPostPayload(mode, values),
+    p_id: postId,
+    p_payload: buildPostPayload(kind, values),
     p_team_member_ids: teamMemberIds ? teamMemberIds.slice(0, 20) : null,
   });
   if (error) return { ok: false, error: friendly(error.message) };
@@ -401,16 +526,42 @@ export async function updateSmartMatchPost(
 }
 
 /** Close (soft) one of the caller's own posts. */
-export async function closeSmartMatchPost(id: string): Promise<Result> {
+export async function closeDiscoverPost(postId: string): Promise<Result> {
+  return setDiscoverPostStatus(postId, "closed");
+}
+
+/** Author-only lifecycle control: open / closed / filled. */
+export async function setDiscoverPostStatus(
+  postId: string,
+  status: "open" | "closed" | "filled"
+): Promise<Result> {
   const supabase = await createClient();
-  const { error } = await supabase.rpc("close_smart_match_post", { p_id: id });
+  const { error } = await supabase.rpc("set_smart_match_post_status", {
+    p_id: postId,
+    p_status: status,
+  });
   if (error) return { ok: false, error: friendly(error.message) };
   revalidatePath("/discover");
   return { ok: true };
 }
 
-/** Express interest / request to join a post. Rate-limited + block-guarded. */
-export async function expressInterest(
+/** Delete one of the caller's own posts. RLS restricts this to author_id = me. */
+export async function deleteDiscoverPost(postId: string): Promise<Result> {
+  const uid = await getAuthUserId();
+  if (!uid) return { ok: false, error: "Not signed in." };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("smart_match_posts")
+    .delete()
+    .eq("id", postId)
+    .eq("author_id", uid);
+  if (error) return { ok: false, error: friendly(error.message) };
+  revalidatePath("/discover");
+  return { ok: true };
+}
+
+/** Respond to a post — request to join / apply / invite. Rate + block guarded. */
+export async function respondToDiscoverPost(
   postId: string,
   message: string
 ): Promise<Result> {
@@ -430,20 +581,22 @@ export async function expressInterest(
   return { ok: true };
 }
 
-export async function cancelInterest(applicationId: string): Promise<Result> {
+export async function cancelDiscoverResponse(
+  responseId: string
+): Promise<Result> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("cancel_smart_match_interest", {
-    p_id: applicationId,
+    p_id: responseId,
   });
   if (error) return { ok: false, error: friendly(error.message) };
   revalidatePath("/discover");
   return { ok: true };
 }
 
-async function respond(applicationId: string, accept: boolean): Promise<Result> {
+async function respond(responseId: string, accept: boolean): Promise<Result> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("respond_smart_match_interest", {
-    p_id: applicationId,
+    p_id: responseId,
     p_accept: accept,
   });
   if (error) return { ok: false, error: friendly(error.message) };
@@ -451,15 +604,19 @@ async function respond(applicationId: string, accept: boolean): Promise<Result> 
   return { ok: true };
 }
 
-export async function acceptInterest(applicationId: string): Promise<Result> {
-  return respond(applicationId, true);
+export async function acceptDiscoverResponse(
+  responseId: string
+): Promise<Result> {
+  return respond(responseId, true);
 }
 
-export async function declineInterest(applicationId: string): Promise<Result> {
-  return respond(applicationId, false);
+export async function declineDiscoverResponse(
+  responseId: string
+): Promise<Result> {
+  return respond(responseId, false);
 }
 
-/** Save the viewer's own skill set (improves matching). */
+/** Save the viewer's own skill set (improves matching everywhere). */
 export async function saveMySkills(skills: string[]): Promise<Result> {
   const uid = await getAuthUserId();
   if (!uid) return { ok: false, error: "Not signed in." };
@@ -486,7 +643,7 @@ export async function openMatchChat(
 }
 
 /** Report a post for moderator review. */
-export async function reportSmartMatchPost(
+export async function reportDiscoverPost(
   postId: string,
   reason: string
 ): Promise<Result> {
@@ -507,7 +664,7 @@ export async function reportSmartMatchPost(
 
 /** Map raw RPC exceptions to friendly copy. */
 function friendly(msg: string): string {
-  if (msg.includes("already applied")) return "You already applied to this post.";
+  if (msg.includes("already applied")) return "You already responded to this post.";
   if (msg.includes("recruitment posts require"))
     return "Only society officers or event organizers can recruit here.";
   if (msg.includes("closed")) return "This post is closed.";

@@ -109,6 +109,52 @@ export function buildPostPayload(mode: PostMode, values: PostFormValues): PostPa
   return payload;
 }
 
+/**
+ * Inverse of buildPostPayload: seed the edit form from an existing post. Only
+ * the keys the mode's own field specs declare are read back, so editing can
+ * never resurrect a field that kind doesn't own.
+ */
+export function postToFormValues(
+  mode: PostMode,
+  post: Record<string, unknown>
+): PostFormValues {
+  const values: PostFormValues = {};
+  for (const field of MODE_META[mode].fields) {
+    if (field.type === "mentions") continue;
+    const raw = post[CAMEL[field.key] ?? field.key];
+    if (field.type === "tags") {
+      values[field.key] = Array.isArray(raw) ? (raw as string[]) : [];
+    } else if (field.type === "datetime") {
+      // <input type="datetime-local"> wants "YYYY-MM-DDTHH:mm", local time.
+      const d = typeof raw === "string" ? new Date(raw) : null;
+      values[field.key] =
+        d && !Number.isNaN(d.getTime())
+          ? new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+              .toISOString()
+              .slice(0, 16)
+          : "";
+    } else {
+      values[field.key] = raw == null ? "" : String(raw);
+    }
+  }
+  return values;
+}
+
+/** snake_case column → the camelCase key it carries on SmartMatchPost. */
+const CAMEL: Record<string, string> = {
+  course_code: "courseCode",
+  people_needed: "peopleNeeded",
+  skills_needed: "skillsNeeded",
+  roles_needed: "rolesNeeded",
+  scheduled_at: "scheduledAt",
+  hackathon_name: "hackathonName",
+  hackathon_url: "hackathonUrl",
+  meeting_preference: "meetingPreference",
+  preferred_commitment: "preferredCommitment",
+  skill_level: "skillLevel",
+  portfolio_url: "portfolioUrl",
+};
+
 /** True when every required field for the mode has a value. Pure + tested. */
 export function validatePostInput(
   mode: PostMode,

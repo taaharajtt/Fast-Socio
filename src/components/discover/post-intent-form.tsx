@@ -4,51 +4,89 @@ import { useState, useTransition } from "react";
 import { ChevronDown, X } from "lucide-react";
 import { GlassSheet, GlassInput, GlassButton } from "@/components/ui";
 import { TeamMemberMentions } from "@/components/discover/team-member-mentions";
-import { modeMeta, type PostMode } from "@/lib/smart-match/modes";
-import type { FieldSpec } from "@/lib/smart-match/modes";
-import { createSmartMatchPost } from "@/app/(student)/discover/smart-match-actions";
+import { modeMeta, type PostMode, type FieldSpec } from "@/lib/smart-match/modes";
+import { postToFormValues, type PostFormValues } from "@/lib/smart-match/validate";
+import {
+  createDiscoverPost,
+  updateDiscoverPost,
+} from "@/app/(student)/discover/discover-actions";
 import type {
-  PostFormValues,
-} from "@/lib/smart-match/validate";
-import type { RecruitAnchor, SmartMatchViewer, TeamMember } from "@/lib/smart-match/types";
+  RecruitAnchor,
+  SmartMatchPost,
+  SmartMatchViewer,
+  TeamMember,
+} from "@/lib/smart-match/types";
 
 /**
- * Progressive, mode-specific create form in a bottom sheet. Required fields show
- * first; optional "advanced" fields collapse behind a toggle. Skills/roles are
- * chip inputs; Project/Hackathon get the team-member mention picker; Recruitment
- * gets a society/event anchor (and is blocked if you run none).
+ * The type-specific half of Post Intent. Once the kind is chosen, this sheet
+ * asks ONLY for that kind's fields: required ones first, optional ones folded
+ * behind "More options". Skills/roles are chip inputs; Project/Hackathon get
+ * the team-member mention picker; Recruitment must be anchored to a society or
+ * event the author actually runs. The same sheet edits an existing post.
  */
-export function SmartMatchForm({
-  mode,
+export function PostIntentForm({
+  kind,
   viewer,
   recruitAnchors,
-  open,
+  editing,
   onClose,
-  onCreated,
+  onSaved,
 }: {
-  mode: PostMode;
+  kind: PostMode | null;
   viewer: SmartMatchViewer;
   recruitAnchors: RecruitAnchor[];
-  open: boolean;
+  /** When set, the sheet updates this post instead of creating one. */
+  editing?: SmartMatchPost | null;
   onClose: () => void;
-  onCreated: () => void;
+  onSaved: () => void;
 }) {
-  const meta = modeMeta(mode);
-  const initialValues = (): PostFormValues => {
+  return kind ? (
+    <PostIntentFormBody
+      // Remount per kind/post so all field state resets cleanly.
+      key={`${kind}:${editing?.id ?? "new"}`}
+      kind={kind}
+      viewer={viewer}
+      recruitAnchors={recruitAnchors}
+      editing={editing ?? null}
+      onClose={onClose}
+      onSaved={onSaved}
+    />
+  ) : null;
+}
+
+function PostIntentFormBody({
+  kind,
+  viewer,
+  recruitAnchors,
+  editing,
+  onClose,
+  onSaved,
+}: {
+  kind: PostMode;
+  viewer: SmartMatchViewer;
+  recruitAnchors: RecruitAnchor[];
+  editing: SmartMatchPost | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const meta = modeMeta(kind);
+  const [values, setValues] = useState<PostFormValues>(() => {
+    if (editing) return postToFormValues(kind, editing as unknown as Record<string, unknown>);
     const init: PostFormValues = {};
     if (viewer.semester) init.semester = String(viewer.semester);
     return init;
-  };
-  const [values, setValues] = useState<PostFormValues>(initialValues);
-  const [team, setTeam] = useState<TeamMember[]>([]);
-  const [anchor, setAnchor] = useState<string>("");
+  });
+  const [team, setTeam] = useState<TeamMember[]>(editing?.teamMembers ?? []);
+  const [anchor, setAnchor] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
   const basic = meta.fields.filter((f) => !f.advanced);
   const advanced = meta.fields.filter((f) => f.advanced);
-  const recruitBlocked = mode === "recruitment" && recruitAnchors.length === 0;
+  // Recruitment authority is fixed at creation, so the anchor only gates new posts.
+  const recruitBlocked =
+    kind === "recruitment" && !editing && recruitAnchors.length === 0;
 
   function set(key: string, v: string | string[]) {
     setValues((prev) => ({ ...prev, [key]: v }));
@@ -57,31 +95,32 @@ export function SmartMatchForm({
   function submit() {
     setError(null);
     const payload: PostFormValues = { ...values };
-    if (mode === "recruitment" && anchor) {
-      const [kind, id] = anchor.split(":");
-      if (kind === "society") payload.society_id = id;
+    if (kind === "recruitment" && anchor) {
+      const [anchorKind, id] = anchor.split(":");
+      if (anchorKind === "society") payload.society_id = id;
       else payload.event_id = id;
     }
+    if (kind === "recruitment" && editing) {
+      // Keep the original anchor so validation passes on edit.
+      if (editing.societyId) payload.society_id = editing.societyId;
+      if (editing.eventId) payload.event_id = editing.eventId;
+    }
     start(async () => {
-      const res = await createSmartMatchPost(
-        mode,
-        payload,
-        team.map((t) => t.id)
-      );
+      const ids = team.map((t) => t.id);
+      const res = editing
+        ? await updateDiscoverPost(editing.id, kind, payload, ids)
+        : await createDiscoverPost(kind, payload, ids);
       if (!res.ok) setError(res.error);
-      else {
-        setValues(initialValues());
-        setTeam([]);
-        setAnchor("");
-        onCreated();
-      }
+      else onSaved();
     });
   }
 
+  const title = editing ? `Edit — ${meta.label}` : meta.formTitle;
+
   return (
-    <GlassSheet open={open} onClose={onClose} label={meta.formTitle}>
+    <GlassSheet open onClose={onClose} label={title}>
       <div className="max-h-[75vh] space-y-4 overflow-y-auto" data-sheet-scroll>
-        <h2 className="text-lg font-bold">{meta.formTitle}</h2>
+        <h2 className="text-lg font-bold">{title}</h2>
 
         {recruitBlocked ? (
           <p className="rounded-[14px] bg-card px-4 py-6 text-center text-sm text-fg-muted">
@@ -90,7 +129,7 @@ export function SmartMatchForm({
           </p>
         ) : (
           <>
-            {mode === "recruitment" && (
+            {kind === "recruitment" && !editing && (
               <Field label="Recruit for">
                 <select
                   value={anchor}
@@ -158,7 +197,11 @@ export function SmartMatchForm({
               onClick={submit}
               className="w-full"
             >
-              {pending ? "Posting…" : meta.createLabel}
+              {pending
+                ? "Saving…"
+                : editing
+                  ? "Save changes"
+                  : meta.createLabel}
             </GlassButton>
           </>
         )}
@@ -167,7 +210,15 @@ export function SmartMatchForm({
   );
 }
 
-function Field({ label, help, children }: { label: string; help?: string; children: React.ReactNode }) {
+function Field({
+  label,
+  help,
+  children,
+}: {
+  label: string;
+  help?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div>
       <label className="mb-1.5 block text-sm font-medium">{label}</label>

@@ -90,6 +90,14 @@ export function safeMatchingDisplay(mode: PostMode, post: SmartMatchPost): Displ
       if (post.peopleNeeded != null) push("people", `${post.peopleNeeded} needed`);
       if (post.deadline) push("deadline", `Apply by ${formatDate(post.deadline)}`);
       break;
+    case "contributor":
+      // skills_needed / roles_needed carry what this student OFFERS.
+      if (post.skillsNeeded.length) push("skills", `Skills: ${tagList(post.skillsNeeded)}`);
+      if (post.rolesNeeded.length) push("roles", `Open to: ${tagList(post.rolesNeeded)}`);
+      if (post.availability) push("avail", `Free ${post.availability}`);
+      if (post.interests.length) push("interests", `Into: ${tagList(post.interests)}`);
+      if (post.degree) push("degree", post.degree);
+      break;
   }
   return rows;
 }

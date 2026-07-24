@@ -5,17 +5,20 @@ import {
   Code2,
   Dumbbell,
   Megaphone,
+  HandHeart,
   type LucideIcon,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
-// Discover modes — SOCIO is the founder's original date/social swipe deck and
-// is ALWAYS the default. The five secondary modes are the focused, post-based
-// campus-matching tools. `mode` is a shareable ?mode= query param.
+// Discover kinds. Discover is ONE unified feed — these are card kinds, not
+// tabs. Six of them are post/opportunity kinds sharing the smart_match_posts
+// table (discriminated by `mode`); SOCIO is the founder's original date/social
+// swipe deck, which keeps its own RPC and its own swipe surface and is mixed
+// into the feed as profile cards.
 //
-// The DB CHECK constraints (mig 0105) mirror POST_MODES exactly — adding a mode
-// is: add it here + to the two CHECK constraints. SOCIO is NOT a smart_match
-// mode (it never touches smart_match_posts); it renders the swipe deck.
+// The DB CHECK constraint (migs 0105 + 0110) mirrors POST_MODES exactly —
+// adding a kind is: add it here + to that CHECK. SOCIO is NOT a post mode (it
+// never touches smart_match_posts).
 // ---------------------------------------------------------------------------
 export const POST_MODES = [
   "project_partner",
@@ -23,6 +26,7 @@ export const POST_MODES = [
   "hackathon_team",
   "sports",
   "recruitment",
+  "contributor",
 ] as const;
 
 export type PostMode = (typeof POST_MODES)[number];
@@ -30,8 +34,6 @@ export type PostMode = (typeof POST_MODES)[number];
 export const DISCOVER_MODES = ["socio", ...POST_MODES] as const;
 
 export type DiscoverMode = (typeof DISCOVER_MODES)[number];
-
-export const DEFAULT_DISCOVER_MODE: DiscoverMode = "socio";
 
 export function isDiscoverMode(x: unknown): x is DiscoverMode {
   return typeof x === "string" && (DISCOVER_MODES as readonly string[]).includes(x);
@@ -383,10 +385,71 @@ export const MODE_META: Record<PostMode, ModeMeta> = {
       { key: "deadline", label: "Apply by", type: "datetime", advanced: true },
     ],
   },
+  contributor: {
+    mode: "contributor",
+    label: "Open to Contribute",
+    tagline: "Put your hand up — societies and events come to you.",
+    icon: HandHeart,
+    createLabel: "Say you're open to contribute",
+    formTitle: "Open to contribute",
+    cta: "Invite",
+    emptyLabel: "Nobody has put their hand up yet. Be the first.",
+    fields: [
+      {
+        key: "title",
+        label: "Headline",
+        type: "text",
+        placeholder: "e.g. Photographer, free most evenings",
+        required: true,
+      },
+      {
+        key: "skills_needed",
+        label: "Your skills",
+        type: "tags",
+        placeholder: "photography, editing, hosting",
+        help: "What you can actually do.",
+        required: true,
+      },
+      {
+        key: "roles_needed",
+        label: "Preferred roles",
+        type: "tags",
+        placeholder: "media team, logistics, host",
+        required: true,
+      },
+      {
+        key: "availability",
+        label: "Availability",
+        type: "text",
+        placeholder: "e.g. weekends, after 5pm",
+      },
+      {
+        key: "interests",
+        label: "Interests",
+        type: "tags",
+        placeholder: "tech events, sports, music",
+      },
+      {
+        key: "description",
+        label: "Short note",
+        type: "textarea",
+        placeholder: "Anything a society head should know…",
+      },
+      {
+        key: "portfolio_url",
+        label: "Portfolio link",
+        type: "url",
+        placeholder: "https://…",
+        advanced: true,
+      },
+      DEGREE,
+      SEMESTER,
+    ],
+  },
 };
 
-/** All modes for the tab strip: SOCIO first, then the five post modes. */
-export const DISCOVER_TABS: { mode: DiscoverMode; label: string; icon: LucideIcon }[] = [
+/** Every card kind in the unified feed: SOCIO first, then the post kinds. */
+export const DISCOVER_KINDS: { mode: DiscoverMode; label: string; icon: LucideIcon }[] = [
   { mode: "socio", label: "SOCIO", icon: Heart },
   ...POST_MODES.map((m) => ({ mode: m, label: MODE_META[m].label, icon: MODE_META[m].icon })),
 ];
