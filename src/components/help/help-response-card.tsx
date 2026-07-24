@@ -89,7 +89,7 @@ export function HelpResponseCard({
   return (
     <div
       className={cn(
-        "py-3.5",
+        "border-b border-glass-border py-3.5 last:border-b-0",
         response.is_selected && "bg-success/5"
       )}
     >

@@ -214,7 +214,7 @@ export default async function HelpDetailPage({
               No responses yet.
             </p>
           ) : (
-            <div className="glass divide-y divide-glass-border rounded-[14px] px-3.5">
+            <div>
               {responses.map((r) => (
                 <HelpResponseCard
                   key={r.id}
