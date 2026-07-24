@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { MessageSquare, HandHeart, Check, Zap } from "lucide-react";
+import { MessageSquare, HandHeart, Check, Zap, VenetianMask } from "lucide-react";
 import { GlassCard, GlassChip } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
 import { cn } from "@/lib/utils";
@@ -7,6 +7,7 @@ import { timeAgo } from "@/lib/time";
 import { CATEGORY_META, STATUS_META } from "@/lib/help/constants";
 import { isUrgentRequest, resolveHelpAuthor } from "@/lib/help/logic";
 import type { HelpRequestRow } from "@/lib/help/types";
+import { HelpAnonBadge } from "./help-anon-badge";
 
 /**
  * A single help request in a list (SOCIO or ME). Purely presentational: the
@@ -70,14 +71,23 @@ export function HelpCard({ req }: { req: HelpRequestRow }) {
 
         {/* Author (or Anonymous) + counts */}
         <div className="mt-3 flex items-center gap-2 text-xs text-fg-muted">
-          <span className="relative h-5 w-5 shrink-0 overflow-hidden rounded-full bg-bg-elevated">
-            {author.avatarUrl && (
-              <AppImage src={author.avatarUrl} alt="" sizes="20px" />
+          <span className="relative flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-bg-elevated">
+            {author.anonymous ? (
+              <VenetianMask className="h-3 w-3 text-fg-muted" aria-hidden />
+            ) : (
+              author.avatarUrl && (
+                <AppImage src={author.avatarUrl} alt="" sizes="20px" />
+              )
             )}
           </span>
           <span className="min-w-0 truncate">
             <span className="font-medium text-fg">{author.name}</span>
             {author.meta && <span className="text-fg-muted"> · {author.meta}</span>}
+            {req.is_anonymous && !author.anonymous && (
+              <span className="ml-1.5 inline-block align-middle">
+                <HelpAnonBadge />
+              </span>
+            )}
           </span>
           {req.is_mine && (
             <span className="ml-auto flex shrink-0 items-center gap-1">

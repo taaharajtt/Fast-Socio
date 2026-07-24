@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Plus, Inbox, CircleDot, CheckCircle2, HandHeart } from "lucide-react";
 import { HelpCard } from "@/components/help/help-card";
 import { groupMyRequests } from "@/lib/help/logic";
+import { cn } from "@/lib/utils";
 import type { HelpRequestRow } from "@/lib/help/types";
 
 /**
@@ -38,7 +39,7 @@ export function MyHelpPanel({ rows }: { rows: HelpRequestRow[] }) {
             <Section
               icon={<Inbox className="h-4 w-4 text-aura" aria-hidden />}
               title="Responses received"
-              hint="Approve a helper to open a chat, or pick the one who solved it."
+              hint="Reply to a helper, or pick the one who solved it."
               rows={withResponses}
             />
           )}
@@ -54,6 +55,7 @@ export function MyHelpPanel({ rows }: { rows: HelpRequestRow[] }) {
               icon={<CheckCircle2 className="h-4 w-4 text-fg-muted" aria-hidden />}
               title="Resolved & history"
               rows={resolved}
+              muted
             />
           )}
         </>
@@ -67,11 +69,14 @@ function Section({
   title,
   hint,
   rows,
+  muted,
 }: {
   icon: React.ReactNode;
   title: string;
   hint?: string;
   rows: HelpRequestRow[];
+  /** Resolved & history: dims the cards so they read as inactive. */
+  muted?: boolean;
 }) {
   return (
     <section>
@@ -81,7 +86,7 @@ function Section({
         <span className="text-xs text-fg-muted">{rows.length}</span>
       </div>
       {hint && <p className="mb-2.5 text-xs text-fg-muted">{hint}</p>}
-      <div className="space-y-3">
+      <div className={cn("space-y-3", muted && "opacity-50 grayscale")}>
         {rows.map((req) => (
           <HelpCard key={req.id} req={req} />
         ))}

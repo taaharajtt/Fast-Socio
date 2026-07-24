@@ -8,6 +8,7 @@ import {
   Trash2,
   Flag,
   CornerDownRight,
+  VenetianMask,
 } from "lucide-react";
 import { AppImage } from "@/components/ui/app-image";
 import { cn } from "@/lib/utils";
@@ -20,6 +21,7 @@ import {
   replyToResponse,
 } from "@/app/(student)/help/actions";
 import { HelpReportSheet } from "./help-report-sheet";
+import { HelpAnonBadge } from "./help-anon-badge";
 
 /**
  * One response in a request thread. What renders depends on who's looking — and
@@ -87,28 +89,33 @@ export function HelpResponseCard({
   return (
     <div
       className={cn(
-        "rounded-[14px] p-3.5",
-        response.is_selected
-          ? "bg-success/10 ring-1 ring-success/40"
-          : "glass"
+        "py-3.5",
+        response.is_selected && "bg-success/5"
       )}
     >
       <div className="flex items-center gap-2">
-        <span className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full bg-bg-elevated">
-          {author.avatarUrl && (
-            <AppImage src={author.avatarUrl} alt="" sizes="28px" />
+        <span className="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-bg-elevated">
+          {author.anonymous ? (
+            <VenetianMask className="h-3.5 w-3.5 text-fg-muted" aria-hidden />
+          ) : (
+            author.avatarUrl && (
+              <AppImage src={author.avatarUrl} alt="" sizes="28px" />
+            )
           )}
         </span>
         <div className="min-w-0 flex-1">
-          {author.href ? (
-            <Link href={author.href} className="block truncate text-sm font-semibold text-fg">
-              {author.name}
-            </Link>
-          ) : (
-            <span className="block truncate text-sm font-semibold text-fg">
-              {author.name}
-            </span>
-          )}
+          <span className="flex items-center gap-1.5">
+            {author.href ? (
+              <Link href={author.href} className="block truncate text-sm font-semibold text-fg">
+                {author.name}
+              </Link>
+            ) : (
+              <span className="block truncate text-sm font-semibold text-fg">
+                {author.name}
+              </span>
+            )}
+            {response.is_anonymous && !author.anonymous && <HelpAnonBadge />}
+          </span>
           {author.meta && (
             <span className="block truncate text-xs text-fg-muted">{author.meta}</span>
           )}

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft, MessageSquare, Check, Zap } from "lucide-react";
+import { ChevronLeft, MessageSquare, Check, Zap, VenetianMask } from "lucide-react";
 import { GlassCard, GlassChip } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
 import { createClient } from "@/lib/supabase/server";
@@ -28,6 +28,7 @@ import { HelpOwnerControls } from "@/components/help/help-owner-controls";
 import { HelpResponseComposer } from "@/components/help/help-response-composer";
 import { HelpResponseCard } from "@/components/help/help-response-card";
 import { HelpRequestReportButton } from "@/components/help/help-request-report-button";
+import { HelpAnonBadge } from "@/components/help/help-anon-badge";
 
 export default async function HelpDetailPage({
   params,
@@ -138,24 +139,31 @@ export default async function HelpDetailPage({
 
         {/* Author + posted time */}
         <div className="mt-4 flex items-center gap-2.5">
-          <span className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full bg-bg-elevated">
-            {author.avatarUrl && (
-              <AppImage src={author.avatarUrl} alt="" sizes="32px" />
+          <span className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-bg-elevated">
+            {author.anonymous ? (
+              <VenetianMask className="h-4 w-4 text-fg-muted" aria-hidden />
+            ) : (
+              author.avatarUrl && (
+                <AppImage src={author.avatarUrl} alt="" sizes="32px" />
+              )
             )}
           </span>
           <div className="min-w-0 flex-1">
-            {author.href ? (
-              <Link
-                href={author.href}
-                className="block truncate text-sm font-semibold text-fg"
-              >
-                {author.name}
-              </Link>
-            ) : (
-              <span className="block truncate text-sm font-semibold text-fg">
-                {author.name}
-              </span>
-            )}
+            <span className="flex items-center gap-1.5">
+              {author.href ? (
+                <Link
+                  href={author.href}
+                  className="block truncate text-sm font-semibold text-fg"
+                >
+                  {author.name}
+                </Link>
+              ) : (
+                <span className="block truncate text-sm font-semibold text-fg">
+                  {author.name}
+                </span>
+              )}
+              {req.is_anonymous && !author.anonymous && <HelpAnonBadge />}
+            </span>
             <span className="text-xs text-fg-muted" title={absoluteTime(req.created_at)}>
               {timeAgo(req.created_at)} ago
               {req.is_mine && req.is_anonymous && " · only you & admins see your name"}
@@ -187,7 +195,7 @@ export default async function HelpDetailPage({
           <h3 className="mb-2 text-sm font-semibold text-fg">Offer help</h3>
           <HelpResponseComposer requestId={req.id} />
           <p className="mt-2 text-xs text-fg-muted">
-            Only the poster can see your response.
+            Only help seekers can see your response.
           </p>
         </section>
       )}
@@ -206,7 +214,7 @@ export default async function HelpDetailPage({
               No responses yet.
             </p>
           ) : (
-            <div className="space-y-2.5">
+            <div className="glass divide-y divide-glass-border rounded-[14px] px-3.5">
               {responses.map((r) => (
                 <HelpResponseCard
                   key={r.id}
