@@ -509,6 +509,7 @@ export async function createDiscoverPost(
   });
   if (error) return { ok: false, error: friendly(error.message) };
   revalidatePath("/discover");
+  revalidatePath("/discover/post");
   return { ok: true };
 }
 
@@ -531,6 +532,7 @@ export async function updateDiscoverPost(
   });
   if (error) return { ok: false, error: friendly(error.message) };
   revalidatePath("/discover");
+  revalidatePath("/discover/post");
   return { ok: true };
 }
 
@@ -551,6 +553,7 @@ export async function setDiscoverPostStatus(
   });
   if (error) return { ok: false, error: friendly(error.message) };
   revalidatePath("/discover");
+  revalidatePath("/discover/post");
   return { ok: true };
 }
 
@@ -566,6 +569,7 @@ export async function deleteDiscoverPost(postId: string): Promise<Result> {
     .eq("author_id", uid);
   if (error) return { ok: false, error: friendly(error.message) };
   revalidatePath("/discover");
+  revalidatePath("/discover/post");
   return { ok: true };
 }
 
@@ -622,6 +626,7 @@ export async function cancelDiscoverResponse(
   });
   if (error) return { ok: false, error: friendly(error.message) };
   revalidatePath("/discover");
+  revalidatePath("/discover/post");
   return { ok: true };
 }
 
@@ -633,6 +638,7 @@ async function respond(responseId: string, accept: boolean): Promise<Result> {
   });
   if (error) return { ok: false, error: friendly(error.message) };
   revalidatePath("/discover");
+  revalidatePath("/discover/post");
   return { ok: true };
 }
 
@@ -659,6 +665,7 @@ export async function saveMySkills(skills: string[]): Promise<Result> {
     .eq("id", uid);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/discover");
+  revalidatePath("/discover/post");
   return { ok: true };
 }
 
