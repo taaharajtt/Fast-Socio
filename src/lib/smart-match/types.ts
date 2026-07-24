@@ -99,13 +99,14 @@ export type IncomingApplication = {
 /** One of the viewer's own posts (author view). */
 export type PostStatus = "open" | "closed" | "expired" | "filled";
 
-export type MyPost = {
-  id: string;
-  mode: PostMode;
-  title: string;
+/**
+ * One of the viewer's OWN intent posts, as shown under "My posts" in the Post
+ * Intent sheet. Carries the full post (so it can be edited in place) plus the
+ * two things only the author sees: its lifecycle status and how many people are
+ * waiting on an answer.
+ */
+export type MyIntent = SmartMatchPost & {
   status: PostStatus;
-  peopleNeeded: number | null;
-  createdAt: string;
   pendingCount: number;
 };
 
@@ -116,13 +117,10 @@ export type RecruitAnchor = {
   name: string;
 };
 
-/** Everything the unified Discover feed needs on first render. */
-export type DiscoverFeedData = {
-  /** Render clock, stamped once on the server so scoring stays pure. */
-  now: number;
+/** The viewer's own Discover state — everything the Post Intent sheet needs. */
+export type MyDiscoverData = {
   viewer: SmartMatchViewer;
-  posts: SmartMatchPost[];
-  myPosts: MyPost[];
+  myPosts: MyIntent[];
   incoming: IncomingApplication[];
   recruitAnchors: RecruitAnchor[];
 };

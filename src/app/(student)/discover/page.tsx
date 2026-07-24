@@ -1,44 +1,33 @@
-import { UnifiedDiscoverFeed } from "@/components/discover/unified-discover-feed";
+import { SwipeDeck } from "@/components/discover/swipe-deck";
+import { PostIntentButton } from "@/components/discover/post-intent-button";
 import {
-  getDiscoverFeedData,
-  getSocioSwipeCandidates,
+  getDiscoverSwipeDeck,
+  getMyDiscoverData,
 } from "@/app/(student)/discover/discover-actions";
 
 /**
- * Discover — ONE unified campus connection feed.
+ * Discover — one continuous swipe experience.
  *
- * There are no mode tabs any more: project partners, FYP teammates, hackathon
- * teams, sports plans, recruitment calls, open contributors and SOCIO profile
- * cards all live in the same ranked list, narrowed by filter chips. SOCIO's
- * original swipe deck is preserved untouched at /discover/socio and reachable
- * from here via "Swipe".
+ * No tabs, no filters, no browsable list. A single deck mixes SOCIO people with
+ * the campus opportunities students post (project partners, hackathon teams,
+ * sports plans, recruitment calls, FYP teammates); swipe right to act, left to
+ * dismiss. The only other control is "Post", which puts your own intent into
+ * everyone else's deck.
  */
 export default async function DiscoverPage() {
-  const [data, socioCandidates] = await Promise.all([
-    getDiscoverFeedData(),
-    getSocioSwipeCandidates(12),
+  const [cards, mine] = await Promise.all([
+    getDiscoverSwipeDeck(),
+    getMyDiscoverData(),
   ]);
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col px-4 py-3">
-      <header className="mb-3">
+      <header className="mb-3 flex items-center justify-between gap-3">
         <h1 className="text-lg font-bold tracking-tight">Discover</h1>
-        <p className="mt-0.5 text-xs text-fg-muted">
-          Find people, teams, events, and opportunities on campus.
-        </p>
+        {mine && <PostIntentButton data={mine} />}
       </header>
 
-      {data ? (
-        <UnifiedDiscoverFeed
-          data={data}
-          socioCandidates={socioCandidates}
-          now={data.now}
-        />
-      ) : (
-        <p className="rounded-[18px] bg-card px-5 py-8 text-center text-sm text-fg-muted">
-          Sign in to use Discover.
-        </p>
-      )}
+      <SwipeDeck initial={cards} />
     </main>
   );
 }

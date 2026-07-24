@@ -7,11 +7,10 @@ import { getAuthUserId } from "@/lib/auth/user";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { isPostMode, type PostMode } from "@/lib/smart-match/modes";
 import {
-  DEFAULT_DISCOVER_FILTER,
-  filterPostModes,
-  isDiscoverFilter,
-  type DiscoverFilter,
-} from "@/lib/discover/filters";
+  buildSwipeDeck,
+  INTENT_KINDS,
+  type DiscoverSwipeCard,
+} from "@/lib/discover/cards";
 import {
   buildPostPayload,
   validatePostInput,
@@ -20,9 +19,9 @@ import {
 } from "@/lib/smart-match/validate";
 import type { DiscoverProfile } from "@/lib/profile/types";
 import type {
-  DiscoverFeedData,
   IncomingApplication,
-  MyPost,
+  MyDiscoverData,
+  MyIntent,
   PostStatus,
   RecruitAnchor,
   SmartMatchPost,
@@ -174,29 +173,20 @@ function mapPost(r: PostRow): SmartMatchPost {
 }
 
 /**
- * One page of the unified feed. `filter` narrows the kinds server-side (so a
- * chip can top itself up without pulling every kind); `cursor` is the
- * created_at of the last row already on screen. Scoring/ranking is TS.
+ * One page of open intent posts, newest first. `cursor` is the created_at of
+ * the last row already in the deck. Scoring/interleaving is pure TS in
+ * lib/discover/cards.ts.
  */
-export async function getUnifiedDiscoverFeed({
-  filter = DEFAULT_DISCOVER_FILTER,
+export async function getDiscoverIntents({
   cursor = null,
   limit = 40,
 }: {
-  filter?: DiscoverFilter;
   cursor?: string | null;
   limit?: number;
 } = {}): Promise<SmartMatchPost[]> {
-  const f: DiscoverFilter = isDiscoverFilter(filter)
-    ? filter
-    : DEFAULT_DISCOVER_FILTER;
-  const modes = filterPostModes(f);
-  // A SOCIO-only view has no opportunity posts to fetch.
-  if (modes.length === 0) return [];
-
   const supabase = await createClient();
   const { data } = await supabase.rpc("get_unified_discover_feed", {
-    p_modes: f === DEFAULT_DISCOVER_FILTER ? null : modes,
+    p_modes: [...INTENT_KINDS],
     p_limit: Math.max(1, Math.min(limit, 80)),
     p_before: cursor,
   });
@@ -212,6 +202,33 @@ export async function getSocioSwipeCandidates(
     p_limit: limit,
   });
   return (data as DiscoverProfile[]) ?? [];
+}
+
+/**
+ * The whole Discover deck as ONE normalized, pre-interleaved list: SOCIO people
+ * and open intent posts, ranked and mixed. This is what the swipe deck renders
+ * and what it calls to top itself up.
+ */
+export async function getDiscoverSwipeDeck({
+  cursor = null,
+  socioLimit = 20,
+  intentLimit = 40,
+}: {
+  cursor?: string | null;
+  socioLimit?: number;
+  intentLimit?: number;
+} = {}): Promise<DiscoverSwipeCard[]> {
+  const uid = await getAuthUserId();
+  if (!uid) return [];
+  const viewer = await getDiscoverViewer();
+  if (!viewer) return [];
+
+  const [socio, posts] = await Promise.all([
+    getSocioSwipeCandidates(socioLimit),
+    getDiscoverIntents({ cursor, limit: intentLimit }),
+  ]);
+
+  return buildSwipeDeck({ socio, posts, viewer, viewerId: uid });
 }
 
 /** Societies / events the viewer may recruit for (recruitment create anchor). */
@@ -253,19 +270,21 @@ async function getRecruitAnchors(uid: string): Promise<RecruitAnchor[]> {
   return anchors;
 }
 
-/** Everything the unified feed needs on first render. */
-export async function getDiscoverFeedData(): Promise<DiscoverFeedData | null> {
+/**
+ * The viewer's OWN Discover state — what the Post Intent sheet shows under
+ * "My posts". Own posts never appear in the swipe deck (you don't swipe on
+ * yourself), so this is where you manage them: edit, close, and answer the
+ * requests they've attracted. RLS lets a user read their own posts directly;
+ * the definer feed RPC deliberately excludes them.
+ */
+export async function getMyDiscoverData(): Promise<MyDiscoverData | null> {
   const uid = await getAuthUserId();
   if (!uid) return null;
   const viewer = await getDiscoverViewer();
   if (!viewer) return null;
   const supabase = await createClient();
 
-  // RLS lets a user read their OWN posts directly (the definer feed RPC
-  // deliberately excludes them), so own cards are fetched here and merged into
-  // the same feed — that's what gives them Edit/Close instead of a CTA.
-  const [others, { data: mine }, { data: myProfile }] = await Promise.all([
-    getUnifiedDiscoverFeed({ limit: 60 }),
+  const [{ data: mine }, { data: myProfile }] = await Promise.all([
     supabase
       .from("smart_match_posts")
       .select("*")
@@ -333,35 +352,32 @@ export async function getDiscoverFeedData(): Promise<DiscoverFeedData | null> {
     aura_score?: number | null;
   };
 
-  const myFeedPosts: SmartMatchPost[] = myRows
-    .filter((r) => r.status === "open")
-    .map((r) => {
-      const team = myTeamByPost.get(r.id as string) ?? [];
-      return {
-        ...mapPost({
-          ...(r as unknown as PostRow),
-          author_name: me.full_name ?? null,
-          author_avatar: me.avatar_url ?? null,
-          author_username: me.username ?? null,
-          author_department: me.department ?? null,
-          author_semester: viewer.semester,
-          author_graduation_year: me.graduation_year ?? null,
-          author_verified: me.verified ?? false,
-          author_aura: me.aura_score ?? 0,
-          society_name: null,
-          event_title: null,
-          team_members: null,
-          team_member_count: team.length,
-          mutual_communities: 0,
-          application_count: 0,
-          my_application_status: null,
-          my_application_id: null,
-        }),
-        teamMembers: team,
-      };
-    });
-
-  const posts = [...others, ...myFeedPosts];
+  const myFullPosts = myRows.map((r) => {
+    const team = myTeamByPost.get(r.id as string) ?? [];
+    return {
+      ...mapPost({
+        ...(r as unknown as PostRow),
+        author_name: me.full_name ?? null,
+        author_avatar: me.avatar_url ?? null,
+        author_username: me.username ?? null,
+        author_department: me.department ?? null,
+        author_semester: viewer.semester,
+        author_graduation_year: me.graduation_year ?? null,
+        author_verified: me.verified ?? false,
+        author_aura: me.aura_score ?? 0,
+        society_name: null,
+        event_title: null,
+        team_members: null,
+        team_member_count: team.length,
+        mutual_communities: 0,
+        application_count: 0,
+        my_application_status: null,
+        my_application_id: null,
+      }),
+      teamMembers: team,
+      status: r.status as PostStatus,
+    };
+  });
 
   // Incoming applications on my own posts (author view). RLS lets the post
   // author read these; we join applicant profiles for display.
@@ -425,20 +441,13 @@ export async function getDiscoverFeedData(): Promise<DiscoverFeedData | null> {
       });
   }
 
-  const myPosts: MyPost[] = myRows.map((r) => ({
-    id: r.id as string,
-    mode: r.mode as PostMode,
-    title: r.title as string,
-    status: r.status as PostStatus,
-    peopleNeeded: (r.people_needed as number | null) ?? null,
-    createdAt: r.created_at as string,
-    pendingCount: pendingByPost.get(r.id as string) ?? 0,
+  const myPosts: MyIntent[] = myFullPosts.map((p) => ({
+    ...p,
+    pendingCount: pendingByPost.get(p.id) ?? 0,
   }));
 
   return {
-    now: Date.now(),
     viewer,
-    posts,
     myPosts,
     incoming,
     recruitAnchors: await getRecruitAnchors(uid),
@@ -560,11 +569,15 @@ export async function deleteDiscoverPost(postId: string): Promise<Result> {
   return { ok: true };
 }
 
-/** Respond to a post — request to join / apply / invite. Rate + block guarded. */
+/**
+ * A right swipe on an intent card: request to join / apply / I'm in. Rate- and
+ * block-guarded by the definer RPC. Returns the response id so the deck's Undo
+ * window can cancel it.
+ */
 export async function respondToDiscoverPost(
   postId: string,
-  message: string
-): Promise<Result> {
+  message = ""
+): Promise<{ ok: true; responseId: string | null } | { ok: false; error: string }> {
   const uid = await getAuthUserId();
   if (!uid) return { ok: false, error: "Not signed in." };
   if (message && message.length > 500)
@@ -572,12 +585,31 @@ export async function respondToDiscoverPost(
   const allowed = await checkRateLimit("smart_match_interest", 40, 60 * 60);
   if (!allowed) return { ok: false, error: "Too many requests for now." };
   const supabase = await createClient();
-  const { error } = await supabase.rpc("express_smart_match_interest", {
+  const { data, error } = await supabase.rpc("express_smart_match_interest", {
     p_post: postId,
     p_message: message?.trim() || null,
   });
   if (error) return { ok: false, error: friendly(error.message) };
-  revalidatePath("/discover");
+  return { ok: true, responseId: (data as string | null) ?? null };
+}
+
+/** A left swipe on an intent card: dismiss it for good (own-row write). */
+export async function passDiscoverPost(postId: string): Promise<Result> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("pass_smart_match_post", {
+    p_post: postId,
+  });
+  if (error) return { ok: false, error: friendly(error.message) };
+  return { ok: true };
+}
+
+/** Undo a left swipe — the intent-card twin of undoSwipe. */
+export async function unpassDiscoverPost(postId: string): Promise<Result> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("unpass_smart_match_post", {
+    p_post: postId,
+  });
+  if (error) return { ok: false, error: friendly(error.message) };
   return { ok: true };
 }
 
