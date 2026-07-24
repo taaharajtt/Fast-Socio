@@ -12,6 +12,43 @@ export const DEPARTMENTS = [
 /** UI noun for `profiles.department` after the schools change (UAT-008). */
 export const SCHOOL_FIELD_LABEL = "School";
 
+/** Degrees offered per school — `profiles.degree` narrows within a `DEPARTMENTS` school. */
+export const DEGREES_BY_SCHOOL: Record<string, readonly string[]> = {
+  "Fast School of Management": ["BBA", "ACF", "FT", "BA"],
+  "Fast School of Computing": ["CS", "AI", "SE", "CY", "DS"],
+  "Fast School of Engineering": ["EE", "CE", "CV"],
+};
+
+export const ALL_DEGREES = [
+  "BBA",
+  "ACF",
+  "FT",
+  "BA",
+  "CS",
+  "AI",
+  "SE",
+  "CY",
+  "DS",
+  "EE",
+  "CE",
+  "CV",
+] as const;
+
+const SCHOOL_INITIALISMS: Record<string, string> = {
+  FSM: "Fast School of Management",
+  FSC: "Fast School of Computing",
+  FSE: "Fast School of Engineering",
+};
+
+/** Degrees selectable for a given school — accepts the full name or its initialism (FSM/FSC/FSE). */
+export function getDegreesForSchool(
+  school: string | null | undefined
+): readonly string[] {
+  if (!school) return [];
+  const fullName = SCHOOL_INITIALISMS[school] ?? school;
+  return DEGREES_BY_SCHOOL[fullName] ?? [];
+}
+
 /** Semesters 1–8 cover a standard four-year program. */
 export const SEMESTERS = Array.from({ length: 8 }, (_, i) => i + 1);
 

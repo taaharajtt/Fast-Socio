@@ -15,6 +15,7 @@ import {
   BIO_MAX,
   DEPARTMENTS,
   GENDERS,
+  getDegreesForSchool,
   INTERESTS,
   MAX_INTERESTS,
   MIN_INTERESTS,
@@ -23,6 +24,7 @@ import {
 export type EditableProfile = {
   full_name: string | null;
   department: string | null;
+  degree: string | null;
   gender: string | null;
   interests: string[];
   bio: string | null;
@@ -41,6 +43,7 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
       avatarUrl: profile.avatar_url,
       coverUrl: profile.cover_url,
       department: profile.department ?? "",
+      degree: profile.degree,
       gender: profile.gender,
       interests: profile.interests ?? [],
       bio: profile.bio ?? "",
@@ -55,6 +58,7 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
   const [uploading, setUploading] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
   const [department, setDepartment] = useState(initial.department);
+  const [degree, setDegree] = useState<string | null>(initial.degree);
   const [gender, setGender] = useState<string | null>(initial.gender);
   const [interests, setInterests] = useState<string[]>(initial.interests);
   const [bio, setBio] = useState(initial.bio);
@@ -72,6 +76,7 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
     avatarUrl !== savedSnapshot.avatarUrl ||
     coverUrl !== savedSnapshot.coverUrl ||
     department !== savedSnapshot.department ||
+    degree !== savedSnapshot.degree ||
     gender !== savedSnapshot.gender ||
     bio !== savedSnapshot.bio ||
     interests.length !== savedSnapshot.interests.length ||
@@ -145,6 +150,7 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
         const res = await updateProfile({
           fullName,
           department,
+          degree,
           gender,
           interests,
           bio,
@@ -160,6 +166,7 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
           avatarUrl,
           coverUrl,
           department,
+          degree,
           gender,
           interests,
           bio,
@@ -174,6 +181,7 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
     avatarUrl,
     coverUrl,
     department,
+    degree,
     gender,
     interests,
     bio,
@@ -298,12 +306,40 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
         <label className="text-sm font-medium">School</label>
         <div className="flex flex-wrap gap-2">
           {DEPARTMENTS.map((d) => (
-            <Pill key={d} active={department === d} onClick={() => setDepartment(d)}>
+            <Pill
+              key={d}
+              active={department === d}
+              onClick={() => {
+                setDepartment(d);
+                const degrees = getDegreesForSchool(d);
+                if (degree && !degrees.includes(degree)) setDegree(null);
+              }}
+            >
               {d}
             </Pill>
           ))}
         </div>
       </div>
+
+      {/* Degree — narrows within the chosen school. */}
+      {department && (
+        <div className="space-y-2">
+          <label className="text-sm font-medium">
+            Degree <span className="text-fg-muted">(optional)</span>
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {getDegreesForSchool(department).map((deg) => (
+              <Pill
+                key={deg}
+                active={degree === deg}
+                onClick={() => setDegree(degree === deg ? null : deg)}
+              >
+                {deg}
+              </Pill>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Semester is derived from the roll number (lib/profile/semester.ts) and
           no longer editable here. */}

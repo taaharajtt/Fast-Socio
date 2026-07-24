@@ -35,7 +35,7 @@ export default async function PublicProfilePage({
     supabase
       .from("profiles")
       .select(
-        "id, full_name, username, department, bio, avatar_url, cover_url, aura_score, verified, show_online, show_aura, show_department, show_semester, deactivated_at"
+        "id, full_name, username, department, degree, bio, avatar_url, cover_url, aura_score, verified, show_online, show_aura, show_department, show_semester, deactivated_at"
       )
       .eq("id", id)
       .single(),
@@ -146,8 +146,13 @@ export default async function PublicProfilePage({
   const semester = deriveSemester(profile.username);
   const deptLabel =
     showDept && profile.department
-      ? deptMeta(profile.department).abbr +
-        (showSem && semester ? ` · ${semesterLabel(semester)}` : "")
+      ? [
+          deptMeta(profile.department).abbr,
+          profile.degree,
+          showSem && semester ? semesterLabel(semester) : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")
       : "—";
 
   return (

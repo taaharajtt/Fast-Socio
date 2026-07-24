@@ -38,7 +38,7 @@ export default async function ProfilePage({
     supabase
       .from("profiles")
       .select(
-        "full_name, username, department, bio, avatar_url, cover_url, aura_score, verified, level, xp"
+        "full_name, username, department, degree, bio, avatar_url, cover_url, aura_score, verified, level, xp"
       )
       .eq("id", me)
       .single(),
@@ -82,8 +82,13 @@ export default async function ProfilePage({
 
   const semester = deriveSemester(profile?.username);
   const deptLabel = profile?.department
-    ? deptMeta(profile.department).abbr +
-      (semester ? ` · ${semesterLabel(semester)}` : "")
+    ? [
+        deptMeta(profile.department).abbr,
+        profile.degree,
+        semester ? semesterLabel(semester) : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")
     : "—";
 
   return (

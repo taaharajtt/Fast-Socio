@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import {
+  ALL_DEGREES,
   BIO_MAX,
   MAX_INTERESTS,
   MIN_INTERESTS,
@@ -19,6 +20,7 @@ export type UpdateProfileResult = { error: string } | { ok: true };
 export async function updateProfile(input: {
   fullName: string;
   department: string;
+  degree: string | null;
   gender: string | null;
   interests: string[];
   bio: string;
@@ -35,6 +37,8 @@ export async function updateProfile(input: {
   if (fullName.length < 2) return { error: "Please enter your name." };
   if (!input.department) return { error: "Please choose your department." };
   // Semester is derived from the roll number on read, never written here.
+  if (input.degree && !ALL_DEGREES.includes(input.degree as never))
+    return { error: "Please choose a valid degree." };
   if (
     input.interests.length < MIN_INTERESTS ||
     input.interests.length > MAX_INTERESTS
@@ -53,6 +57,7 @@ export async function updateProfile(input: {
     .update({
       full_name: fullName,
       department: input.department,
+      degree: input.degree,
       gender: input.gender,
       interests: input.interests,
       bio: input.bio.trim() || null,

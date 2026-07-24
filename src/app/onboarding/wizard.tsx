@@ -11,6 +11,7 @@ import {
   BIO_MAX,
   DEPARTMENTS,
   GENDERS,
+  getDegreesForSchool,
   graduationYears,
   HOSTEL_STATUS,
   INTERESTS,
@@ -63,6 +64,7 @@ export function OnboardingWizard({
   );
   const [uploading, setUploading] = useState(false);
   const [department, setDepartment] = useState(initial.department ?? "");
+  const [degree, setDegree] = useState<string | null>(initial.degree ?? null);
   const [gender, setGender] = useState<string | null>(initial.gender ?? null);
   const [gradYear, setGradYear] = useState<number | null>(
     initial.graduationYear ?? null
@@ -93,6 +95,7 @@ export function OnboardingWizard({
       fullName,
       avatarUrl,
       department,
+      degree,
       gender,
       graduationYear: gradYear,
       hostelStatus: hostel,
@@ -254,12 +257,35 @@ export function OnboardingWizard({
           <Field label="School">
             <PillRow>
               {DEPARTMENTS.map((d) => (
-                <Pill key={d} active={department === d} onClick={() => setDepartment(d)}>
+                <Pill
+                  key={d}
+                  active={department === d}
+                  onClick={() => {
+                    setDepartment(d);
+                    const degrees = getDegreesForSchool(d);
+                    if (degree && !degrees.includes(degree)) setDegree(null);
+                  }}
+                >
                   {d}
                 </Pill>
               ))}
             </PillRow>
           </Field>
+          {department && (
+            <Field label="Degree" optional>
+              <PillRow>
+                {getDegreesForSchool(department).map((deg) => (
+                  <Pill
+                    key={deg}
+                    active={degree === deg}
+                    onClick={() => setDegree(degree === deg ? null : deg)}
+                  >
+                    {deg}
+                  </Pill>
+                ))}
+              </PillRow>
+            </Field>
+          )}
           <Field label="Gender" optional>
             <PillRow>
               {GENDERS.map((g) => (

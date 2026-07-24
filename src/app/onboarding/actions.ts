@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import {
+  ALL_DEGREES,
   BIO_MAX,
   DEPARTMENTS,
   GENDERS,
@@ -27,6 +28,7 @@ export type OnboardingDraft = {
   fullName?: string;
   avatarUrl?: string | null;
   department?: string;
+  degree?: string | null;
   gender?: string | null;
   interests?: string[];
   bio?: string;
@@ -74,6 +76,8 @@ function toProfilePatch(d: OnboardingDraft): Record<string, unknown> {
   if (d.fullName !== undefined) patch.full_name = d.fullName.trim() || null;
   if (d.department !== undefined && DEPARTMENTS.includes(d.department as never))
     patch.department = d.department;
+  if (d.degree !== undefined)
+    patch.degree = d.degree && ALL_DEGREES.includes(d.degree as never) ? d.degree : null;
   if (d.gender !== undefined)
     patch.gender = d.gender && GENDER_VALUES.includes(d.gender) ? d.gender : null;
   if (d.interests !== undefined)
