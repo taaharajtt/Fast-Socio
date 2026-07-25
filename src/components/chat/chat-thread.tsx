@@ -8,21 +8,24 @@ import {
   ImagePlus,
   Loader2,
   Mic,
+  Pause,
   Pencil,
   Pin,
   PinOff,
   Search,
   Send,
-  Square,
+  Smile,
   Trash2,
   X,
 } from "lucide-react";
 import { GlassButton, GlassSheet } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
+import { ImageCropper, type CropResult } from "@/components/ui/image-cropper";
 import { cn } from "@/lib/utils";
 import { useKeyboardInset } from "@/lib/use-keyboard-inset";
 import { createClient } from "@/lib/supabase/client";
 import { chatMediaPath, CHAT_MEDIA_TTL_SECONDS } from "@/lib/chat-media";
+import { uploadWithProgress } from "@/lib/storage-upload";
 import { clockTime, absoluteTime, timeAgo } from "@/lib/time";
 import { VoiceNote } from "@/components/chat/voice-note";
 import {
@@ -47,6 +50,21 @@ import {
 
 type Reaction = { emoji: string; user_id: string };
 const QUICK_EMOJIS = ["❤️", "😂", "🔥", "👍", "😮", "😢", "🙏"];
+const COMPOSER_EMOJIS = ["😀", "😂", "❤️", "👍", "🙏", "🔥", "😮", "😢", "🎉", "😉"];
+// Single-line pill height (h-11); the textarea grows past this and morphs to
+// rounded-2xl, capping at ~6 lines before it scrolls internally.
+const MIN_TEXTAREA_HEIGHT = 44;
+const MAX_TEXTAREA_HEIGHT = 144;
+
+function formatRecordingTime(totalSeconds: number): string {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+// Static bar heights for the recording waveform preview — a lightweight visual
+// cue, not a real amplitude readout (no audio-analysis wiring needed for it).
+const WAVEFORM_BARS = [6, 12, 8, 16, 10, 14, 7, 11, 15, 9, 13, 6];
 
 export type ChatMessage = {
   id: string;
@@ -106,6 +124,13 @@ export function ChatThread({
   const [busy, setBusy] = useState(false);
   const [otherTyping, setOtherTyping] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [recordingPaused, setRecordingPaused] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const [multiline, setMultiline] = useState(false);
+  // Selected-but-not-yet-cropped image (UAT-011): opens the ImageCropper
+  // dialog before anything touches chat-media.
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [reportId, setReportId] = useState<string | null>(null);
   const [actionsFor, setActionsFor] = useState<ChatMessage | null>(null);
   const [forwardFor, setForwardFor] = useState<ChatMessage | null>(null);
@@ -125,6 +150,31 @@ export function ChatThread({
   // iOS keyboard: exposes the keyboard overlap as --kb so the fixed chat shell
   // shrinks and this sticky composer stays visible (Phase 2 keyboard fix).
   useKeyboardInset();
+
+  // Auto-grow the composer textarea with its content, capped at MAX_TEXTAREA_
+  // HEIGHT (~6 lines) where it starts scrolling internally instead. `multiline`
+  // drives the pill -> rounded-rectangle shape morph once content wraps past
+  // one line.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const next = Math.min(el.scrollHeight, MAX_TEXTAREA_HEIGHT);
+    el.style.height = `${Math.max(next, MIN_TEXTAREA_HEIGHT)}px`;
+    setMultiline(el.scrollHeight > MIN_TEXTAREA_HEIGHT + 4);
+  }, [draft]);
+
+  // Live "0:00" timer for the recording strip — ticks every second while
+  // recording and not paused. recordingSeconds is reset to 0 where recording
+  // actually starts (toggleRecording), not here, so this effect never needs to
+  // call setState outside its own interval callback.
+  useEffect(() => {
+    if (!recording) return;
+    const id = setInterval(() => {
+      if (!recordingPaused) setRecordingSeconds((s) => s + 1);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [recording, recordingPaused]);
 
   // Resolve a signed URL for a private chat-media attachment (P5-01). Images get
   // a 1080px transform; voice notes are signed as-is.
@@ -234,6 +284,7 @@ export function ChatThread({
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const channelRef = useRef<ReturnType<
     ReturnType<typeof createClient>["channel"]
@@ -401,6 +452,65 @@ export function ChatThread({
     return path;
   }
 
+  /** Selecting a file just opens the crop step — nothing touches chat-media yet. */
+  function onPickImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setPendingFile(file);
+  }
+
+  /** ImageCropper's onCropped: the only path an image ever reaches chat-media from. */
+  async function onCropped({ blob, extension, mimeType }: CropResult) {
+    setPendingFile(null);
+    setError(null);
+
+    // Optimistic image bubble: the cropped photo renders immediately with an
+    // "Uploading…" spinner, so the send has clear feedback instead of the
+    // composer just freezing until the upload + insert round-trips finish.
+    const localSrc = URL.createObjectURL(blob);
+    const tempId = `temp-${crypto.randomUUID()}`;
+    const temp: ChatMessage = {
+      id: tempId,
+      sender_id: meId,
+      body: null,
+      attachment_url: "pending",
+      attachment_type: "image",
+      shared_post_id: null,
+      created_at: new Date().toISOString(),
+      read_at: null,
+      edited_at: null,
+      deleted_at: null,
+      pinned_at: null,
+      _localSrc: localSrc,
+      _uploadStatus: "uploading",
+    };
+    setMessages((prev) => [...prev, temp]);
+
+    const path = `${conversationId}/${crypto.randomUUID()}.${extension}`;
+    try {
+      await uploadWithProgress("chat-media", path, blob, { contentType: mimeType });
+    } catch {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? { ...m, _uploadStatus: "error" } : m))
+      );
+      return;
+    }
+
+    const res = await sendMessage(conversationId, "", { url: path, type: "image" });
+    if (!res.ok) {
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      URL.revokeObjectURL(localSrc);
+      setError(res.error);
+      return;
+    }
+    // Mark sent; the realtime INSERT then swaps in the authoritative row (which
+    // carries the local preview forward until its signed URL resolves).
+    setMessages((prev) =>
+      prev.map((m) => (m.id === tempId ? { ...m, _uploadStatus: "sent" } : m))
+    );
+  }
+
   async function onSendText(e: React.FormEvent) {
     e.preventDefault();
     const text = draft.trim();
@@ -431,61 +541,24 @@ export function ChatThread({
     }
   }
 
-  async function onPickImage(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    const ext = file.name.split(".").pop() ?? "jpg";
-
-    // Optimistic image bubble: show the picked photo immediately with an
-    // "Uploading…" spinner, so the send has clear feedback instead of the
-    // composer just freezing until the upload + insert round-trips finish.
-    const localSrc = URL.createObjectURL(file);
-    const tempId = `temp-${crypto.randomUUID()}`;
-    const temp: ChatMessage = {
-      id: tempId,
-      sender_id: meId,
-      body: null,
-      attachment_url: "pending",
-      attachment_type: "image",
-      shared_post_id: null,
-      created_at: new Date().toISOString(),
-      read_at: null,
-      edited_at: null,
-      deleted_at: null,
-      pinned_at: null,
-      _localSrc: localSrc,
-      _uploadStatus: "uploading",
-    };
-    setMessages((prev) => [...prev, temp]);
-
-    const path = await uploadMedia(file, ext, file.type);
-    if (!path) {
-      setMessages((prev) =>
-        prev.map((m) => (m.id === tempId ? { ...m, _uploadStatus: "error" } : m))
-      );
-      return;
-    }
-
-    const res = await sendMessage(conversationId, "", { url: path, type: "image" });
-    if (!res.ok) {
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      URL.revokeObjectURL(localSrc);
-      setError(res.error);
-      return;
-    }
-    // Mark sent; the realtime INSERT then swaps in the authoritative row (which
-    // carries the local preview forward until its signed URL resolves).
-    setMessages((prev) =>
-      prev.map((m) => (m.id === tempId ? { ...m, _uploadStatus: "sent" } : m))
-    );
-  }
-
   /** Discard the take: stop the recorder but skip the upload in onstop. */
   function cancelRecording() {
     if (!recording) return;
     cancelledRef.current = true;
     recorderRef.current?.stop();
+  }
+
+  /** Pause/resume capture without ending the take (MediaRecorder pause/resume). */
+  function togglePauseRecording() {
+    const rec = recorderRef.current;
+    if (!rec) return;
+    if (rec.state === "recording") {
+      rec.pause();
+      setRecordingPaused(true);
+    } else if (rec.state === "paused") {
+      rec.resume();
+      setRecordingPaused(false);
+    }
   }
 
   async function toggleRecording() {
@@ -506,6 +579,7 @@ export function ChatThread({
         // Always release the mic, whether we're sending or discarding.
         stream.getTracks().forEach((t) => t.stop());
         setRecording(false);
+        setRecordingPaused(false);
         // Cancelled: drop the captured audio without uploading or sending.
         if (cancelledRef.current) {
           cancelledRef.current = false;
@@ -522,6 +596,7 @@ export function ChatThread({
       recorderRef.current = rec;
       rec.start();
       setRecording(true);
+      setRecordingSeconds(0);
     } catch {
       // Mic permission denied or unsupported — silently ignore.
     }
@@ -973,78 +1048,196 @@ export function ChatThread({
       ) : (
         <form
           onSubmit={onSendText}
-          className="sticky bottom-0 flex items-center gap-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2"
+          className="sticky bottom-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2"
         >
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            hidden
-            onChange={onPickImage}
-          />
-          {/* While recording, the image button is replaced by Discard — so a
-              take can be thrown away instead of only stopped-and-sent. */}
-          {recording ? (
-            <button
-              type="button"
-              aria-label="Discard voice note"
-              onClick={cancelRecording}
-              className="glass flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-error"
-            >
-              <Trash2 className="h-5 w-5" aria-hidden />
-            </button>
-          ) : (
-            <button
-              type="button"
-              aria-label="Attach image"
-              onClick={() => fileRef.current?.click()}
-              disabled={busy}
-              className="glass flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-fg-muted disabled:opacity-40"
-            >
-              <ImagePlus className="h-5 w-5" aria-hidden />
-            </button>
+          {/* Quick-emoji strip (toggled by the Smile button) — inserts into the
+              draft without stealing focus, so several picks chain naturally. */}
+          {emojiOpen && !recording && (
+            <div className="glass mb-2 flex items-center justify-between rounded-[var(--radius-pill)] px-2 py-1.5">
+              {COMPOSER_EMOJIS.map((e) => (
+                <button
+                  key={e}
+                  type="button"
+                  aria-label={`Insert ${e}`}
+                  onClick={() => setDraft((prev) => prev + e)}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xl active:scale-90"
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
           )}
-          <button
-            type="button"
-            aria-label={recording ? "Send voice note" : "Record voice note"}
-            onClick={toggleRecording}
-            disabled={busy && !recording}
-            className={cn(
-              "flex h-11 w-11 shrink-0 items-center justify-center rounded-full disabled:opacity-40",
-              recording ? "bg-error text-white" : "glass text-fg-muted"
-            )}
-          >
+
+          {/* items-end keeps the side buttons anchored to the textarea's last
+              line as it grows, matching the WhatsApp composer feel. */}
+          <div className="flex items-end gap-2">
             {recording ? (
-              <Square className="h-4 w-4" aria-hidden />
+              <>
+                {/* State 3 (Recording) — left: discard the take entirely. */}
+                <button
+                  type="button"
+                  aria-label="Discard voice note"
+                  onClick={cancelRecording}
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-error/20 text-error transition-colors hover:bg-error hover:text-white"
+                >
+                  <Trash2 className="h-5 w-5" aria-hidden />
+                </button>
+
+                {/* Center: live timer + waveform preview + pause/resume. */}
+                <div className="glass flex h-11 min-w-0 flex-1 items-center gap-2 rounded-full px-4">
+                  <span
+                    className={cn(
+                      "h-2.5 w-2.5 shrink-0 rounded-full bg-error",
+                      !recordingPaused && "animate-pulse"
+                    )}
+                    aria-hidden
+                  />
+                  <span className="shrink-0 text-sm font-medium tabular-nums text-fg">
+                    {formatRecordingTime(recordingSeconds)}
+                  </span>
+                  <span
+                    className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden"
+                    aria-hidden
+                  >
+                    {WAVEFORM_BARS.map((h, i) => (
+                      <span
+                        key={i}
+                        className={cn(
+                          "w-0.5 shrink-0 rounded-full bg-accent/70",
+                          recordingPaused ? "opacity-30" : "animate-pulse"
+                        )}
+                        style={{ height: h, animationDelay: `${i * 80}ms` }}
+                      />
+                    ))}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={recordingPaused ? "Resume recording" : "Pause recording"}
+                    onClick={togglePauseRecording}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-fg-muted hover:text-fg"
+                  >
+                    {recordingPaused ? (
+                      <Mic className="h-4 w-4" aria-hidden />
+                    ) : (
+                      <Pause className="h-4 w-4" aria-hidden />
+                    )}
+                  </button>
+                </div>
+
+                {/* Right: finalize + submit the voice note. */}
+                <button
+                  type="button"
+                  aria-label="Send voice note"
+                  onClick={toggleRecording}
+                  disabled={busy}
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-white transition-colors hover:bg-accent-light disabled:opacity-40"
+                >
+                  <Send className="h-5 w-5" aria-hidden />
+                </button>
+              </>
             ) : (
-              <Mic className="h-5 w-5" aria-hidden />
+              <>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  onChange={onPickImage}
+                />
+                {/* States 1 (Idle) & 2 (Typing) — leftmost: pick an image, which
+                    always opens the crop step before anything uploads. */}
+                <button
+                  type="button"
+                  aria-label="Attach image"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={busy}
+                  className="glass flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-fg-muted disabled:opacity-40"
+                >
+                  <ImagePlus className="h-5 w-5" aria-hidden />
+                </button>
+                {/* Emoji toggle. */}
+                <button
+                  type="button"
+                  aria-label="Emoji"
+                  aria-pressed={emojiOpen}
+                  onClick={() => setEmojiOpen((o) => !o)}
+                  className={cn(
+                    "flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors",
+                    emojiOpen ? "glass-strong text-accent" : "glass text-fg-muted"
+                  )}
+                >
+                  <Smile className="h-5 w-5" aria-hidden />
+                </button>
+
+                {/* text-base (16px): anything smaller triggers iOS Safari's
+                    auto-zoom on focus — the root cause of the chat "jump" on
+                    iPhones. rows=1 + the auto-grow effect above own the height;
+                    shape morphs from a pill to rounded-2xl once it wraps. */}
+                <textarea
+                  ref={textareaRef}
+                  rows={1}
+                  value={draft}
+                  onChange={(e) => {
+                    setDraft(e.target.value);
+                    broadcastTyping();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      e.currentTarget.form?.requestSubmit();
+                    }
+                  }}
+                  placeholder="Message…"
+                  enterKeyHint="send"
+                  // min-w-0 lets this flex-1 field shrink below its intrinsic
+                  // width so the row never overflows and pushes the side
+                  // buttons off-screen on narrow viewports.
+                  className={cn(
+                    "glass min-w-0 flex-1 resize-none px-4 py-2.5 text-base text-fg outline-none",
+                    "placeholder:text-fg-muted focus:ring-2 focus:ring-accent/40",
+                    "overflow-y-auto transition-[border-radius] duration-150",
+                    multiline ? "rounded-2xl" : "rounded-full"
+                  )}
+                  style={{ maxHeight: MAX_TEXTAREA_HEIGHT }}
+                />
+
+                {/* Right: standalone Mic (idle) morphs into Send once text is
+                    entered (typing). */}
+                {draft.trim().length > 0 ? (
+                  <button
+                    type="submit"
+                    aria-label="Send"
+                    disabled={busy}
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-white transition-colors hover:bg-accent-light disabled:opacity-40"
+                  >
+                    <Send className="h-5 w-5" aria-hidden />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    aria-label="Record voice note"
+                    onClick={toggleRecording}
+                    disabled={busy}
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-white transition-colors hover:bg-accent-light disabled:opacity-40"
+                  >
+                    <Mic className="h-5 w-5" aria-hidden />
+                  </button>
+                )}
+              </>
             )}
-          </button>
-          {/* text-base (16px): anything smaller triggers iOS Safari's auto-zoom
-              on focus — the root cause of the chat "jump" on iPhones. */}
-          <input
-            value={draft}
-            onChange={(e) => {
-              setDraft(e.target.value);
-              broadcastTyping();
-            }}
-            placeholder={recording ? "Recording…" : "Message…"}
-            disabled={recording}
-            // min-w-0 lets this flex-1 input shrink below its intrinsic width so
-            // the row never overflows and pushes the Send button off-screen on
-            // narrow viewports (a flex item defaults to min-width:auto).
-            className="glass h-11 min-w-0 flex-1 rounded-[var(--radius-pill)] px-4 text-base text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
-          />
-          <GlassButton
-            type="submit"
-            size="icon"
-            className="h-11 w-11 shrink-0"
-            aria-label="Send"
-            disabled={busy || draft.trim().length === 0}
-          >
-            <Send className="h-5 w-5" aria-hidden />
-          </GlassButton>
+          </div>
         </form>
+      )}
+
+      {pendingFile && (
+        <ImageCropper
+          file={pendingFile}
+          aspect={1}
+          aspectOptions
+          title="Edit photo"
+          onCancel={() => setPendingFile(null)}
+          onCropped={onCropped}
+        />
       )}
 
       {/* UAT-005/009: long-press any message to react, forward, edit or unsend. */}

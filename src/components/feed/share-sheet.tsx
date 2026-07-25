@@ -21,9 +21,14 @@ export function ShareSheet({
   onClose: () => void;
 }) {
   return (
-    <GlassSheet open={open} onClose={onClose}>
+    <GlassSheet
+      open={open}
+      onClose={onClose}
+      label="Share to a friend"
+      className="flex h-[60vh] max-h-[75vh] flex-col"
+    >
       {/* Mounts fresh each time the sheet opens, so state starts clean. */}
-      <ShareSheetContent postId={postId} onClose={onClose} />
+      {open && <ShareSheetContent postId={postId} onClose={onClose} />}
     </GlassSheet>
   );
 }
@@ -67,8 +72,8 @@ function ShareSheetContent({
   }
 
   return (
-    <div className="flex max-h-[70vh] flex-col">
-      <h3 className="mb-3 text-lg font-bold">Share to a friend</h3>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <h3 className="mb-3 shrink-0 text-lg font-bold">Share to a friend</h3>
       {/* Keeps finger-scrolling while the sheet panel claims the drag gesture. */}
       <div data-sheet-scroll className="min-h-0 flex-1 overflow-y-auto">
         {friends === null ? (

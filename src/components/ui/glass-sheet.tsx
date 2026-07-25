@@ -169,7 +169,7 @@ export function GlassSheet({
             // and cancelled the pointer — the sheet simply would not drag by
             // hand. Claiming the gesture here is what makes dragging work.
             // Scroll areas inside opt back out via [data-sheet-scroll].
-            style={{ touchAction: "none" }}
+            style={{ touchAction: "none", willChange: "transform" }}
             onPointerDown={maybeStartDrag}
             onDragEnd={(_, info) => {
               if (info.offset.y > 120 || info.velocity.y > 600) onClose();
