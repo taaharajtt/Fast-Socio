@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { Search, Trophy, X } from "lucide-react";
-import { SegmentedPills, type PillOption } from "@/components/ui/segmented-pills";
 import { CampusMapViewer } from "@/components/map/campus-map-viewer";
 import {
   CAMPUS_MAP_PLACES,
@@ -10,29 +9,9 @@ import {
   resolvePlace,
   searchPlaces,
   type CampusPlace,
-  type PlaceType,
 } from "@/lib/map/places";
 import { formatWhen } from "@/lib/smart-match/display";
 import type { SmartMatchPost } from "@/lib/smart-match/types";
-
-type Filter = "all" | PlaceType;
-
-// Filter order chosen to match the product brief (All · Buildings · Cafes · …).
-const FILTER_ORDER: PlaceType[] = [
-  "building",
-  "cafe",
-  "sports",
-  "gate",
-  "parking",
-  "library",
-  "prayer",
-  "hangout",
-];
-
-const FILTER_OPTIONS: PillOption[] = [
-  { value: "all", label: "All" },
-  ...FILTER_ORDER.map((t) => ({ value: t, label: PLACE_TYPE_META[t].label })),
-];
 
 /** Height (px) the detail card occupies — lifts the viewer's zoom controls. */
 const DETAIL_INSET = 120;
@@ -44,8 +23,8 @@ const DETAIL_INSET = 120;
  * library is involved.
  *
  * Selecting a place (from a pin tap or a search result) centers + zooms to it
- * and opens the detail card. Filters narrow both the visible pins and the
- * search results. Zoom-to-fit, pan and the zoom controls are unchanged.
+ * and opens the detail card. Zoom-to-fit, pan and the zoom controls are
+ * unchanged.
  *
  * `initialPlace` is a Discover "Show on map" deep link (an id, name, or
  * alias) — resolved once, at mount, into the matching pin's selection so the
@@ -62,24 +41,14 @@ export function CampusMapExperience({
 } = {}) {
   const [query, setQuery] = useState("");
   const [resultsOpen, setResultsOpen] = useState(false);
-  const [filter, setFilter] = useState<Filter>("all");
   const [selectedId, setSelectedId] = useState<string | null>(
     () => resolvePlace(initialPlace)?.id ?? null
   );
   const [focusSignal, setFocusSignal] = useState(0);
 
-  // Type filter feeds both the pins on the map and the search corpus.
-  const filteredPlaces = useMemo(
-    () =>
-      filter === "all"
-        ? CAMPUS_MAP_PLACES
-        : CAMPUS_MAP_PLACES.filter((p) => p.type === filter),
-    [filter]
-  );
-
   const results = useMemo(
-    () => searchPlaces(query, filteredPlaces),
-    [query, filteredPlaces]
+    () => searchPlaces(query, CAMPUS_MAP_PLACES),
+    [query]
   );
 
   const selectedPlace = useMemo(
@@ -143,7 +112,7 @@ export function CampusMapExperience({
         </div>
 
         {showResults && (
-          <div className="absolute left-0 right-0 top-full mt-2 max-h-72 overflow-y-auto rounded-xl border border-white/10 bg-card/95 p-1 shadow-xl backdrop-blur">
+          <div className="absolute left-0 right-0 top-full mt-2 max-h-72 overflow-y-auto rounded-xl border border-white/10 bg-card p-1 shadow-xl">
             {results.length === 0 ? (
               <p className="px-3 py-6 text-center text-sm text-fg-muted">
                 No places found
@@ -161,20 +130,11 @@ export function CampusMapExperience({
         )}
       </div>
 
-      {/* Type filters. */}
-      <SegmentedPills
-        className="mt-3 shrink-0"
-        options={FILTER_OPTIONS}
-        value={filter}
-        onChange={(v) => setFilter(v as Filter)}
-        scrollable
-      />
-
       {/* Map + pins + detail card. */}
       <div className="relative mt-3 min-h-0 flex-1">
         <CampusMapViewer
           className="absolute inset-0"
-          places={filteredPlaces}
+          places={CAMPUS_MAP_PLACES}
           selectedId={selectedId}
           onSelectPlace={selectPlace}
           focusSignal={focusSignal}
@@ -243,7 +203,7 @@ function PlaceDetailCard({
     <div
       role="dialog"
       aria-label={`${place.name} details`}
-      className="absolute inset-x-3 bottom-3 z-20 max-h-[min(60vh,320px)] overflow-y-auto rounded-2xl border border-white/10 bg-card/95 p-4 shadow-2xl backdrop-blur"
+      className="absolute inset-x-3 bottom-3 z-20 max-h-[min(60vh,320px)] overflow-y-auto rounded-2xl border border-white/10 bg-card p-4 shadow-2xl"
     >
       <div className="flex items-start gap-3">
         <span

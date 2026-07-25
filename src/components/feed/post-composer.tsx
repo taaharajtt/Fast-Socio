@@ -227,7 +227,8 @@ export function PostComposer({
       {pendingFile && (
         <ImageCropper
           file={pendingFile}
-          aspect={4 / 5}
+          aspect={1}
+          aspectOptions
           title="Crop photo"
           onCancel={() => setPendingFile(null)}
           onCropped={onCropped}

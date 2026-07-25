@@ -18,6 +18,7 @@ export function AppImage({
   className,
   priority,
   draggable,
+  onNaturalSize,
 }: {
   src: string;
   alt: string;
@@ -26,6 +27,8 @@ export function AppImage({
   className?: string;
   priority?: boolean;
   draggable?: boolean;
+  /** Fires once, with the underlying <img>'s real pixel size, as it loads. */
+  onNaturalSize?: (size: { width: number; height: number }) => void;
 }) {
   const [loaded, setLoaded] = useState(false);
   return (
@@ -45,7 +48,13 @@ export function AppImage({
         sizes={sizes}
         priority={priority}
         draggable={draggable}
-        onLoad={() => setLoaded(true)}
+        onLoad={(e) => {
+          setLoaded(true);
+          const { naturalWidth, naturalHeight } = e.currentTarget;
+          if (onNaturalSize && naturalWidth > 0 && naturalHeight > 0) {
+            onNaturalSize({ width: naturalWidth, height: naturalHeight });
+          }
+        }}
         className={cn(
           "object-cover transition-opacity duration-500",
           loaded ? "opacity-100" : "opacity-0",

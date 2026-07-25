@@ -16,6 +16,38 @@ export const MAX_EXPORT_EDGE = 1440;
 export const MIN_ZOOM = 1;
 export const MAX_ZOOM = 4;
 
+/** The 3 post-media aspect ratios the cropper and feed both understand. */
+export const ASPECT_RATIOS = {
+  landscape: 16 / 9,
+  square: 1,
+  portrait: 3 / 4,
+} as const;
+
+export const ASPECT_RATIO_OPTIONS = [
+  { label: "16:9", value: ASPECT_RATIOS.landscape },
+  { label: "1:1", value: ASPECT_RATIOS.square },
+  { label: "3:4", value: ASPECT_RATIOS.portrait },
+];
+
+/**
+ * Best-fit target ratio for an image's own dimensions: wide photos default to
+ * 16:9, tall ones to 3:4, and anything in between to a centred 1:1.
+ */
+export function detectAspectRatio(natural: Size): number {
+  if (!natural.width || !natural.height) return ASPECT_RATIOS.square;
+  const raw = natural.width / natural.height;
+  if (raw >= 1.33) return ASPECT_RATIOS.landscape;
+  if (raw <= 0.88) return ASPECT_RATIOS.portrait;
+  return ASPECT_RATIOS.square;
+}
+
+/** Snap an arbitrary ratio to whichever of the 3 standard ratios it's closest to. */
+export function nearestAspectRatio(ratio: number): number {
+  return ASPECT_RATIO_OPTIONS.reduce((best, opt) =>
+    Math.abs(opt.value - ratio) < Math.abs(best.value - ratio) ? opt : best
+  ).value;
+}
+
 /** Scale at which `natural` exactly covers `frame` (no letterboxing). */
 export function coverScale(natural: Size, frame: Size): number {
   if (!natural.width || !natural.height) return 1;

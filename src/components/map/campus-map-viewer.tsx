@@ -315,7 +315,7 @@ export function CampusMapViewer({
       {/* Zoom controls — icon-first, large tap targets, clear of the bottom dock. */}
       <div className="pointer-events-none absolute inset-0 z-10">
         <div
-          className="pointer-events-auto absolute right-4 flex flex-col overflow-hidden rounded-full border border-white/10 bg-card/80 shadow-lg backdrop-blur transition-all"
+          className="pointer-events-auto absolute right-4 flex flex-col overflow-hidden rounded-full border border-white/10 bg-card/95 shadow-lg transition-all"
           style={{ bottom: 16 + controlsBottomInset }}
         >
           <ControlButton
@@ -336,7 +336,7 @@ export function CampusMapViewer({
         </div>
 
         <div
-          className="pointer-events-auto absolute left-4 flex flex-col overflow-hidden rounded-full border border-white/10 bg-card/80 shadow-lg backdrop-blur transition-all"
+          className="pointer-events-auto absolute left-4 flex flex-col overflow-hidden rounded-full border border-white/10 bg-card/95 shadow-lg transition-all"
           style={{ bottom: 16 + controlsBottomInset }}
         >
           <ControlButton label="Fit map to screen" onClick={resetToFit}>

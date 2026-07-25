@@ -3,10 +3,9 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { AnimatePresence, motion } from "framer-motion";
-import { MotionReduced } from "@/components/ui/motion-reduced";
 import { Megaphone, X } from "lucide-react";
 import { dismissAnnouncements } from "@/app/(student)/activity/actions";
+import { cn } from "@/lib/utils";
 
 export type Announcement = {
   id: string;
@@ -42,6 +41,8 @@ export function AnnouncementModal({
 }) {
   const [dismissed, setDismissed] = useState(false);
   const [index, setIndex] = useState(0);
+  const [renderModal, setRenderModal] = useState(false);
+  const [entered, setEntered] = useState(false);
 
   const alreadyShown = useSyncExternalStore(
     noopSubscribe,
@@ -55,6 +56,24 @@ export function AnnouncementModal({
   // does not feed back into render.
   useEffect(() => {
     if (open) sessionStorage.setItem(SESSION_KEY, "1");
+  }, [open]);
+
+  useEffect(() => {
+    let raf = 0;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+
+    if (open) {
+      setRenderModal(true);
+      raf = requestAnimationFrame(() => setEntered(true));
+    } else {
+      setEntered(false);
+      timeout = setTimeout(() => setRenderModal(false), 220);
+    }
+
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      if (timeout) clearTimeout(timeout);
+    };
   }, [open]);
 
   // Escape closes, matching GlassSheet's behaviour.
@@ -81,35 +100,32 @@ export function AnnouncementModal({
     else close();
   }
 
-  if (announcements.length === 0 || alreadyShown) return null;
+  if (announcements.length === 0 || alreadyShown || !renderModal) return null;
 
   const current = announcements[index];
   const isLast = index === announcements.length - 1;
 
   return createPortal(
-    <MotionReduced>
-    <AnimatePresence>
-      {open && (
-        <>
-          <motion.div
-            className="fixed inset-0 z-50 bg-black/70"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            onClick={close}
-          />
-          <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-6">
-            <motion.div
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="announcement-title"
-              className="glass-strong pointer-events-auto w-full max-w-[340px] overflow-hidden rounded-[20px]"
-              initial={{ opacity: 0, scale: 0.92, y: 12 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 8 }}
-              transition={{ type: "spring", damping: 26, stiffness: 320 }}
-            >
+    <>
+      <div
+        className={cn(
+          "fixed inset-0 z-50 bg-black/70 transition-opacity duration-200 ease-out",
+          entered ? "opacity-100" : "opacity-0"
+        )}
+        onClick={close}
+      />
+      <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-6">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="announcement-title"
+          className={cn(
+            "glass-strong pointer-events-auto w-full max-w-[340px] overflow-hidden rounded-[20px] transition-[opacity,transform] duration-200 ease-out will-change-transform",
+            entered
+              ? "translate-y-0 scale-100 opacity-100"
+              : "translate-y-2 scale-[0.95] opacity-0"
+          )}
+        >
               <div className="gradient-brand relative flex flex-col items-center px-6 py-6 text-white">
                 <button
                   type="button"
@@ -160,12 +176,9 @@ export function AnnouncementModal({
                   )}
                 </div>
               </div>
-            </motion.div>
-          </div>
-        </>
-      )}
-    </AnimatePresence>
-    </MotionReduced>,
+        </div>
+      </div>
+    </>,
     document.body
   );
 }

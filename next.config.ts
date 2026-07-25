@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 import withPWAInit from "@ducanh2912/next-pwa";
 import { withSentryConfig } from "@sentry/nextjs";
+import bundleAnalyzer from "@next/bundle-analyzer";
+
+const withBundleAnalyzer = bundleAnalyzer({
+  enabled: process.env.ANALYZE === "true",
+});
 
 const withPWA = withPWAInit({
   dest: "public",
@@ -101,35 +106,39 @@ const nextConfig: NextConfig = {
 // block sentry.io can't silently drop error reports. Source-map upload only
 // runs when SENTRY_AUTH_TOKEN is present (CI/prod); otherwise it's skipped and
 // the build still succeeds.
-export default withSentryConfig(withPWA(nextConfig), {
-  org: process.env.SENTRY_ORG,
-  project: process.env.SENTRY_PROJECT,
-  authToken: process.env.SENTRY_AUTH_TOKEN,
-  // Quiet the plugin unless we're in CI where the log is useful.
-  silent: !process.env.CI,
-  // Same-origin tunnel for browser events (see note above).
-  tunnelRoute: "/monitoring",
-  // Tree-shake the SDK's debug logging out of the client bundle.
-  webpack: { treeshake: { removeDebugLogging: true } },
-  // Upload source maps for the client bundle's dynamic imports too.
-  widenClientFileUpload: true,
-  // RES/Lighthouse perf pass: the Sentry client SDK was the single largest
-  // chunk in `rootMainFiles` (~474 KB raw) — it loads on EVERY page and was the
-  // dominant Total-Blocking-Time / bundle cost across the whole app. Tree-shake
-  // out the parts we don't use so error reporting (the reason Sentry is here at
-  // all — see instrumentation-client.ts) stays, but the dead weight drops:
-  //   - Session Replay: never initialised (privacy: we don't record the DOM of
-  //     an app full of DMs/profiles). Safe to strip entirely.
-  //   - Performance tracing: we keep server-side tracing via env-driven
-  //     tracesSampleRate, but the browser BrowserTracing instrumentation is the
-  //     biggest slice of the client bundle and buys little for a small campus
-  //     PWA. Deliberate trade for TBT; flip `excludeTracing` back to re-enable.
-  //   - Debug statements: production never needs them.
-  bundleSizeOptimizations: {
-    excludeReplayShadowDom: true,
-    excludeReplayIframe: true,
-    excludeReplayWorker: true,
-    excludeTracing: true,
-    excludeDebugStatements: true,
-  },
-});
+export default withBundleAnalyzer(
+  withSentryConfig(withPWA(nextConfig), {
+    org: process.env.SENTRY_ORG,
+    project: process.env.SENTRY_PROJECT,
+    authToken: process.env.SENTRY_AUTH_TOKEN,
+    // Quiet the plugin unless we're in CI where the log is useful.
+    silent: !process.env.CI,
+    // Same-origin tunnel for browser events (see note above).
+    tunnelRoute: "/monitoring",
+    // Strip Sentry's internal logger calls from the browser bundle.
+    disableLogger: true,
+    // Tree-shake the SDK's debug logging out of the client bundle.
+    webpack: { treeshake: { removeDebugLogging: true } },
+    // Upload source maps for the client bundle's dynamic imports too.
+    widenClientFileUpload: true,
+    // RES/Lighthouse perf pass: the Sentry client SDK was the single largest
+    // chunk in `rootMainFiles` (~474 KB raw) — it loads on EVERY page and was the
+    // dominant Total-Blocking-Time / bundle cost across the whole app. Tree-shake
+    // out the parts we don't use so error reporting (the reason Sentry is here at
+    // all — see instrumentation-client.ts) stays, but the dead weight drops:
+    //   - Session Replay: never initialised (privacy: we don't record the DOM of
+    //     an app full of DMs/profiles). Safe to strip entirely.
+    //   - Performance tracing: we keep server-side tracing via env-driven
+    //     tracesSampleRate, but the browser BrowserTracing instrumentation is the
+    //     biggest slice of the client bundle and buys little for a small campus
+    //     PWA. Deliberate trade for TBT; flip `excludeTracing` back to re-enable.
+    //   - Debug statements: production never needs them.
+    bundleSizeOptimizations: {
+      excludeReplayShadowDom: true,
+      excludeReplayIframe: true,
+      excludeReplayWorker: true,
+      excludeTracing: true,
+      excludeDebugStatements: true,
+    },
+  })
+);

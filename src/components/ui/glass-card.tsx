@@ -10,13 +10,14 @@ const radiusMap = {
 type GlassCardProps = React.ComponentProps<"div"> & {
   /** Corner radius from the UI Spec §2.5 scale. */
   radius?: keyof typeof radiusMap;
-  /** Use the stronger blur/opacity variant for elevated surfaces. */
+  /** Use the stronger solid-surface variant for elevated surfaces. */
   strong?: boolean;
 };
 
 /**
- * Floating glass surface — the base panel of the design system.
- * Carries blur, soft transparency, subtle border, and soft shadow (UI Spec §2.6).
+ * Solid surface panel — the base card of the design system. No backdrop
+ * blur (GPU cost on mobile PWA scroll/drag); just a flat tinted surface,
+ * subtle border, and soft shadow (UI Spec §2.6).
  */
 export function GlassCard({
   className,

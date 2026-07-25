@@ -4,12 +4,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Loader2, Minus, Plus, RotateCcw } from "lucide-react";
 import {
+  ASPECT_RATIO_OPTIONS,
   MAX_ZOOM,
   MIN_ZOOM,
   clamp,
   clampOffset,
   coverScale,
   croppedExtension,
+  detectAspectRatio,
   reconcileView,
   renderCrop,
   type Offset,
@@ -29,6 +31,7 @@ export type CropResult = { blob: Blob; extension: string; mimeType: string };
 export function ImageCropper({
   file,
   aspect,
+  aspectOptions,
   title = "Crop photo",
   round = false,
   onCancel,
@@ -37,6 +40,11 @@ export function ImageCropper({
   file: File;
   /** Frame width ÷ height. 1 = square, 16/9 = cover banner, 4/5 = portrait post. */
   aspect: number;
+  /**
+   * When set, shows a ratio selector (e.g. 16:9 / 1:1 / 3:4) and re-picks
+   * `aspect` automatically once the image's natural size is known.
+   */
+  aspectOptions?: boolean;
   title?: string;
   /** Draw the frame as a circle (avatars). The export is still the square crop. */
   round?: boolean;
@@ -46,6 +54,7 @@ export function ImageCropper({
   const [src, setSrc] = useState<string | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [natural, setNatural] = useState<Size | null>(null);
+  const [selectedAspect, setSelectedAspect] = useState(aspect);
   const [frame, setFrame] = useState<Size>({ width: 0, height: 0 });
   const [zoom, setZoom] = useState(MIN_ZOOM);
   const [offset, setOffset] = useState<Offset>({ x: 0, y: 0 });
@@ -72,7 +81,9 @@ export function ImageCropper({
     setSrc(url);
     setLoadFailed(false);
     setNatural(null);
+    setSelectedAspect(aspect);
     return () => URL.revokeObjectURL(url);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `aspect` is the initial value for a new file, not a live sync target
   }, [file]);
 
   // The frame fills the available width at the requested aspect, but never grows
@@ -82,17 +93,17 @@ export function ImageCropper({
       const maxWidth = Math.min(window.innerWidth - 32, 420);
       const maxHeight = window.innerHeight - 240;
       let width = maxWidth;
-      let height = width / aspect;
+      let height = width / selectedAspect;
       if (height > maxHeight) {
         height = maxHeight;
-        width = height * aspect;
+        width = height * selectedAspect;
       }
       setFrame({ width: Math.round(width), height: Math.round(height) });
     }
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
-  }, [aspect]);
+  }, [selectedAspect]);
 
   const base = natural && frame.width ? coverScale(natural, frame) : 1;
   const scale = base * zoom;
@@ -261,6 +272,26 @@ export function ImageCropper({
         </button>
       </header>
 
+      {aspectOptions && (
+        <div className="flex shrink-0 items-center justify-center gap-2 pb-3">
+          {ASPECT_RATIO_OPTIONS.map((opt) => (
+            <button
+              key={opt.label}
+              type="button"
+              onClick={() => setSelectedAspect(opt.value)}
+              aria-pressed={selectedAspect === opt.value}
+              className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+                selectedAspect === opt.value
+                  ? "bg-white text-black"
+                  : "bg-white/10 text-white/70"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="flex flex-1 items-center justify-center overflow-hidden">
         <div
           ref={frameRef}
@@ -284,8 +315,12 @@ export function ImageCropper({
               onLoad={(e) => {
                 const w = e.currentTarget.naturalWidth;
                 const h = e.currentTarget.naturalHeight;
-                if (w > 0 && h > 0) setNatural({ width: w, height: h });
-                else setLoadFailed(true);
+                if (w > 0 && h > 0) {
+                  if (aspectOptions) setSelectedAspect(detectAspectRatio({ width: w, height: h }));
+                  setNatural({ width: w, height: h });
+                } else {
+                  setLoadFailed(true);
+                }
               }}
               onError={() => setLoadFailed(true)}
               style={{

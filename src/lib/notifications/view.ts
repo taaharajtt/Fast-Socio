@@ -26,6 +26,8 @@ export function notificationActionPhrase(type: string): string {
       return "reacted to your post";
     case "comment":
       return "replied to your post";
+    case "comment_reply":
+      return "replied to your comment";
     case "mention":
       return "mentioned you in a comment";
     case "message":
@@ -92,6 +94,7 @@ export function notificationCategory(type: string): ActivityCategory {
     case "post_like":
       return "reacts";
     case "comment":
+    case "comment_reply":
     case "mention":
       return "replies";
     case "match":
@@ -181,6 +184,11 @@ export function notificationView(
     case "comment":
       return {
         text: `${who} replied to your ${data.community_id ? "community post" : "post"}`,
+        href: data.post_id ? `/post/${data.post_id}` : "/home",
+      };
+    case "comment_reply":
+      return {
+        text: `${who} replied to your comment`,
         href: data.post_id ? `/post/${data.post_id}` : "/home",
       };
     case "mention":

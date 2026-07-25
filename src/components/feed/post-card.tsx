@@ -20,6 +20,7 @@ import { CommentsSheet } from "@/components/feed/comments-sheet";
 import { PostPoll } from "@/components/feed/post-poll";
 import { timeAgo, absoluteTime } from "@/lib/time";
 import { AppImage } from "@/components/ui/app-image";
+import { ASPECT_RATIOS, nearestAspectRatio } from "@/lib/crop";
 import type { FeedPost } from "@/lib/feed/types";
 
 const REPORT_REASONS = [
@@ -54,6 +55,9 @@ function PostCardImpl({
   // Heart-burst overlay: bumping the key remounts the <Heart> and replays the
   // animation, so rapid double-taps each get their own burst.
   const [burstKey, setBurstKey] = useState(0);
+  // Cropping always exports exactly one of the 3 standard ratios; snap the
+  // measured natural size to the nearest so a rounding pixel can't wobble it.
+  const [imageAspect, setImageAspect] = useState<number>(ASPECT_RATIOS.square);
   const lastTap = useRef(0);
   // UAT-001: an anonymous post reads as Anonymous for everyone — including its
   // own author — so a poster never sees their own name/avatar on it.
@@ -192,12 +196,18 @@ function PostCardImpl({
         </p>
       )}
       {post.image_url && (
-        <div className="relative mt-2.5 aspect-square w-full overflow-hidden rounded-xl">
+        <div
+          className="relative mt-2.5 w-full overflow-hidden rounded-xl"
+          style={{ aspectRatio: imageAspect }}
+        >
           <AppImage
             src={post.image_url}
             alt="Post image"
             sizes="(max-width: 448px) 100vw, 448px"
             draggable={false}
+            onNaturalSize={(size) =>
+              setImageAspect(nearestAspectRatio(size.width / size.height))
+            }
           />
         </div>
       )}

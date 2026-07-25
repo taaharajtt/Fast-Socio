@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  AnimatePresence,
   motion,
   useMotionValue,
   useTransform,
@@ -234,36 +235,48 @@ export function SwipeDeck({ initial }: { initial: DiscoverSwipeCard[] }) {
               )
             )
             .reverse()}
+
+          {/* Undo pill / transient toast — floats above the card stack as an
+              overlay so it never pushes the action row below out of place. */}
+          <AnimatePresence>
+            {toast ? (
+              <motion.div
+                key="toast"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="pointer-events-none absolute bottom-3 left-1/2 z-30 -translate-x-1/2"
+              >
+                <span className="glass inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium">
+                  <Check className="h-4 w-4 text-success" aria-hidden />
+                  {toast}
+                </span>
+              </motion.div>
+            ) : lastSwiped ? (
+              <motion.div
+                key="undo"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="pointer-events-auto absolute bottom-3 left-1/2 z-30 -translate-x-1/2"
+              >
+                <button
+                  type="button"
+                  onClick={undo}
+                  className="glass flex items-center gap-2 rounded-[var(--radius-pill)] px-4 py-2 text-sm font-medium text-fg-muted hover:text-fg"
+                >
+                  <RotateCcw className="h-4 w-4" aria-hidden />
+                  Undo{" "}
+                  {lastSwiped.kind === "socio"
+                    ? (lastSwiped.card.kind === "socio"
+                        ? lastSwiped.card.profile.full_name?.split(" ")[0]
+                        : null) ?? "swipe"
+                    : "swipe"}
+                </button>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
         </div>
-
-        {/* Transient confirmation for intent swipes (no match overlay there). */}
-        {toast && (
-          <div className="pointer-events-none mt-3 flex justify-center">
-            <span className="glass inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium">
-              <Check className="h-4 w-4 text-success" aria-hidden />
-              {toast}
-            </span>
-          </div>
-        )}
-
-        {/* Undo affordance (CR-009, edge case 5): appears ~3s after a swipe. */}
-        {lastSwiped && !toast && (
-          <div className="mt-3 flex justify-center">
-            <button
-              type="button"
-              onClick={undo}
-              className="glass flex items-center gap-2 rounded-[var(--radius-pill)] px-4 py-2 text-sm font-medium text-fg-muted hover:text-fg"
-            >
-              <RotateCcw className="h-4 w-4" aria-hidden />
-              Undo{" "}
-              {lastSwiped.kind === "socio"
-                ? (lastSwiped.card.kind === "socio"
-                    ? lastSwiped.card.profile.full_name?.split(" ")[0]
-                    : null) ?? "swipe"
-                : "swipe"}
-            </button>
-          </div>
-        )}
 
         {/* Action row (UISpec V3 Screen 5): Pass 56 · Message 56 · Like 64 (glow).
             On an intent card the middle button opens details instead of a DM —
@@ -711,7 +724,7 @@ function IntentDetail({ card }: { card: IntentCard }) {
 function MatchOverlay({ name, onClose }: { name: string; onClose: () => void }) {
   return (
     <motion.div
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/70 px-6 text-center backdrop-blur-md"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/80 px-6 text-center"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       onClick={onClose}
