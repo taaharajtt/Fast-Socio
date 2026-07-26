@@ -7,6 +7,7 @@ import { PushAutoEnable } from "@/components/push/push-auto-enable";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { PresenceHeartbeat } from "@/components/presence/heartbeat";
 import { AnnouncementModal } from "@/components/notifications/announcement-modal";
+import { ExternalLinkInterceptor } from "@/components/ui/external-link-interceptor";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { getMaintenanceState, resolveFlags } from "@/lib/flags";
@@ -86,6 +87,9 @@ export default async function StudentLayout({
         }}
       />
       <div className="flex-1 pb-20">{children}</div>
+      {/* Global click-delegation guard: warns before any off-origin link in a
+          post, comment, chat, help response, or profile bio is followed. */}
+      <ExternalLinkInterceptor />
       {/* Enable push notifications by default for signed-in students. */}
       <PushAutoEnable />
       {/* Browser-tab users: invite them to install. On iOS this is the only way

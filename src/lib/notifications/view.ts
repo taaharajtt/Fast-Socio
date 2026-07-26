@@ -40,6 +40,12 @@ export function notificationActionPhrase(type: string): string {
       return "accepted your request";
     case "help_response":
       return "responded to your help request";
+    case "community_message":
+      return "sent a message in your community";
+    case "community_post":
+      return "posted in your community";
+    case "event_post_request":
+      return "wants to post in your event";
     case "help_offer_accepted":
       return "approved your offer to help";
     case "help_follow":
@@ -132,6 +138,12 @@ export function notificationCategory(type: string): ActivityCategory {
     case "help_resolved":
     case "help_offer_accepted":
       return "other";
+    case "community_message":
+      return "messages";
+    case "community_post":
+      return "announcements";
+    case "event_post_request":
+      return "requests";
     default:
       return "other";
   }
@@ -264,10 +276,34 @@ export function notificationView(
           : "Your appeal was reviewed and declined.",
         href: "/appeals",
       };
-    case "help_response":
+    case "help_response": {
+      const helpWho =
+        actorName === null || data.is_anonymous ? "An Anonymous Student" : who;
       return {
-        text: `${who} responded to your help request`,
+        text: `${helpWho} responded to your help request`,
         href: data.request_id ? `/help/${data.request_id}` : "/help",
+      };
+    }
+    case "community_message": {
+      const communityWho =
+        actorName === null || data.is_anonymous ? "Someone" : who;
+      const communityName = data.community_name ? ` in ${data.community_name}` : "";
+      return {
+        text: `${communityWho} sent a message${communityName}`,
+        href: data.community_id ? `/communities/${data.community_id}/chat` : "/chat",
+      };
+    }
+    case "community_post": {
+      const communityName = data.community_name ? ` in ${data.community_name}` : "";
+      return {
+        text: `${who} posted${communityName}`,
+        href: data.community_id ? `/communities/${data.community_id}` : "/communities",
+      };
+    }
+    case "event_post_request":
+      return {
+        text: `${who} wants to post in your event`,
+        href: data.event_id ? `/events/${data.event_id}` : "/events",
       };
     case "help_follow":
       return {

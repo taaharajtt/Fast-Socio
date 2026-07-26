@@ -2,19 +2,20 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Camera,
   Check,
   CornerUpRight,
   Flag,
   ImagePlus,
   Loader2,
   Mic,
+  Paperclip,
   Pause,
   Pencil,
   Pin,
   PinOff,
   Search,
   Send,
-  Smile,
   Trash2,
   X,
 } from "lucide-react";
@@ -50,10 +51,9 @@ import {
 
 type Reaction = { emoji: string; user_id: string };
 const QUICK_EMOJIS = ["❤️", "😂", "🔥", "👍", "😮", "😢", "🙏"];
-const COMPOSER_EMOJIS = ["😀", "😂", "❤️", "👍", "🙏", "🔥", "😮", "😢", "🎉", "😉"];
-// Single-line pill height (h-11); the textarea grows past this and morphs to
-// rounded-2xl, capping at ~6 lines before it scrolls internally.
-const MIN_TEXTAREA_HEIGHT = 44;
+// Single-line pill height (min-h-[40px]); the textarea grows past this and
+// caps at ~5-6 lines before it scrolls internally.
+const MIN_TEXTAREA_HEIGHT = 40;
 const MAX_TEXTAREA_HEIGHT = 144;
 
 function formatRecordingTime(totalSeconds: number): string {
@@ -126,8 +126,6 @@ export function ChatThread({
   const [recording, setRecording] = useState(false);
   const [recordingPaused, setRecordingPaused] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
-  const [emojiOpen, setEmojiOpen] = useState(false);
-  const [multiline, setMultiline] = useState(false);
   // Selected-but-not-yet-cropped image (UAT-011): opens the ImageCropper
   // dialog before anything touches chat-media.
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -152,16 +150,13 @@ export function ChatThread({
   useKeyboardInset();
 
   // Auto-grow the composer textarea with its content, capped at MAX_TEXTAREA_
-  // HEIGHT (~6 lines) where it starts scrolling internally instead. `multiline`
-  // drives the pill -> rounded-rectangle shape morph once content wraps past
-  // one line.
+  // HEIGHT (~5-6 lines) where it starts scrolling internally instead.
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
     const next = Math.min(el.scrollHeight, MAX_TEXTAREA_HEIGHT);
     el.style.height = `${Math.max(next, MIN_TEXTAREA_HEIGHT)}px`;
-    setMultiline(el.scrollHeight > MIN_TEXTAREA_HEIGHT + 4);
   }, [draft]);
 
   // Live "0:00" timer for the recording strip — ticks every second while
@@ -1050,24 +1045,6 @@ export function ChatThread({
           onSubmit={onSendText}
           className="sticky bottom-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2"
         >
-          {/* Quick-emoji strip (toggled by the Smile button) — inserts into the
-              draft without stealing focus, so several picks chain naturally. */}
-          {emojiOpen && !recording && (
-            <div className="glass mb-2 flex items-center justify-between rounded-[var(--radius-pill)] px-2 py-1.5">
-              {COMPOSER_EMOJIS.map((e) => (
-                <button
-                  key={e}
-                  type="button"
-                  aria-label={`Insert ${e}`}
-                  onClick={() => setDraft((prev) => prev + e)}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xl active:scale-90"
-                >
-                  {e}
-                </button>
-              ))}
-            </div>
-          )}
-
           {/* items-end keeps the side buttons anchored to the textarea's last
               line as it grows, matching the WhatsApp composer feel. */}
           <div className="flex items-end gap-2">
@@ -1144,65 +1121,59 @@ export function ChatThread({
                   hidden
                   onChange={onPickImage}
                 />
-                {/* States 1 (Idle) & 2 (Typing) — leftmost: pick an image, which
-                    always opens the crop step before anything uploads. */}
-                <button
-                  type="button"
-                  aria-label="Attach image"
-                  onClick={() => fileRef.current?.click()}
-                  disabled={busy}
-                  className="glass flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-fg-muted disabled:opacity-40"
-                >
-                  <ImagePlus className="h-5 w-5" aria-hidden />
-                </button>
-                {/* Emoji toggle. */}
-                <button
-                  type="button"
-                  aria-label="Emoji"
-                  aria-pressed={emojiOpen}
-                  onClick={() => setEmojiOpen((o) => !o)}
-                  className={cn(
-                    "flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors",
-                    emojiOpen ? "glass-strong text-accent" : "glass text-fg-muted"
-                  )}
-                >
-                  <Smile className="h-5 w-5" aria-hidden />
-                </button>
 
-                {/* text-base (16px): anything smaller triggers iOS Safari's
-                    auto-zoom on focus — the root cause of the chat "jump" on
-                    iPhones. rows=1 + the auto-grow effect above own the height;
-                    shape morphs from a pill to rounded-2xl once it wraps. */}
-                <textarea
-                  ref={textareaRef}
-                  rows={1}
-                  value={draft}
-                  onChange={(e) => {
-                    setDraft(e.target.value);
-                    broadcastTyping();
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      e.currentTarget.form?.requestSubmit();
-                    }
-                  }}
-                  placeholder="Message…"
-                  enterKeyHint="send"
-                  // min-w-0 lets this flex-1 field shrink below its intrinsic
-                  // width so the row never overflows and pushes the side
-                  // buttons off-screen on narrow viewports.
-                  className={cn(
-                    "glass min-w-0 flex-1 resize-none px-4 py-2.5 text-base text-fg outline-none",
-                    "placeholder:text-fg-muted focus:ring-2 focus:ring-accent/40",
-                    "overflow-y-auto transition-[border-radius] duration-150",
-                    multiline ? "rounded-2xl" : "rounded-full"
-                  )}
-                  style={{ maxHeight: MAX_TEXTAREA_HEIGHT }}
-                />
+                {/* Single rounded pill: textarea + attachment icons live inside
+                    together, matching WhatsApp's composer bar. */}
+                <div className="glass focus-within:ring-accent/40 flex min-w-0 flex-1 items-center gap-2 rounded-2xl px-3 py-1.5 focus-within:ring-2">
+                  {/* text-base (16px): anything smaller triggers iOS Safari's
+                      auto-zoom on focus — the root cause of the chat "jump" on
+                      iPhones. rows=1 + the auto-grow effect above own the height. */}
+                  <textarea
+                    ref={textareaRef}
+                    rows={1}
+                    value={draft}
+                    onChange={(e) => {
+                      setDraft(e.target.value);
+                      broadcastTyping();
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        e.currentTarget.form?.requestSubmit();
+                      }
+                    }}
+                    placeholder="Message…"
+                    enterKeyHint="send"
+                    className="min-h-[40px] min-w-0 flex-1 resize-none overflow-y-auto border-none bg-transparent text-base text-fg outline-none placeholder:text-fg-muted"
+                    style={{ maxHeight: MAX_TEXTAREA_HEIGHT }}
+                  />
 
-                {/* Right: standalone Mic (idle) morphs into Send once text is
-                    entered (typing). */}
+                  {/* Camera only shows idle (no draft) — matches WhatsApp,
+                      both icons open the same file picker. */}
+                  {draft.trim() === "" && (
+                    <button
+                      type="button"
+                      aria-label="Take photo"
+                      onClick={() => fileRef.current?.click()}
+                      disabled={busy}
+                      className="flex h-7 w-7 shrink-0 items-center justify-center text-fg-muted disabled:opacity-40"
+                    >
+                      <Camera className="h-5 w-5" aria-hidden />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    aria-label="Attach image"
+                    onClick={() => fileRef.current?.click()}
+                    disabled={busy}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center text-fg-muted disabled:opacity-40"
+                  >
+                    <Paperclip className="h-5 w-5" aria-hidden />
+                  </button>
+                </div>
+
+                {/* Floating action button outside the pill: standalone Mic
+                    (idle) morphs into Send once text is entered (typing). */}
                 {draft.trim().length > 0 ? (
                   <button
                     type="submit"

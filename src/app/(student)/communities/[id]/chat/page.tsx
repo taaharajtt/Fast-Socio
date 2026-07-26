@@ -47,6 +47,11 @@ export default async function CommunityChatPage({
   // Only members can see the room; bounce everyone else to the community page.
   if (!membership || community.status !== "approved") redirect(`/communities/${id}`);
 
+  // Opening the room clears its unread badge in the Messages list (mirrors
+  // messages.read_at for DMs, which community chat previously had no
+  // equivalent of).
+  await supabase.rpc("mark_community_chat_read", { p_community_id: id });
+
   const { data: rows } = await supabase
     .from("community_chat_view")
     .select(

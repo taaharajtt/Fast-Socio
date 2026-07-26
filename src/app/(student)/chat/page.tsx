@@ -173,17 +173,26 @@ export default async function ChatPage({
     avatar: string | null;
     preview: string;
     ts: string;
+    unreadCount: number;
   }[] = [];
   if (myCommunities.length > 0) {
-    const { data: cmsgs } = await supabase
-      .from("community_chat_view")
-      .select("community_id, body, sender_name, is_anonymous, created_at")
-      .in(
-        "community_id",
-        myCommunities.map((c) => c.id)
-      )
-      .order("created_at", { ascending: false })
-      .limit(200);
+    const communityIds = myCommunities.map((c) => c.id);
+    const [{ data: cmsgs }, { data: readRows }] = await Promise.all([
+      supabase
+        .from("community_chat_view")
+        .select("community_id, body, sender_name, is_anonymous, created_at")
+        .in("community_id", communityIds)
+        .order("created_at", { ascending: false })
+        .limit(200),
+      supabase
+        .from("community_chat_reads")
+        .select("community_id, last_read_at")
+        .eq("user_id", me)
+        .in("community_id", communityIds),
+    ]);
+    const lastRead = new Map(
+      (readRows ?? []).map((r) => [r.community_id as string, r.last_read_at as string])
+    );
     const latest = new Map<string, { preview: string; ts: string }>();
     for (const m of cmsgs ?? []) {
       if (latest.has(m.community_id)) continue;
@@ -193,6 +202,17 @@ export default async function ChatPage({
         ts: m.created_at,
       });
     }
+    // Unread = messages after the viewer's last_read_at; a room never opened
+    // has no read marker, so every message in the (200-row, cross-room) page
+    // counts as unread.
+    const unreadCounts = new Map<string, number>();
+    for (const m of cmsgs ?? []) {
+      const readAt = lastRead.get(m.community_id);
+      if (readAt && new Date(m.created_at).getTime() <= new Date(readAt).getTime()) {
+        continue;
+      }
+      unreadCounts.set(m.community_id, (unreadCounts.get(m.community_id) ?? 0) + 1);
+    }
     for (const c of myCommunities) {
       const l = latest.get(c.id);
       communityThreads.push({
@@ -201,6 +221,7 @@ export default async function ChatPage({
         avatar: c.cover_url ?? c.avatar_url,
         preview: l?.preview ?? "No messages yet — say hello 👋",
         ts: l?.ts ?? "1970-01-01T00:00:00Z",
+        unreadCount: unreadCounts.get(c.id) ?? 0,
       });
     }
   }
@@ -215,6 +236,7 @@ export default async function ChatPage({
         name: string;
         avatar: string | null;
         preview: string;
+        unreadCount: number;
       };
   const threads: Thread[] = [
     ...conversations.map(
@@ -233,6 +255,7 @@ export default async function ChatPage({
         name: c.name,
         avatar: c.avatar,
         preview: c.preview,
+        unreadCount: c.unreadCount,
       })
     ),
   ].sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
@@ -313,11 +336,15 @@ export default async function ChatPage({
 
             {threads.map((t) => {
               if (t.kind === "community") {
+                const hasUnread = t.unreadCount > 0;
                 return (
                   <Link
                     key={`c:${t.id}`}
                     href={`/communities/${t.id}/chat`}
-                    className="flex items-center gap-3 py-3.5 transition-transform active:scale-[0.99]"
+                    className={cn(
+                      "flex items-center gap-3 py-3.5 transition-transform active:scale-[0.99]",
+                      hasUnread && "-mx-2 rounded-[12px] bg-accent/[0.06] px-2"
+                    )}
                   >
                     <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-2xl bg-card">
                       {t.avatar && (
@@ -331,10 +358,29 @@ export default async function ChatPage({
                           Community
                         </span>
                       </p>
-                      <p className="truncate text-sm text-fg-muted">{t.preview}</p>
+                      <p
+                        className={cn(
+                          "truncate text-sm",
+                          hasUnread ? "font-semibold text-fg" : "text-fg-muted"
+                        )}
+                      >
+                        {t.preview}
+                      </p>
                     </div>
-                    <span className="shrink-0 self-start text-xs text-fg-muted">
-                      {timeAgo(t.ts)}
+                    <span className="flex shrink-0 flex-col items-end gap-1 self-start">
+                      <span
+                        className={cn(
+                          "text-xs",
+                          hasUnread ? "font-semibold text-accent" : "text-fg-muted"
+                        )}
+                      >
+                        {timeAgo(t.ts)}
+                      </span>
+                      {hasUnread && (
+                        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-[11px] font-bold text-white">
+                          {t.unreadCount > 99 ? "99+" : t.unreadCount}
+                        </span>
+                      )}
                     </span>
                   </Link>
                 );
