@@ -16,7 +16,8 @@ type Result = { ok: true } | { ok: false; error: string };
 /**
  * Follow a society === join the underlying community (member_count is the
  * follower count). Mirrors joinCommunity but scoped to the society surface so
- * revalidation targets /societies. RLS still enforces approved + self + member.
+ * revalidation targets /events (the Community tab, where the societies list
+ * lives). RLS still enforces approved + self + member.
  */
 export async function followSociety(societyId: string): Promise<void> {
   const supabase = await createClient();
@@ -26,7 +27,7 @@ export async function followSociety(societyId: string): Promise<void> {
     .from("community_members")
     .insert({ community_id: societyId, user_id: uid, role: "member" });
   revalidatePath(`/societies/${societyId}`);
-  revalidatePath("/societies");
+  revalidatePath("/events");
 }
 
 export async function unfollowSociety(societyId: string): Promise<void> {
@@ -39,7 +40,7 @@ export async function unfollowSociety(societyId: string): Promise<void> {
     .eq("community_id", societyId)
     .eq("user_id", uid);
   revalidatePath(`/societies/${societyId}`);
-  revalidatePath("/societies");
+  revalidatePath("/events");
 }
 
 export type SocietyProfileInput = {
@@ -98,7 +99,7 @@ export async function upsertSocietyProfile(
 
   revalidatePath(`/societies/${societyId}`);
   revalidatePath(`/societies/${societyId}/manage`);
-  revalidatePath("/societies");
+  revalidatePath("/events");
   return { ok: true };
 }
 

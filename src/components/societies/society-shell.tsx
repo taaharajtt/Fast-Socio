@@ -62,7 +62,7 @@ export function SocietyShell({
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
 
         <Link
-          href="/societies"
+          href="/events"
           aria-label="Back"
           className="absolute left-4 top-[max(1rem,env(safe-area-inset-top))] z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white"
         >

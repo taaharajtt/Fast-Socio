@@ -53,7 +53,7 @@ const STEPS: Step[] = [
     icon: Users2,
     title: "Society & Event OS",
     body: "Societies get public pages that run events, recruitment, announcements, and check-ins — all in one place.",
-    href: "/societies",
+    href: "/events",
     cta: "Browse societies",
   },
   {

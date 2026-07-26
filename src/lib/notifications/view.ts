@@ -345,12 +345,12 @@ export function notificationView(
         text: `${who} posted a society announcement 📣`,
         href: data.society_id
           ? `/societies/${data.society_id}/announcements`
-          : "/societies",
+          : "/events",
       };
     case "society_role":
       return {
         text: "You were appointed a society officer 🎖️",
-        href: data.society_id ? `/societies/${data.society_id}` : "/societies",
+        href: data.society_id ? `/societies/${data.society_id}` : "/events",
       };
     case "smart_match_application":
       return {
