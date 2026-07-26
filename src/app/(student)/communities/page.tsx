@@ -2,7 +2,6 @@ import Link from "next/link";
 import { Plus, Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
-import { ChatCommunityTabs } from "@/components/chat/chat-community-tabs";
 import {
   CommunityBrowser,
   type CommunityVM,
@@ -25,20 +24,13 @@ export default async function CommunitiesPage() {
   // gated this route; RLS scopes every query below).
   const me = (await getAuthUserId())!;
 
-  const [{ data: rows }, { data: memberRows }, { count: pendingRequests }] =
-    await Promise.all([
-      supabase
-        .from("communities")
-        .select("id, name, description, avatar_url, cover_url, member_count, status, owner_id")
-        .order("member_count", { ascending: false }),
-      supabase.from("community_members").select("community_id").eq("user_id", me),
-      // Keeps the Requests pill badge consistent across all three tab panels.
-      supabase
-        .from("message_requests")
-        .select("id", { count: "exact", head: true })
-        .eq("recipient_id", me)
-        .eq("status", "pending"),
-    ]);
+  const [{ data: rows }, { data: memberRows }] = await Promise.all([
+    supabase
+      .from("communities")
+      .select("id, name, description, avatar_url, cover_url, member_count, status, owner_id")
+      .order("member_count", { ascending: false }),
+    supabase.from("community_members").select("community_id").eq("user_id", me),
+  ]);
   const communities = (rows ?? []) as Community[];
   const myMemberships = new Set(
     (memberRows ?? []).map((m) => m.community_id as string)
@@ -73,33 +65,31 @@ export default async function CommunitiesPage() {
         </Link>
       </div>
 
-      <ChatCommunityTabs active="community" requestCount={pendingRequests ?? 0}>
-        {myPending.length > 0 && (
-          <section className="mt-4">
-            <h2 className="mb-2 text-sm font-medium text-fg-muted">
-              Awaiting approval
-            </h2>
-            <div className="space-y-2">
-              {myPending.map((c) => (
-                <div
-                  key={c.id}
-                  className="flex items-center gap-3 rounded-[14px] bg-card p-4"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-semibold">{c.name}</p>
-                    <p className="text-xs text-fg-muted">Pending admin review</p>
-                  </div>
-                  <span className="flex items-center gap-1 rounded-full bg-warning/15 px-2.5 py-1 text-xs font-medium text-warning">
-                    <Clock className="h-3 w-3" aria-hidden /> pending
-                  </span>
+      {myPending.length > 0 && (
+        <section className="mt-4">
+          <h2 className="mb-2 text-sm font-medium text-fg-muted">
+            Awaiting approval
+          </h2>
+          <div className="space-y-2">
+            {myPending.map((c) => (
+              <div
+                key={c.id}
+                className="flex items-center gap-3 rounded-[14px] bg-card p-4"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold">{c.name}</p>
+                  <p className="text-xs text-fg-muted">Pending admin review</p>
                 </div>
-              ))}
-            </div>
-          </section>
-        )}
+                <span className="flex items-center gap-1 rounded-full bg-warning/15 px-2.5 py-1 text-xs font-medium text-warning">
+                  <Clock className="h-3 w-3" aria-hidden /> pending
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
-        <CommunityBrowser communities={vms} />
-      </ChatCommunityTabs>
+      <CommunityBrowser communities={vms} />
     </main>
   );
 }

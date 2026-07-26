@@ -150,115 +150,19 @@ export default async function ChatPage({
     };
   });
 
-  // UAT-007: the communities you're in appear in Messages like IG group chats.
-  const { data: memberRows } = await supabase
-    .from("community_members")
-    .select("community:communities(id, name, avatar_url, cover_url, status)")
-    .eq("user_id", me);
-  type CommunityLite = {
-    id: string;
-    name: string;
-    avatar_url: string | null;
-    cover_url: string | null;
-    status: string;
-  };
-  const myCommunities = ((memberRows ?? [])
-    .map((r) => r.community as unknown as CommunityLite | null)
-    .filter((c): c is CommunityLite => Boolean(c) && c!.status === "approved"));
-
-  // Latest chat line per community for the preview + ordering.
-  const communityThreads: {
-    id: string;
-    name: string;
-    avatar: string | null;
-    preview: string;
-    ts: string;
-    unreadCount: number;
-  }[] = [];
-  if (myCommunities.length > 0) {
-    const communityIds = myCommunities.map((c) => c.id);
-    const [{ data: cmsgs }, { data: readRows }] = await Promise.all([
-      supabase
-        .from("community_chat_view")
-        .select("community_id, body, sender_name, is_anonymous, created_at")
-        .in("community_id", communityIds)
-        .order("created_at", { ascending: false })
-        .limit(200),
-      supabase
-        .from("community_chat_reads")
-        .select("community_id, last_read_at")
-        .eq("user_id", me)
-        .in("community_id", communityIds),
-    ]);
-    const lastRead = new Map(
-      (readRows ?? []).map((r) => [r.community_id as string, r.last_read_at as string])
-    );
-    const latest = new Map<string, { preview: string; ts: string }>();
-    for (const m of cmsgs ?? []) {
-      if (latest.has(m.community_id)) continue;
-      const who = m.is_anonymous ? "Anonymous" : (m.sender_name ?? "Member");
-      latest.set(m.community_id, {
-        preview: `${who}: ${m.body}`,
-        ts: m.created_at,
-      });
-    }
-    // Unread = messages after the viewer's last_read_at; a room never opened
-    // has no read marker, so every message in the (200-row, cross-room) page
-    // counts as unread.
-    const unreadCounts = new Map<string, number>();
-    for (const m of cmsgs ?? []) {
-      const readAt = lastRead.get(m.community_id);
-      if (readAt && new Date(m.created_at).getTime() <= new Date(readAt).getTime()) {
-        continue;
-      }
-      unreadCounts.set(m.community_id, (unreadCounts.get(m.community_id) ?? 0) + 1);
-    }
-    for (const c of myCommunities) {
-      const l = latest.get(c.id);
-      communityThreads.push({
-        id: c.id,
-        name: c.name,
-        avatar: c.cover_url ?? c.avatar_url,
-        preview: l?.preview ?? "No messages yet — say hello 👋",
-        ts: l?.ts ?? "1970-01-01T00:00:00Z",
-        unreadCount: unreadCounts.get(c.id) ?? 0,
-      });
-    }
-  }
-
-  // A unified, recency-sorted inbox of DM conversations + community rooms.
-  type Thread =
-    | { kind: "dm"; ts: string; convId: string; otherId: string }
-    | {
-        kind: "community";
-        ts: string;
-        id: string;
-        name: string;
-        avatar: string | null;
-        preview: string;
-        unreadCount: number;
-      };
-  const threads: Thread[] = [
-    ...conversations.map(
+  // A recency-sorted inbox of 1:1 conversations. Community rooms used to be
+  // folded in here (UAT-007); they now live under the Community dock tab, so
+  // Chat is strictly direct messages.
+  type Thread = { ts: string; convId: string; otherId: string };
+  const threads: Thread[] = conversations
+    .map(
       (c): Thread => ({
-        kind: "dm",
         ts: c.last_message_at ?? "1970-01-01T00:00:00Z",
         convId: c.id,
         otherId: c.user_low === me ? c.user_high : c.user_low,
       })
-    ),
-    ...communityThreads.map(
-      (c): Thread => ({
-        kind: "community",
-        ts: c.ts,
-        id: c.id,
-        name: c.name,
-        avatar: c.avatar,
-        preview: c.preview,
-        unreadCount: c.unreadCount,
-      })
-    ),
-  ].sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+    )
+    .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
 
   // Matches that don't yet have a conversation AND that we haven't already
   // reached out to — surfaced so a chat can start. A match we've messaged
@@ -335,56 +239,6 @@ export default async function ChatPage({
             })}
 
             {threads.map((t) => {
-              if (t.kind === "community") {
-                const hasUnread = t.unreadCount > 0;
-                return (
-                  <Link
-                    key={`c:${t.id}`}
-                    href={`/communities/${t.id}/chat`}
-                    className={cn(
-                      "flex items-center gap-3 py-3.5 transition-transform active:scale-[0.99]",
-                      hasUnread && "-mx-2 rounded-[12px] bg-accent/[0.06] px-2"
-                    )}
-                  >
-                    <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-2xl bg-card">
-                      {t.avatar && (
-                        <AppImage src={t.avatar} alt={t.name} sizes="44px" />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="flex items-center gap-1.5 truncate text-[15px] font-semibold text-fg">
-                        <span className="truncate">{t.name}</span>
-                        <span className="shrink-0 rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent">
-                          Community
-                        </span>
-                      </p>
-                      <p
-                        className={cn(
-                          "truncate text-sm",
-                          hasUnread ? "font-semibold text-fg" : "text-fg-muted"
-                        )}
-                      >
-                        {t.preview}
-                      </p>
-                    </div>
-                    <span className="flex shrink-0 flex-col items-end gap-1 self-start">
-                      <span
-                        className={cn(
-                          "text-xs",
-                          hasUnread ? "font-semibold text-accent" : "text-fg-muted"
-                        )}
-                      >
-                        {timeAgo(t.ts)}
-                      </span>
-                      {hasUnread && (
-                        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-[11px] font-bold text-white">
-                          {t.unreadCount > 99 ? "99+" : t.unreadCount}
-                        </span>
-                      )}
-                    </span>
-                  </Link>
-                );
-              }
               const p = profiles.get(t.otherId);
               const preview = lastMsg.get(t.convId);
               const unreadCount = unread.get(t.convId) ?? 0;

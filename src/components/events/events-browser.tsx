@@ -1,12 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Search, MapPin } from "lucide-react";
 import { AppImage } from "@/components/ui/app-image";
-import { Skeleton } from "@/components/ui/skeleton";
+import { SocietyBrowser } from "@/components/societies/society-browser";
+import type { SocietyCardVM } from "@/lib/societies/types";
 import { cn } from "@/lib/utils";
-import { EVENT_CATEGORIES } from "@/lib/events/constants";
 
 /** Serializable event view-model prepared on the server (badge + organizer are
  *  precomputed there because the date formatter is server-only). */
@@ -68,64 +66,29 @@ function Banner({ event, className }: { event: EventVM; className?: string }) {
   );
 }
 
-export function EventsBrowser({ events }: { events: EventVM[] }) {
-  const [query, setQuery] = useState("");
-  const [category, setCategory] = useState<string>("All");
-
-  // Brief shimmer when the category tab changes (UAT-013) so switching feels
-  // smooth even though filtering is instant.
-  const [switching, setSwitching] = useState(false);
-  const firstCat = useRef(true);
-  useEffect(() => {
-    if (firstCat.current) {
-      firstCat.current = false;
-      return;
-    }
-    setSwitching(true);
-    const t = setTimeout(() => setSwitching(false), 350);
-    return () => clearTimeout(t);
-  }, [category]);
-
-  const featured = events.slice(0, 4);
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return events.filter((e) => {
-      if (category !== "All" && e.category !== category) return false;
-      if (!q) return true;
-      return (
-        e.title.toLowerCase().includes(q) ||
-        e.organizer.toLowerCase().includes(q) ||
-        (e.location?.toLowerCase().includes(q) ?? false)
-      );
-    });
-  }, [events, query, category]);
-
+/**
+ * The Community surface (dock tab "Community", route /events): upcoming events
+ * as featured cards on top, the campus societies browser below.
+ *
+ * The old "Browse by Category" event list — and the event search bar that fed
+ * it — were replaced by the societies browser, which brings its own search and
+ * filters. The featured grid now renders every upcoming event rather than the
+ * first four, so nothing is stranded by the list's removal.
+ */
+export function EventsBrowser({
+  events,
+  societies,
+}: {
+  events: EventVM[];
+  societies: SocietyCardVM[];
+}) {
   return (
     <>
-      {/* Search bar (UISpec V3 Screen 9). */}
-      <div className="relative mt-4">
-        <Search
-          className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-fg-muted"
-          aria-hidden
-        />
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search events..."
-          aria-label="Search events"
-          className="h-12 w-full rounded-xl bg-card pl-11 pr-4 text-[15px] text-fg placeholder:text-fg-disabled outline-none focus:ring-2 focus:ring-accent/30"
-        />
-      </div>
-
-      {/* Upcoming — featured 2-column grid. Hidden while searching so results
-          read as a single focused list. */}
-      {query.trim() === "" && featured.length > 0 && (
+      {events.length > 0 && (
         <section className="mt-6">
-          <h2 className="mb-3 text-[17px] font-bold">Upcoming</h2>
+          <h2 className="mb-3 text-[17px] font-bold">Upcoming Events</h2>
           <div className="grid grid-cols-2 gap-3">
-            {featured.map((e) => (
+            {events.map((e) => (
               <Link key={e.id} href={`/events/${e.id}`} className="block">
                 <div className="relative">
                   <Banner event={e} className="h-40 rounded-2xl" />
@@ -148,81 +111,22 @@ export function EventsBrowser({ events }: { events: EventVM[] }) {
         </section>
       )}
 
-      {/* Browse by Category. */}
-      <section className="mt-6">
-        <h2 className="mb-3 text-[17px] font-bold">Browse by Category</h2>
-        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {["All", ...EVENT_CATEGORIES].map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => setCategory(c)}
-              aria-pressed={category === c}
-              className={cn(
-                "shrink-0 rounded-full px-4 py-2 text-sm transition-colors active:scale-95",
-                category === c
-                  ? "bg-accent font-semibold text-white"
-                  : "border border-white/[0.08] bg-card font-medium text-fg-muted hover:text-fg"
-              )}
-            >
-              {c}
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-4 space-y-2">
-          {switching ? (
-            Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3 rounded-[14px] bg-card p-3">
-                <Skeleton className="h-[72px] w-[72px] shrink-0 rounded-[10px]" />
-                <div className="min-w-0 flex-1">
-                  <Skeleton className="h-4 w-2/3" />
-                  <Skeleton className="mt-2 h-3 w-1/3" />
-                  <Skeleton className="mt-2 h-3 w-1/2" />
-                </div>
-              </div>
-            ))
-          ) : filtered.length === 0 ? (
-            <p className="rounded-[14px] bg-card p-6 text-center text-sm text-fg-muted">
-              No events found
-              {category !== "All" ? ` in ${category}` : ""}
-              {query.trim() ? ` for “${query.trim()}”` : ""}.
-            </p>
-          ) : (
-            filtered.map((e) => (
-              <Link
-                key={e.id}
-                href={`/events/${e.id}`}
-                className="flex items-center gap-3 rounded-[14px] bg-card p-3"
-              >
-                <Banner
-                  event={e}
-                  className="h-[72px] w-[72px] shrink-0 rounded-[10px]"
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[15px] font-semibold text-fg">
-                    {e.title}
-                  </p>
-                  <p className="truncate text-xs text-fg-muted">
-                    by {e.organizer}
-                  </p>
-                  <p className="mt-1 flex items-center gap-1 truncate text-xs text-fg-muted">
-                    {e.location && (
-                      <>
-                        <MapPin className="h-3 w-3 shrink-0" aria-hidden />
-                        {e.location}
-                        <span aria-hidden>·</span>
-                      </>
-                    )}
-                    {e.attendee_count} going
-                  </p>
-                </div>
-                <DateBadge day={e.day} month={e.month} />
-              </Link>
-            ))
-          )}
-        </div>
+      {/* Campus societies — replaces the old "Browse by Category" event list.
+          SocietyBrowser owns its own search, status flags and category chips. */}
+      <section className="mt-8">
+        <h2 className="text-[17px] font-bold">Campus Societies</h2>
+        <p className="mt-0.5 text-xs text-fg-muted">
+          Explore and follow the societies running campus life.
+        </p>
+        {societies.length === 0 ? (
+          <p className="mt-4 rounded-[14px] bg-card p-6 text-center text-sm text-fg-muted">
+            No societies yet.
+          </p>
+        ) : (
+          <SocietyBrowser societies={societies} />
+        )}
       </section>
+
     </>
   );
 }

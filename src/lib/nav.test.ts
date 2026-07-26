@@ -25,8 +25,13 @@ describe("activeNavHref", () => {
   it("adopts routes that have no tab of their own", () => {
     expect(activeNavHref("/activity", ME)).toBe("/home");
     expect(activeNavHref("/post/abc", ME)).toBe("/home");
-    expect(activeNavHref("/communities", ME)).toBe("/chat");
-    expect(activeNavHref("/communities/abc", ME)).toBe("/chat");
+    // The campus-life cluster all lights the Community tab (which lives at
+    // /events); Chat is now purely 1:1 messaging.
+    expect(activeNavHref("/communities", ME)).toBe("/events");
+    expect(activeNavHref("/communities/abc", ME)).toBe("/events");
+    expect(activeNavHref("/community", ME)).toBe("/events");
+    expect(activeNavHref("/societies", ME)).toBe("/events");
+    expect(activeNavHref("/societies/abc", ME)).toBe("/events");
     expect(activeNavHref("/settings", ME)).toBe("/profile");
     // Campus Help now lives at Me → Help, not its own dock tab.
     expect(activeNavHref("/help", ME)).toBe("/profile");
