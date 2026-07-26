@@ -5,7 +5,6 @@ import { HomeFeed } from "@/components/feed/home-feed";
 import { FirstRunTour } from "@/components/tour/first-run-tour";
 import { NewFeaturesTour } from "@/components/tour/new-features-tour";
 import { HomeHelpStrip } from "@/components/help/home-help-strip";
-import { HomeSocietyStrip } from "@/components/societies/home-society-strip";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { FEED_PAGE_SIZE, type FeedPost } from "@/lib/feed/types";
@@ -96,12 +95,6 @@ export default async function HomePage() {
           </Link>
         </div>
       </header>
-
-      {/* Society discovery strip — a utility surface, not a feed category
-          (renders nothing when nothing is open). */}
-      <div className="px-4">
-        <HomeSocietyStrip />
-      </div>
 
       {/* A client shell ties composer → feed so a new post appears via one
           targeted fetch instead of a full RSC refresh. The Campus Help discovery
