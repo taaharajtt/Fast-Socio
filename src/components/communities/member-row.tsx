@@ -1,0 +1,53 @@
+import Link from "next/link";
+import { ShieldCheck } from "lucide-react";
+import { AppImage } from "@/components/ui/app-image";
+
+export type CommunityMemberVM = {
+  user_id: string;
+  full_name: string | null;
+  username: string | null;
+  avatar_url: string | null;
+  role: "owner" | "moderator" | "member";
+};
+
+const ROLE_LABEL: Record<CommunityMemberVM["role"], string> = {
+  owner: "Owner",
+  moderator: "Moderator",
+  member: "Member",
+};
+
+/** Read-only member row (avatar, name, role chip) for a plain community's
+ *  Members tab — the community equivalent of a society's OfficerRow. */
+export function MemberRow({ member }: { member: CommunityMemberVM }) {
+  const name = member.full_name ?? member.username ?? "Member";
+  return (
+    <Link
+      href={`/profile/${member.user_id}`}
+      className="flex items-center gap-3 rounded-[14px] bg-card p-3"
+    >
+      <span className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/10 text-sm font-bold text-fg-muted">
+        {member.avatar_url ? (
+          <AppImage src={member.avatar_url} alt="" sizes="40px" />
+        ) : (
+          name.charAt(0).toUpperCase()
+        )}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-semibold text-fg">{name}</span>
+        {member.username && (
+          <span className="block truncate text-xs text-fg-muted">
+            @{member.username}
+          </span>
+        )}
+      </span>
+      {member.role !== "member" && (
+        <span className="flex shrink-0 items-center gap-1 rounded-full bg-accent/12 px-2.5 py-1 text-[12px] font-semibold text-accent">
+          {member.role === "owner" && (
+            <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
+          )}
+          {ROLE_LABEL[member.role]}
+        </span>
+      )}
+    </Link>
+  );
+}
