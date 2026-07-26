@@ -7,6 +7,7 @@ import { AppImage } from "@/components/ui/app-image";
 import { cn } from "@/lib/utils";
 import { clockTime, absoluteTime } from "@/lib/time";
 import { useKeyboardInset } from "@/lib/use-keyboard-inset";
+import { renderLinkifiedText } from "@/lib/linkify";
 import { createClient } from "@/lib/supabase/client";
 import { PollCard } from "@/components/communities/poll-card";
 import {
@@ -247,7 +248,7 @@ export function CommunityChat({
                     onVote={(optionId) => onVote(m.poll_id!, optionId)}
                   />
                 ) : (
-                  m.body
+                  renderLinkifiedText(m.body)
                 )}
                 <time
                   dateTime={m.created_at}

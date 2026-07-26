@@ -24,6 +24,7 @@ import { AppImage } from "@/components/ui/app-image";
 import { ImageCropper, type CropResult } from "@/components/ui/image-cropper";
 import { cn } from "@/lib/utils";
 import { useKeyboardInset } from "@/lib/use-keyboard-inset";
+import { renderLinkifiedText } from "@/lib/linkify";
 import { createClient } from "@/lib/supabase/client";
 import { chatMediaPath, CHAT_MEDIA_TTL_SECONDS } from "@/lib/chat-media";
 import { uploadWithProgress } from "@/lib/storage-upload";
@@ -894,7 +895,7 @@ export function ChatThread({
                     )
                   ) : (
                     <span className="whitespace-pre-wrap break-words">
-                      {m.body}
+                      {renderLinkifiedText(m.body ?? "")}
                       {m.edited_at && (
                         <span
                           className={cn(

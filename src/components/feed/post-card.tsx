@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { GlassSheet, VerifiedBadge } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { renderLinkifiedText } from "@/lib/linkify";
 import { toggleLike, reportPost, deletePost } from "@/app/(student)/home/actions";
 import { ShareSheet } from "@/components/feed/share-sheet";
 import { CommentsSheet } from "@/components/feed/comments-sheet";
@@ -192,7 +193,7 @@ function PostCardImpl({
 
       {post.body && (
         <p className="mt-2.5 whitespace-pre-wrap text-[15px] leading-[22px] text-fg">
-          {post.body}
+          {renderLinkifiedText(post.body)}
         </p>
       )}
       {post.image_url && (
