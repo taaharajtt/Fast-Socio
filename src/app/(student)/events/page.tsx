@@ -149,9 +149,9 @@ export default async function EventsPage() {
           </p>
         </div>
         <Link
-          href="/events/new"
+          href="/communities/new"
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-card text-fg-muted hover:text-fg"
-          aria-label="Create event"
+          aria-label="Create community"
         >
           <Plus className="h-5 w-5" aria-hidden />
         </Link>

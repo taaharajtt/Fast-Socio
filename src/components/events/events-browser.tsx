@@ -111,12 +111,11 @@ export function EventsBrowser({
         </section>
       )}
 
-      {/* Campus societies — replaces the old "Browse by Category" event list.
-          SocietyBrowser owns its own search, status flags and category chips. */}
+      {/* Communities — replaces the old "Browse by Category" event list. */}
       <section className="mt-8">
-        <h2 className="text-[17px] font-bold">Campus Societies</h2>
+        <h2 className="text-[17px] font-bold">Communities</h2>
         <p className="mt-0.5 text-xs text-fg-muted">
-          Explore and follow the societies running campus life.
+          Discover and join active campus communities.
         </p>
         {societies.length === 0 ? (
           <p className="mt-4 rounded-[14px] bg-card p-6 text-center text-sm text-fg-muted">
@@ -126,7 +125,6 @@ export function EventsBrowser({
           <SocietyBrowser societies={societies} />
         )}
       </section>
-
     </>
   );
 }
