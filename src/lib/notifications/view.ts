@@ -44,6 +44,8 @@ export function notificationActionPhrase(type: string): string {
       return "sent a message in your community";
     case "community_post":
       return "posted in your community";
+    case "community_post_review":
+      return "submitted a post for review in your community";
     case "event_post_request":
       return "wants to post in your event";
     case "help_offer_accepted":
@@ -142,6 +144,8 @@ export function notificationCategory(type: string): ActivityCategory {
       return "messages";
     case "community_post":
       return "announcements";
+    case "community_post_review":
+      return "requests";
     case "event_post_request":
       return "requests";
     default:
@@ -298,6 +302,17 @@ export function notificationView(
       return {
         text: `${who} posted${communityName}`,
         href: data.community_id ? `/communities/${data.community_id}` : "/communities",
+      };
+    }
+    case "community_post_review": {
+      const reviewWho =
+        actorName === null || data.is_anonymous ? "Someone" : who;
+      const communityName = data.community_name ?? "your community";
+      return {
+        text: `${reviewWho} submitted a post for review in ${communityName}`,
+        href: data.community_id
+          ? `/communities/${data.community_id}?tab=review`
+          : "/communities",
       };
     }
     case "event_post_request":

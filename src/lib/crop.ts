@@ -12,7 +12,7 @@ export type Size = { width: number; height: number };
 export type Offset = { x: number; y: number };
 
 /** Largest edge of the exported image; keeps uploads light on mobile data. */
-export const MAX_EXPORT_EDGE = 1440;
+export const MAX_EXPORT_EDGE = 1080;
 export const MIN_ZOOM = 1;
 export const MAX_ZOOM = 4;
 

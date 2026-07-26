@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { compressImageTo1080p } from "@/lib/image-compression";
 
 /**
  * Upload a blob to Supabase Storage with real progress events (UAT-004).
@@ -29,6 +30,20 @@ export async function uploadWithProgress(
   } = await supabase.auth.getSession();
   if (!session) throw new Error("You are not signed in.");
 
+  // Every image upload (chat attachments, post media, avatars, community/
+  // society covers) is scaled to ~1080p and re-compressed before it ever
+  // reaches Storage — the cropper already does its own capped export, but
+  // uncropped images (raw attachments, avatar picks) had no size limit at all.
+  let uploadBlob = blob;
+  const contentType = opts.contentType ?? blob.type;
+  if (contentType.startsWith("image/") && contentType !== "image/svg+xml") {
+    try {
+      uploadBlob = await compressImageTo1080p(blob);
+    } catch {
+      uploadBlob = blob; // Decoding failed (corrupt/unsupported) — upload as-is.
+    }
+  }
+
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
   const url = `${base}/storage/v1/object/${bucket}/${encodeURI(path)}`;
@@ -39,7 +54,10 @@ export async function uploadWithProgress(
     xhr.open(opts.upsert ? "PUT" : "POST", url);
     xhr.setRequestHeader("authorization", `Bearer ${session.access_token}`);
     xhr.setRequestHeader("apikey", anon);
-    if (opts.contentType) xhr.setRequestHeader("content-type", opts.contentType);
+    // Compression can change the encoded format (e.g. a non-alpha PNG becomes
+    // JPEG), so the header must reflect uploadBlob's actual type, not the
+    // caller's original guess.
+    xhr.setRequestHeader("content-type", uploadBlob.type || opts.contentType || contentType);
     xhr.setRequestHeader("x-upsert", opts.upsert ? "true" : "false");
     xhr.setRequestHeader("cache-control", "3600");
 
@@ -54,7 +72,7 @@ export async function uploadWithProgress(
 
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
-        opts.onProgress?.({ loaded: blob.size, total: blob.size, percent: 100 });
+        opts.onProgress?.({ loaded: uploadBlob.size, total: uploadBlob.size, percent: 100 });
         resolve({ path });
       } else {
         // Storage returns a JSON { message } on failure.
@@ -76,7 +94,7 @@ export async function uploadWithProgress(
       opts.signal.addEventListener("abort", () => xhr.abort(), { once: true });
     }
 
-    xhr.send(blob);
+    xhr.send(uploadBlob);
   });
 }
 
