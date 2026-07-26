@@ -71,7 +71,7 @@ export default async function CommunityChatPage({
     <div className="fixed inset-0 z-40 mx-auto flex h-[calc(100dvh-var(--kb,0px))] max-w-md flex-col overflow-hidden bg-bg px-4">
       <header className="flex shrink-0 items-center gap-3 border-b border-glass-border py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <Link
-          href="/chat"
+          href={`/communities/${id}`}
           aria-label="Back"
           className="glass flex h-9 w-9 items-center justify-center rounded-full text-fg-muted"
         >

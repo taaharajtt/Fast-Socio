@@ -27,7 +27,7 @@ export default function NewCommunityPage() {
     <main className="mx-auto w-full max-w-md px-5 py-6">
       <div className="mb-4 flex items-center gap-3">
         <Link
-          href="/communities"
+          href="/events"
           aria-label="Back"
           className="glass flex h-9 w-9 items-center justify-center rounded-full text-fg-muted"
         >
