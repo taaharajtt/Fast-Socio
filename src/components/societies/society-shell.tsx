@@ -1,51 +1,44 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, Settings2 } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { AppImage } from "@/components/ui/app-image";
 import { VerifiedBadge } from "@/components/ui";
-import { RouteTabs, type RouteTab } from "@/components/ui/route-tabs";
-import { SkeletonRows } from "@/components/ui/skeleton";
 import { communityIcon } from "@/lib/communities/icon";
 import { categoryLabel } from "@/lib/societies/constants";
-import { canManageSociety } from "@/lib/societies/logic";
 import { FollowSocietyButton } from "@/components/societies/follow-society-button";
 import { SocietyReportButton } from "@/components/societies/society-report-button";
+import { cn } from "@/lib/utils";
 import type { SocietyContext } from "@/lib/societies/load";
-import type { SocietyTab } from "@/lib/societies/constants";
+
+export type SocietyShellTab = {
+  key: string;
+  label: string;
+  badge?: number;
+  content: React.ReactNode;
+};
 
 const GRADIENT = "linear-gradient(135deg, #4c1d95, #7c3aed)";
 
 /**
- * Shared chrome for every society profile sub-route: the banner hero (cover,
- * logo, name, verification, follow) and the tab bar. Each route renders its own
- * panel as `children`.
+ * Stable chrome for a society profile: the banner hero (cover, logo, name,
+ * verification, follow) and the subtab bar stay mounted and visually frozen
+ * while `activeTab` switches — every tab's content is server-fetched up front
+ * (see /societies/[id]/page.tsx) and handed in as `tabs[].content`, so
+ * switching tabs is a pure client state change with zero network round trip
+ * and zero layout shift.
  */
 export function SocietyShell({
   ctx,
-  active,
-  children,
+  tabs,
 }: {
   ctx: SocietyContext;
-  active: SocietyTab;
-  children: React.ReactNode;
+  tabs: SocietyShellTab[];
 }) {
   const { society: s, viewer } = ctx;
-  const canManage = canManageSociety(viewer);
-  const base = `/societies/${s.id}`;
-
-  const tabs: RouteTab[] = [
-    { key: "overview", href: base, label: "Overview" },
-    { key: "events", href: `${base}/events`, label: "Events" },
-    { key: "announcements", href: `${base}/announcements`, label: "News" },
-    { key: "members", href: `${base}/members`, label: "Members" },
-    { key: "recruitment", href: `${base}/recruitment`, label: "Recruit" },
-  ];
-  const skeletons: Record<string, React.ReactNode> = {
-    overview: <SkeletonRows count={3} />,
-    events: <SkeletonRows count={3} />,
-    announcements: <SkeletonRows count={3} />,
-    members: <SkeletonRows count={4} />,
-    recruitment: <SkeletonRows count={2} />,
-  };
+  const [active, setActive] = useState(tabs[0]?.key);
+  const activeTab = tabs.find((t) => t.key === active) ?? tabs[0];
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col">
@@ -62,24 +55,14 @@ export function SocietyShell({
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
 
         <Link
-          href="/events"
+          href="/communities"
           aria-label="Back"
           className="absolute left-4 top-[max(1rem,env(safe-area-inset-top))] z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white"
         >
           <ChevronLeft className="h-5 w-5" aria-hidden />
         </Link>
 
-        <div className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] z-10 flex items-center gap-2">
-          {canManage && (
-            <Link
-              href={`${base}/manage`}
-              aria-label="Manage society"
-              className="flex h-9 items-center gap-1.5 rounded-full bg-black/40 px-3 text-sm font-semibold text-white"
-            >
-              <Settings2 className="h-4 w-4" aria-hidden />
-              Manage
-            </Link>
-          )}
+        <div className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] z-10">
           <SocietyReportButton societyId={s.id} />
         </div>
 
@@ -107,14 +90,35 @@ export function SocietyShell({
       </div>
 
       <div className="flex flex-1 flex-col px-4 py-4">
-        <RouteTabs
-          tabs={tabs}
-          activeKey={active}
-          variant="underline"
-          skeletons={skeletons}
-        >
-          <div className="pt-4">{children}</div>
-        </RouteTabs>
+        <div className="flex border-b border-white/[0.08]">
+          {tabs.map((tab) => {
+            const isActive = tab.key === activeTab?.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActive(tab.key)}
+                aria-current={isActive ? "page" : undefined}
+                className={cn(
+                  "relative flex flex-1 items-center justify-center gap-1.5 pb-3 text-center text-[15px] font-semibold transition-colors",
+                  isActive ? "text-fg" : "text-fg-muted hover:text-fg"
+                )}
+              >
+                {tab.label}
+                {tab.badge ? (
+                  <span className="gradient-brand rounded-full px-1.5 text-xs text-white">
+                    {tab.badge}
+                  </span>
+                ) : null}
+                {isActive && (
+                  <span className="absolute inset-x-0 -bottom-px h-[3px] rounded-full bg-accent" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="min-h-[300px] pt-4">{activeTab?.content}</div>
       </div>
     </main>
   );

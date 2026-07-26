@@ -27,7 +27,7 @@ export async function followSociety(societyId: string): Promise<void> {
     .from("community_members")
     .insert({ community_id: societyId, user_id: uid, role: "member" });
   revalidatePath(`/societies/${societyId}`);
-  revalidatePath("/events");
+  revalidatePath("/communities");
 }
 
 export async function unfollowSociety(societyId: string): Promise<void> {
@@ -40,7 +40,7 @@ export async function unfollowSociety(societyId: string): Promise<void> {
     .eq("community_id", societyId)
     .eq("user_id", uid);
   revalidatePath(`/societies/${societyId}`);
-  revalidatePath("/events");
+  revalidatePath("/communities");
 }
 
 export type SocietyProfileInput = {
@@ -98,8 +98,7 @@ export async function upsertSocietyProfile(
   if (error) return { ok: false, error: error.message };
 
   revalidatePath(`/societies/${societyId}`);
-  revalidatePath(`/societies/${societyId}/manage`);
-  revalidatePath("/events");
+  revalidatePath("/communities");
   return { ok: true };
 }
 
@@ -122,8 +121,7 @@ export async function assignSocietyRole(
     p_title: title?.trim() || null,
   });
   if (error) return { ok: false, error: error.message };
-  revalidatePath(`/societies/${societyId}/members`);
-  revalidatePath(`/societies/${societyId}/manage`);
+  revalidatePath(`/societies/${societyId}`);
   return { ok: true };
 }
 
@@ -140,8 +138,7 @@ export async function removeSocietyRole(
     p_user: userId,
   });
   if (error) return { ok: false, error: error.message };
-  revalidatePath(`/societies/${societyId}/members`);
-  revalidatePath(`/societies/${societyId}/manage`);
+  revalidatePath(`/societies/${societyId}`);
   return { ok: true };
 }
 
@@ -174,7 +171,6 @@ export async function createSocietyAnnouncement(
   });
   if (error) return { ok: false, error: error.message };
   revalidatePath(`/societies/${societyId}`);
-  revalidatePath(`/societies/${societyId}/announcements`);
   return { ok: true };
 }
 
@@ -190,7 +186,6 @@ export async function pinSocietyAnnouncement(
   });
   if (error) return { ok: false, error: error.message };
   revalidatePath(`/societies/${societyId}`);
-  revalidatePath(`/societies/${societyId}/announcements`);
   return { ok: true };
 }
 
@@ -204,7 +199,6 @@ export async function deleteSocietyAnnouncement(
   });
   if (error) return { ok: false, error: error.message };
   revalidatePath(`/societies/${societyId}`);
-  revalidatePath(`/societies/${societyId}/announcements`);
   return { ok: true };
 }
 

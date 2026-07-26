@@ -37,10 +37,9 @@ export function FloatingDock({
   // disabled feature is neither shown nor reachable via the primary nav.
   const items = NAV_ITEMS.filter((n) => !hiddenHrefs.includes(n.href));
 
-  // Immersive conversation screens hide the dock: 1:1 threads and community
-  // chat rooms (UAT-007).
-  if (/^\/chat\/.+/.test(pathname) || /^\/communities\/[^/]+\/chat$/.test(pathname))
-    return null;
+  // Immersive conversation screens hide the dock: 1:1 threads. Community and
+  // society chat now live inline as a shell subtab, not a full-screen route.
+  if (/^\/chat\/.+/.test(pathname)) return null;
 
   const activeHref = activeNavHref(pathname, viewerId);
 

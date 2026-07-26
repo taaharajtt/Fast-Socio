@@ -1,29 +1,13 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  ChevronLeft,
-  Calendar,
-  MapPin,
-  Users,
-  Star,
-  QrCode,
-  ChevronRight,
-} from "lucide-react";
-import { GlassCard, GlassChip } from "@/components/ui";
-import { AppImage } from "@/components/ui/app-image";
-import { RsvpButton, type RsvpState } from "@/components/events/rsvp-button";
-import {
-  EventHostControls,
-  type Organizer,
-} from "@/components/events/event-host-controls";
-import { EventTicket } from "@/components/events/event-ticket";
-import {
-  EventDiscussion,
-  type EventMessage,
-} from "@/components/events/event-discussion";
-import { EventFeedback } from "@/components/events/event-feedback";
+import { EventShell, type EventShellTab } from "@/components/events/event-shell";
+import { EventOverviewTab } from "@/components/events/tabs/event-overview-tab";
+import { EventMembersTab } from "@/components/events/tabs/event-members-tab";
+import type { RsvpState } from "@/components/events/rsvp-button";
+import type { Organizer } from "@/components/events/event-host-controls";
+import type { EventMessage } from "@/components/events/event-discussion";
+import type { Attendee } from "@/components/events/attendee-list";
 import { createClient } from "@/lib/supabase/server";
-import { formatEventDate, eventBadge } from "@/lib/events/format";
+import { formatEventDate } from "@/lib/events/format";
 import { checkInQrDataUrl } from "@/lib/events/qr";
 
 /** Whether an event's end (or start, if open-ended) is in the past. */
@@ -37,6 +21,12 @@ type DiscussionRow = {
   body: string;
   created_at: string;
   sender: { full_name: string | null; avatar_url: string | null } | null;
+};
+
+type AttendeeRow = {
+  user_id: string;
+  checked_in_at: string | null;
+  user: { id: string; full_name: string | null; username: string | null; avatar_url: string | null } | null;
 };
 
 export default async function EventPage({
@@ -54,7 +44,7 @@ export default async function EventPage({
   const { data: event } = await supabase
     .from("events")
     .select(
-      "id, title, description, category, location, starts_at, ends_at, attendee_count, capacity, status, host_id"
+      "id, title, description, category, location, starts_at, ends_at, cover_url, attendee_count, capacity, status, host_id, community_id"
     )
     .eq("id", id)
     .single();
@@ -68,10 +58,12 @@ export default async function EventPage({
     { data: attendance },
     { data: waitrow },
     { data: host },
+    { data: community },
     { data: rating },
     { data: myFeedback },
     { data: discussionRows },
     { data: organizerRows },
+    { data: attendeeRows },
   ] = await Promise.all([
     supabase
       .from("event_attendees")
@@ -85,11 +77,14 @@ export default async function EventPage({
       .eq("event_id", id)
       .eq("user_id", me)
       .maybeSingle(),
-    supabase
-      .from("profiles")
-      .select("id, full_name, avatar_url")
-      .eq("id", event.host_id)
-      .single(),
+    supabase.from("profiles").select("id, full_name, avatar_url").eq("id", event.host_id).single(),
+    event.community_id
+      ? supabase
+          .from("communities")
+          .select("id, name, is_society")
+          .eq("id", event.community_id)
+          .single()
+      : Promise.resolve({ data: null }),
     supabase.rpc("get_organizer_rating", { p_host: event.host_id }),
     ended
       ? supabase
@@ -107,13 +102,17 @@ export default async function EventPage({
       .limit(100),
     supabase
       .from("event_organizers")
-      // event_organizers has two FKs to profiles (user_id + added_by), so the
-      // embed must name the one to follow or PostgREST drops it as ambiguous.
       .select(
         "user_id, user:profiles!event_organizers_user_id_fkey(id, full_name, username, avatar_url)"
       )
       .eq("event_id", id)
       .order("created_at", { ascending: true }),
+    supabase
+      .from("event_attendees")
+      .select("user_id, checked_in_at, user:profiles(id, full_name, username, avatar_url)")
+      .eq("event_id", id)
+      .order("created_at", { ascending: true })
+      .limit(1000),
   ]);
 
   const organizers: Organizer[] = (
@@ -125,22 +124,17 @@ export default async function EventPage({
 
   const attending = Boolean(attendance);
   const waitlisted = !attending && Boolean(waitrow);
-  const rsvpState: RsvpState = attending
-    ? "going"
-    : waitlisted
-      ? "waitlisted"
-      : "none";
+  const rsvpState: RsvpState = attending ? "going" : waitlisted ? "waitlisted" : "none";
   const checkedIn = Boolean(attendance?.checked_in_at);
 
-  const ratingRow = (rating as { avg_rating: number | null; review_count: number }[] | null)?.[0];
+  const ratingRow = (rating as { avg_rating: number | null; review_count: number }[] | null)?.[0] ?? null;
 
-  // The check-in QR is only useful before the event ends and only to the holder.
   const qrDataUrl =
     attending && !ended && attendance?.check_in_code
       ? await checkInQrDataUrl(attendance.check_in_code)
       : null;
 
-  const messages: EventMessage[] = ((discussionRows as unknown as DiscussionRow[]) ?? []).map(
+  const discussionMessages: EventMessage[] = ((discussionRows as unknown as DiscussionRow[]) ?? []).map(
     (r) => ({
       id: r.id,
       sender_id: r.sender_id,
@@ -151,207 +145,75 @@ export default async function EventPage({
     })
   );
 
-  return (
-    <main className="mx-auto w-full max-w-md px-5 py-6">
-      <div className="mb-4 flex items-center gap-3">
-        <Link
-          href="/events"
-          aria-label="Back"
-          className="glass flex h-9 w-9 items-center justify-center rounded-full text-fg-muted"
-        >
-          <ChevronLeft className="h-5 w-5" aria-hidden />
-        </Link>
-        <h1 className="truncate text-lg font-bold">Event</h1>
-      </div>
+  const attendees: Attendee[] = ((attendeeRows as unknown as AttendeeRow[]) ?? [])
+    .filter((r) => r.user)
+    .map((r) => ({
+      id: r.user!.id,
+      full_name: r.user!.full_name,
+      username: r.user!.username,
+      avatar_url: r.user!.avatar_url,
+      checked_in: r.checked_in_at != null,
+    }));
 
-      <GlassCard radius="card" className="p-5">
-        <div className="flex items-center gap-2">
-          <GlassChip tone="cyan">{event.category}</GlassChip>
-          {pending && <GlassChip tone="warning">pending</GlassChip>}
-          {!pending && ended && <GlassChip>ended</GlassChip>}
-        </div>
-
-        <div className="mt-3 flex items-start justify-between gap-3">
-          <h2 className="text-2xl font-bold">{event.title}</h2>
-          {(() => {
-            const b = eventBadge(event.starts_at);
-            return (
-              <div className="gradient-brand flex shrink-0 flex-col items-center rounded-[var(--radius-md)] px-3 py-2 text-center shadow-[0_8px_24px_rgba(200,80,192,0.4)]">
-                <span className="text-xl font-extrabold leading-none text-white">
-                  {b.day}
-                </span>
-                <span className="mt-0.5 text-[11px] text-white/75">{b.month}</span>
-              </div>
-            );
-          })()}
-        </div>
-
-        <div className="mt-4 space-y-2 text-sm text-fg-muted">
-          <p className="flex items-center gap-2">
-            <Calendar className="h-4 w-4" aria-hidden />
-            {formatEventDate(event.starts_at)}
-          </p>
-          {event.location && (
-            <p className="flex items-center gap-2">
-              <MapPin className="h-4 w-4" aria-hidden />
-              {event.location}
-            </p>
-          )}
-          <Link
-            href={`/events/${id}/attendees`}
-            className="-mx-1 flex items-center gap-2 rounded-lg px-1 py-0.5 transition-colors hover:text-fg"
-          >
-            <Users className="h-4 w-4" aria-hidden />
-            <span>
-              {event.attendee_count} going
-              {event.capacity != null && ` · capacity ${event.capacity}`}
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0" aria-hidden />
-          </Link>
-        </div>
-
-        {event.description && (
-          <p className="mt-4 whitespace-pre-wrap text-[15px]">
-            {event.description}
-          </p>
-        )}
-
-        {!pending && (
-          <div className="mt-5">
-            <RsvpButton
-              eventId={event.id}
-              initialState={rsvpState}
-              count={event.attendee_count}
-              capacity={event.capacity}
-              ended={ended}
-            />
-          </div>
-        )}
-        {pending && (
-          <p className="mt-5 text-sm text-fg-muted">
-            This event is awaiting admin approval.
-          </p>
-        )}
-      </GlassCard>
-
-      {/* Organizer row + reputation. */}
-      {host && (
-        <Link href={`/profile/${host.id}`} className="mt-3 block">
-          <GlassCard className="flex items-center gap-3 p-4">
-            <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-bg-elevated">
-              {host.avatar_url && (
-                <AppImage src={host.avatar_url} alt="" sizes="40px" />
-              )}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs text-fg-muted">Organized by</p>
-              <p className="truncate text-sm font-semibold text-fg">
-                {host.full_name ?? "Organizer"}
-              </p>
-            </div>
-            {ratingRow?.avg_rating != null && (
-              <span className="flex shrink-0 items-center gap-1 text-sm font-semibold text-gold">
-                <Star className="h-4 w-4 fill-gold" aria-hidden />
-                {ratingRow.avg_rating}
-                <span className="text-xs font-normal text-fg-muted">
-                  ({ratingRow.review_count})
-                </span>
-              </span>
-            )}
-          </GlassCard>
-        </Link>
-      )}
-
-      {/* Co-organizers (public), if any. */}
-      {organizers.length > 0 && (
-        <GlassCard className="mt-3 p-4">
-          <p className="text-xs text-fg-muted">Co-organizers</p>
-          <div className="mt-2 space-y-2">
-            {organizers.map((o) => (
-              <Link
-                key={o.id}
-                href={`/profile/${o.id}`}
-                className="flex items-center gap-3"
-              >
-                <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full bg-bg-elevated">
-                  {o.avatar_url && (
-                    <AppImage src={o.avatar_url} alt="" sizes="32px" />
-                  )}
-                </div>
-                <span className="truncate text-sm font-medium text-fg">
-                  {o.full_name ?? "Organizer"}
-                </span>
-              </Link>
-            ))}
-          </div>
-        </GlassCard>
-      )}
-
-      {/* Host management: organizers + delete. Available in any status so a host
-          can also remove a pending or rejected event. */}
-      {isHost && (
-        <EventHostControls
+  const tabs: EventShellTab[] = [
+    {
+      key: "overview",
+      label: "Overview",
+      content: (
+        <EventOverviewTab
           eventId={id}
-          hostId={me}
-          initialOrganizers={organizers}
+          meId={me}
+          description={event.description}
+          formattedDate={formatEventDate(event.starts_at)}
+          location={event.location}
+          attendeeCount={event.attendee_count}
+          capacity={event.capacity}
+          host={host ?? null}
+          organizerRating={ratingRow}
+          organizers={organizers}
+          isHost={isHost}
+          isOrganizer={isOrganizer}
+          ended={ended}
+          pending={pending}
+          attending={attending}
+          checkedIn={checkedIn}
+          qrDataUrl={qrDataUrl}
+          checkInCode={attendance?.check_in_code ?? null}
+          feedback={{
+            rating: (myFeedback as { rating: number } | null)?.rating ?? null,
+            comment: (myFeedback as { comment: string | null } | null)?.comment ?? null,
+          }}
+          discussionMessages={discussionMessages}
+          canDiscuss={!pending && (attending || isOrganizer)}
         />
-      )}
+      ),
+    },
+    {
+      key: "members",
+      label: "Members",
+      content: <EventMembersTab attendees={attendees} />,
+    },
+  ];
 
-      {/* Organizer check-in entry. */}
-      {isOrganizer && !pending && (
-        <Link href={`/events/${id}/check-in`} className="mt-3 block">
-          <GlassCard className="flex items-center gap-3 p-4">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full gradient-brand">
-              <QrCode className="h-5 w-5 text-white" aria-hidden />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-fg">Check-in console</p>
-              <p className="text-xs text-fg-muted">
-                Validate attendee codes at the door
-              </p>
-            </div>
-          </GlassCard>
-        </Link>
-      )}
-
-      {/* Attendee's own check-in pass. */}
-      {attending && !ended && (
-        <div className="mt-3">
-          <EventTicket
-            qrDataUrl={qrDataUrl}
-            code={attendance!.check_in_code}
-            checkedIn={checkedIn}
-          />
-        </div>
-      )}
-
-      {/* Post-event feedback for attendees. */}
-      {ended && attending && (
-        <div className="mt-3">
-          <EventFeedback
-            eventId={id}
-            initialRating={
-              (myFeedback as { rating: number } | null)?.rating ?? null
-            }
-            initialComment={
-              (myFeedback as { comment: string | null } | null)?.comment ?? null
-            }
-          />
-        </div>
-      )}
-
-      {/* Discussion — visible to attendees and organizers (host/admin via RLS). */}
-      {!pending && (attending || isOrganizer) && (
-        <section className="mt-5">
-          <h3 className="mb-1 text-sm font-semibold text-fg">Discussion</h3>
-          <EventDiscussion
-            eventId={id}
-            meId={me}
-            canPost={attending || isOrganizer}
-            initialMessages={messages}
-          />
-        </section>
-      )}
-    </main>
+  return (
+    <EventShell
+      event={{
+        id: event.id,
+        title: event.title,
+        category: event.category,
+        cover_url: event.cover_url,
+        hostName: community?.name ?? host?.full_name ?? null,
+        hostHref:
+          community && community.is_society
+            ? `/societies/${community.id}`
+            : host
+              ? `/profile/${host.id}`
+              : null,
+        pending,
+        ended,
+      }}
+      rsvp={{ initialState: rsvpState, count: event.attendee_count, capacity: event.capacity }}
+      tabs={tabs}
+    />
   );
 }

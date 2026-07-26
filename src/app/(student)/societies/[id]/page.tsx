@@ -1,197 +1,161 @@
-import Link from "next/link";
-import {
-  CalendarDays,
-  ChevronRight,
-  Globe,
-  Camera,
-  Mail,
-  Megaphone,
-  Sparkles,
-  Users,
-} from "lucide-react";
-import { SocietyShell } from "@/components/societies/society-shell";
-import { OfficerRow } from "@/components/societies/officer-row";
-import { EventMini } from "@/components/societies/event-mini";
-import { AnnouncementCard } from "@/components/societies/announcement-card";
+import { SocietyShell, type SocietyShellTab } from "@/components/societies/society-shell";
+import { BroadcastTab } from "@/components/societies/tabs/broadcast-tab";
+import { ChatTab } from "@/components/societies/tabs/chat-tab";
+import { EventsTab } from "@/components/societies/tabs/events-tab";
+import { MembersTab } from "@/components/societies/tabs/members-tab";
+import { ManageTab } from "@/components/societies/tabs/manage-tab";
 import { getSocietyContext } from "@/lib/societies/load";
 import {
   getSocietyOfficers,
   getUpcomingSocietyEvents,
+  getPastSocietyEvents,
   getSocietyAnnouncements,
 } from "@/lib/societies/queries";
-import { canManageSociety } from "@/lib/societies/logic";
+import { canManageSociety, canPostAnnouncement } from "@/lib/societies/logic";
+import { createClient } from "@/lib/supabase/server";
+import { fetchPollResults, type PollOptionResult } from "@/app/(student)/communities/actions";
+import type { CommunityMessage } from "@/components/communities/community-chat";
+import type { PendingPost } from "@/components/communities/review-post-row";
 
-export default async function SocietyOverviewPage({
+/**
+ * A society's single page. Every subtab's data is fetched here, up front, in
+ * parallel, and handed to the client SocietyShell as fully-loaded content —
+ * so switching tabs (Broadcast/Chat/Events/Members/Manage) is an instant
+ * client state change with a frozen header, never a route navigation.
+ */
+export default async function SocietyPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
   const ctx = await getSocietyContext(id);
-  const { society: s, viewer } = ctx;
-  const base = `/societies/${id}`;
-
-  const [officers, events, announcements] = await Promise.all([
-    getSocietyOfficers(id),
-    getUpcomingSocietyEvents(id, 3),
-    getSocietyAnnouncements(id, 2),
-  ]);
+  const { viewer } = ctx;
   const canManage = canManageSociety(viewer);
+  const canPost = canPostAnnouncement(viewer);
+  const isMember = viewer.isFollowing;
 
-  return (
-    <SocietyShell ctx={ctx} active="overview">
-      <div className="space-y-6">
-        {/* About + socials */}
-        <section>
-          {s.description ? (
-            <p className="whitespace-pre-wrap text-[15px] text-fg/90">
-              {s.description}
-            </p>
-          ) : (
-            <p className="text-sm text-fg-muted">No description yet.</p>
-          )}
-          {(s.instagram_url || s.website_url || s.contact_email) && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {s.instagram_url && (
-                <a
-                  href={s.instagram_url}
-                  target="_blank"
-                  rel="noopener noreferrer nofollow"
-                  className="flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs font-medium text-fg-muted"
-                >
-                  <Camera className="h-3.5 w-3.5" aria-hidden /> Instagram
-                </a>
-              )}
-              {s.website_url && (
-                <a
-                  href={s.website_url}
-                  target="_blank"
-                  rel="noopener noreferrer nofollow"
-                  className="flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs font-medium text-fg-muted"
-                >
-                  <Globe className="h-3.5 w-3.5" aria-hidden /> Website
-                </a>
-              )}
-              {s.contact_email && (
-                <a
-                  href={`mailto:${s.contact_email}`}
-                  className="flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs font-medium text-fg-muted"
-                >
-                  <Mail className="h-3.5 w-3.5" aria-hidden /> Contact
-                </a>
-              )}
-            </div>
-          )}
-        </section>
+  const supabase = await createClient();
 
-        {/* Stats */}
-        <section className="grid grid-cols-2 gap-2">
-          <div className="rounded-[14px] bg-card p-4">
-            <p className="flex items-center gap-1.5 text-xs text-fg-muted">
-              <Users className="h-3.5 w-3.5" aria-hidden /> Followers
-            </p>
-            <p className="mt-1 text-xl font-bold">{s.member_count.toLocaleString()}</p>
-          </div>
-          <div className="rounded-[14px] bg-card p-4">
-            <p className="flex items-center gap-1.5 text-xs text-fg-muted">
-              <CalendarDays className="h-3.5 w-3.5" aria-hidden /> Upcoming
-            </p>
-            <p className="mt-1 text-xl font-bold">{events.length}</p>
-          </div>
-        </section>
+  const [
+    officers,
+    upcoming,
+    past,
+    announcements,
+    chatRows,
+    followerRows,
+    pendingRows,
+  ] = await Promise.all([
+    getSocietyOfficers(id),
+    getUpcomingSocietyEvents(id, 40),
+    getPastSocietyEvents(id, 20),
+    getSocietyAnnouncements(id, 50),
+    isMember
+      ? supabase
+          .from("community_chat_view")
+          .select(
+            "id, sender_id, sender_name, sender_avatar, body, poll_id, is_anonymous, created_at"
+          )
+          .eq("community_id", id)
+          .order("created_at", { ascending: true })
+          .limit(100)
+      : Promise.resolve({ data: [] as CommunityMessage[] }),
+    supabase
+      .from("community_members")
+      .select("user_id, profile:profiles(id, full_name, username, avatar_url)")
+      .eq("community_id", id)
+      .limit(200),
+    canManage
+      ? supabase
+          .from("community_review_posts")
+          .select("*")
+          .eq("community_id", id)
+          .order("created_at", { ascending: true })
+      : Promise.resolve({ data: [] as PendingPost[] }),
+  ]);
 
-        {/* Recruiting banner */}
-        {s.recruitment_open && (
-          <Link
-            href={`${base}/recruitment`}
-            className="flex items-center gap-3 rounded-[14px] bg-success/12 p-4"
-          >
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-success/20 text-success">
-              <Sparkles className="h-5 w-5" aria-hidden />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold text-fg">
-                Recruitment is open
-              </span>
-              <span className="block text-xs text-fg-muted">
-                Applications are being accepted — tap to apply.
-              </span>
-            </span>
-            <ChevronRight className="h-5 w-5 shrink-0 text-fg-muted" aria-hidden />
-          </Link>
-        )}
-
-        {/* Upcoming events */}
-        <Section
-          title="Upcoming events"
-          href={`${base}/events`}
-          show={events.length > 0}
-        >
-          <div className="space-y-2">
-            {events.map((e) => (
-              <EventMini key={e.id} event={e} />
-            ))}
-          </div>
-        </Section>
-
-        {/* Recent announcements */}
-        <Section
-          title="Latest news"
-          href={`${base}/announcements`}
-          show={announcements.length > 0}
-        >
-          <div className="space-y-2">
-            {announcements.map((a) => (
-              <AnnouncementCard key={a.id} a={a} canManage={canManage} />
-            ))}
-          </div>
-        </Section>
-
-        {/* Officers */}
-        <Section title="Officers" href={`${base}/members`} show={officers.length > 0}>
-          <div className="space-y-2">
-            {officers.slice(0, 5).map((o) => (
-              <OfficerRow key={o.user_id} officer={o} />
-            ))}
-          </div>
-        </Section>
-
-        {events.length === 0 &&
-          announcements.length === 0 &&
-          officers.length <= 1 && (
-            <div className="rounded-[14px] bg-card px-5 py-8 text-center">
-              <Megaphone className="mx-auto h-7 w-7 text-fg-muted" aria-hidden />
-              <p className="mt-2 text-sm text-fg-muted">
-                This society is just getting started.
-              </p>
-            </div>
-          )}
-      </div>
-    </SocietyShell>
+  const chatMessages = (chatRows.data as CommunityMessage[] | null) ?? [];
+  const polls: Record<string, PollOptionResult[]> = await fetchPollResults(
+    [...new Set(chatMessages.map((m) => m.poll_id).filter(Boolean) as string[])]
   );
-}
 
-function Section({
-  title,
-  href,
-  show,
-  children,
-}: {
-  title: string;
-  href: string;
-  show: boolean;
-  children: React.ReactNode;
-}) {
-  if (!show) return null;
-  return (
-    <section>
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-fg">{title}</h2>
-        <Link href={href} className="text-xs font-medium text-accent">
-          See all
-        </Link>
-      </div>
-      {children}
-    </section>
-  );
+  const officerIds = new Set(officers.map((o) => o.user_id));
+  type MemberRow = {
+    user_id: string;
+    profile: { id: string; full_name: string | null; username: string | null; avatar_url: string | null } | null;
+  };
+  const followers = ((followerRows.data ?? []) as unknown as MemberRow[])
+    .filter((r) => !officerIds.has(r.user_id))
+    .map((r) => ({
+      id: r.user_id,
+      full_name: r.profile?.full_name ?? null,
+      username: r.profile?.username ?? null,
+      avatar_url: r.profile?.avatar_url ?? null,
+    }));
+
+  const pendingPosts = (pendingRows.data as PendingPost[] | null) ?? [];
+
+  const tabs: SocietyShellTab[] = [
+    {
+      key: "broadcast",
+      label: "Broadcast",
+      content: (
+        <BroadcastTab
+          societyId={id}
+          announcements={announcements}
+          canPost={canPost}
+          canManage={canManage}
+        />
+      ),
+    },
+    {
+      key: "chat",
+      label: "Chat",
+      content: (
+        <ChatTab
+          societyId={id}
+          meId={viewer.me}
+          isMember={isMember}
+          initialMessages={chatMessages}
+          initialPolls={polls}
+        />
+      ),
+    },
+    {
+      key: "events",
+      label: "Events",
+      content: (
+        <EventsTab societyId={id} upcoming={upcoming} past={past} canManage={canManage} />
+      ),
+    },
+    {
+      key: "members",
+      label: "Members",
+      content: (
+        <MembersTab
+          description={ctx.society.description}
+          officers={officers}
+          followers={followers}
+        />
+      ),
+    },
+  ];
+
+  if (canManage) {
+    tabs.push({
+      key: "manage",
+      label: "Manage",
+      badge: pendingPosts.length,
+      content: (
+        <ManageTab
+          society={ctx.society}
+          pendingPosts={pendingPosts}
+          officers={officers}
+          viewer={{ role: viewer.role, isAdmin: viewer.isAdmin }}
+        />
+      ),
+    });
+  }
+
+  return <SocietyShell ctx={ctx} tabs={tabs} />;
 }

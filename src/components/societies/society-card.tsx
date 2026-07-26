@@ -90,6 +90,12 @@ export function SocietyCard({ s }: { s: SocietyCardVM }) {
           {!following && <UserPlus className="h-3.5 w-3.5" aria-hidden />}
           {following ? "Following" : "Follow"}
         </button>
+        <Link
+          href={`/societies/${s.id}`}
+          className="shrink-0 rounded-full bg-white/10 px-3.5 py-1.5 text-[13px] font-semibold text-fg"
+        >
+          View
+        </Link>
       </div>
     </div>
   );

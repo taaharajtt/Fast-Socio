@@ -69,17 +69,3 @@ export const DIRECTORY_FLAGS = [
   { key: "recruiting", label: "Recruiting" },
 ] as const;
 export type DirectoryFlag = (typeof DIRECTORY_FLAGS)[number]["key"];
-
-/** Profile tabs → each is a real route under /societies/[id]. */
-export const SOCIETY_TABS = [
-  "overview",
-  "events",
-  "announcements",
-  "members",
-  "recruitment",
-] as const;
-export type SocietyTab = (typeof SOCIETY_TABS)[number];
-
-export function isSocietyTab(v: string): v is SocietyTab {
-  return (SOCIETY_TABS as readonly string[]).includes(v);
-}

@@ -5,12 +5,21 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { isAppStorageUrl } from "@/lib/url-safety";
+import { isSocietyCategory } from "@/lib/societies/logic";
 
-/** Submit a new community for admin approval (status starts pending). */
+/**
+ * Submit a new community for admin approval (status starts pending). The
+ * creation modal's "Verified Community/Society" option sets isSociety so the
+ * row is born with is_society = true and a category — still reviewed by an
+ * admin like any other community, just pre-registered as a society rather
+ * than requiring a separate upsertSocietyProfile step after approval.
+ */
 export async function createCommunity(input: {
   name: string;
   description: string;
   coverUrl?: string | null;
+  isSociety?: boolean;
+  societyCategory?: string | null;
 }): Promise<{ error: string } | void> {
   const supabase = await createClient();
   const {
@@ -24,6 +33,8 @@ export async function createCommunity(input: {
   // Only accept covers we host (mirrors the post-image guard).
   if (input.coverUrl && !isAppStorageUrl(input.coverUrl))
     return { error: "Invalid cover image." };
+  if (input.isSociety && !isSocietyCategory(input.societyCategory))
+    return { error: "Pick a category for your society." };
 
   // Cap submissions to curb spam even though approval is manual.
   const allowed = await checkRateLimit("create_community", 5, 24 * 60 * 60);
@@ -37,12 +48,16 @@ export async function createCommunity(input: {
       description: input.description.trim() || null,
       cover_url: input.coverUrl ?? null,
       status: "pending",
+      is_society: input.isSociety ?? false,
+      society_category: input.isSociety ? input.societyCategory : null,
     })
     .select("id")
     .single();
   if (error) return { error: error.message };
 
-  redirect(`/communities/${data.id}`);
+  redirect(
+    input.isSociety ? `/societies/${data.id}` : `/communities/${data.id}`
+  );
 }
 
 /**

@@ -223,9 +223,9 @@ export async function deleteEvent(
   const { error } = await supabase.rpc("delete_event", { p_event_id: eventId });
   if (error) return { error: error.message };
 
-  revalidatePath("/events");
+  revalidatePath("/communities");
   revalidatePath("/profile");
-  redirect("/events");
+  redirect("/communities");
 }
 
 export type OrganizerCandidate = {

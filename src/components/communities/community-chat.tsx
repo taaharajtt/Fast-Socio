@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BarChart3, Plus, Send, VenetianMask, X } from "lucide-react";
+import { BarChart3, MessageCircle, Plus, Send, VenetianMask, X } from "lucide-react";
 import { GlassButton } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
 import { cn } from "@/lib/utils";
@@ -195,9 +195,10 @@ export function CommunityChat({
     <div className="flex min-h-[60vh] flex-1 flex-col">
       <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto py-4">
         {messages.length === 0 && (
-          <p className="mt-8 text-center text-sm text-fg-muted">
-            No messages yet — say hello 👋
-          </p>
+          <div className="mt-8 flex flex-col items-center gap-2 text-center">
+            <MessageCircle className="h-7 w-7 text-fg-muted" aria-hidden />
+            <p className="text-sm text-fg-muted">Chat room is quiet. Say hello!</p>
+          </div>
         )}
         {messages.map((m) => {
           const mine = m.sender_id === meId;

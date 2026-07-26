@@ -227,7 +227,7 @@ export function notificationView(
     case "event_approved":
       return {
         text: "Your event was approved 🎉",
-        href: data.event_id ? `/events/${data.event_id}` : "/events",
+        href: data.event_id ? `/events/${data.event_id}` : "/communities",
       };
     case "community_post_approved":
       return {
@@ -256,7 +256,7 @@ export function notificationView(
     case "waitlist_promoted":
       return {
         text: "A seat opened up — you're in! 🎟️",
-        href: data.event_id ? `/events/${data.event_id}` : "/events",
+        href: data.event_id ? `/events/${data.event_id}` : "/communities",
       };
     case "event_reminder":
       return {
@@ -264,7 +264,7 @@ export function notificationView(
           data.kind === "1h"
             ? "An event you're attending starts within the hour ⏰"
             : "An event you're attending is coming up tomorrow ⏰",
-        href: data.event_id ? `/events/${data.event_id}` : "/events",
+        href: data.event_id ? `/events/${data.event_id}` : "/communities",
       };
     case "moderation_warning":
       return {
@@ -294,7 +294,7 @@ export function notificationView(
       const communityName = data.community_name ? ` in ${data.community_name}` : "";
       return {
         text: `${communityWho} sent a message${communityName}`,
-        href: data.community_id ? `/communities/${data.community_id}/chat` : "/chat",
+        href: data.community_id ? `/communities/${data.community_id}` : "/chat",
       };
     }
     case "community_post": {
@@ -318,7 +318,7 @@ export function notificationView(
     case "event_post_request":
       return {
         text: `${who} wants to post in your event`,
-        href: data.event_id ? `/events/${data.event_id}` : "/events",
+        href: data.event_id ? `/events/${data.event_id}` : "/communities",
       };
     case "help_follow":
       return {
@@ -344,13 +344,13 @@ export function notificationView(
       return {
         text: `${who} posted a society announcement 📣`,
         href: data.society_id
-          ? `/societies/${data.society_id}/announcements`
-          : "/events",
+          ? `/societies/${data.society_id}`
+          : "/communities",
       };
     case "society_role":
       return {
         text: "You were appointed a society officer 🎖️",
-        href: data.society_id ? `/societies/${data.society_id}` : "/events",
+        href: data.society_id ? `/societies/${data.society_id}` : "/communities",
       };
     case "smart_match_application":
       return {

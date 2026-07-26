@@ -25,7 +25,7 @@ export function RegisterSocietyButton({ communityId }: { communityId: string }) 
     setError(null);
     start(async () => {
       const res = await upsertSocietyProfile(communityId, { category });
-      if (res.ok) router.push(`/societies/${communityId}/manage`);
+      if (res.ok) router.push(`/societies/${communityId}`);
       else setError(res.error);
     });
   }

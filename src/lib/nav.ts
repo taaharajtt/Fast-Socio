@@ -18,17 +18,18 @@ export type NavItem = {
  * Six-item bottom navigation (UISpec V3 §2.1): Home · Discover · Ranks ·
  * Community · Chat · Me. "Ranks" is the Leaderboard route (weekly + department
  * rankings); "Me" is the profile. "Community" is the campus-life surface at
- * /events — upcoming events on top, campus societies below — and it also owns
- * the /communities and /societies routes (see ADOPTED_ROUTES). Chat is now just
- * Messages + Requests. Two features are reached without their own dock button:
- * the Campus Map (/map) from the Home header, and Campus Help from Me → Help
- * (the /help route still exists for deep links and lights the Me tab).
+ * /communities — Your Spaces, Verified Communities, Upcoming Events, and Chat
+ * Rooms — and it also owns the /community alias, /societies, and /events
+ * routes (see ADOPTED_ROUTES). Chat is now just Messages + Requests. Two
+ * features are reached without their own dock button: the Campus Map (/map)
+ * from the Home header, and Campus Help from Me → Help (the /help route still
+ * exists for deep links and lights the Me tab).
  */
 export const NAV_ITEMS: NavItem[] = [
   { href: "/home", label: "Home", icon: Home },
   { href: "/discover", label: "Discover", icon: Compass },
   { href: "/leaderboard", label: "Ranks", icon: Trophy },
-  { href: "/events", label: "Community", icon: Users },
+  { href: "/communities", label: "Community", icon: Users },
   { href: "/chat", label: "Chat", icon: MessageCircle },
   { href: "/profile", label: "Me", icon: User },
 ];
@@ -38,10 +39,10 @@ const ADOPTED_ROUTES: Array<[prefix: string, tab: string]> = [
   ["/activity", "/home"], // reached from the Home header
   ["/post", "/home"],
   // The whole campus-life cluster lights the "Community" tab (which lives at
-  // /events): the community directory, society pages, and the /community alias.
-  ["/community", "/events"],
-  ["/communities", "/events"],
-  ["/societies", "/events"],
+  // /communities): the /community alias, society pages, and event pages.
+  ["/community", "/communities"],
+  ["/societies", "/communities"],
+  ["/events", "/communities"],
   ["/settings", "/profile"],
   ["/help", "/profile"], // Campus Help now lives at Me → Help
 ];

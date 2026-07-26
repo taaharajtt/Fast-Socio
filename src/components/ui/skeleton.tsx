@@ -70,6 +70,15 @@ export function SkeletonCards({ count = 3 }: { count?: number }) {
 }
 
 /**
+ * Shimmer for a stable-shell subtab panel while its content streams in (society,
+ * chat room, and event detail pages) — 3 rows so the panel never collapses and
+ * the frozen header above it never jumps.
+ */
+export function TabSkeletonLoader() {
+  return <SkeletonRows count={3} />;
+}
+
+/**
  * Alternating left/right message bubbles — the shimmer for a chat panel, whose
  * shape a generic list skeleton would misrepresent.
  */

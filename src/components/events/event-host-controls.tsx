@@ -268,7 +268,7 @@ function DeleteConfirm({
   function confirm() {
     setError(null);
     start(async () => {
-      // deleteEvent redirects to /events on success; only returns on failure.
+      // deleteEvent redirects to /communities on success; only returns on failure.
       const res = await deleteEvent(eventId);
       if (res?.error) setError(res.error);
     });
