@@ -8,6 +8,7 @@ import type { EventMessage } from "@/components/events/event-discussion";
 import type { Attendee } from "@/components/events/attendee-list";
 import { createClient } from "@/lib/supabase/server";
 import { formatEventDate } from "@/lib/events/format";
+import { getSocialProof } from "@/lib/communities/social-proof";
 import { checkInQrDataUrl } from "@/lib/events/qr";
 
 /** Whether an event's end (or start, if open-ended) is in the past. */
@@ -155,6 +156,13 @@ export default async function EventPage({
       checked_in: r.checked_in_at != null,
     }));
 
+  // Cover social proof, ranked from the attendee list already loaded above.
+  const proof = await getSocialProof(
+    attendees.map((a) => a.id),
+    event.attendee_count,
+    me
+  );
+
   const tabs: EventShellTab[] = [
     {
       key: "overview",
@@ -213,6 +221,7 @@ export default async function EventPage({
         ended,
       }}
       rsvp={{ initialState: rsvpState, count: event.attendee_count, capacity: event.capacity }}
+      proof={proof}
       tabs={tabs}
     />
   );

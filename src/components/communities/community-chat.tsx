@@ -191,9 +191,12 @@ export function CommunityChat({
     return true;
   }
 
+  // The parent (SpaceShell's `fill` tab) hands this component a fixed height,
+  // so the feed is the only thing that scrolls and the composer sits on the
+  // bottom edge — no sticky positioning, no page-level scrolling.
   return (
-    <div className="flex min-h-[60vh] flex-1 flex-col">
-      <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto py-4">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto py-4">
         {messages.length === 0 && (
           <div className="mt-8 flex flex-col items-center gap-2 text-center">
             <MessageCircle className="h-7 w-7 text-fg-muted" aria-hidden />
@@ -268,66 +271,63 @@ export function CommunityChat({
         <div ref={bottomRef} />
       </div>
 
-      {composingPoll && (
-        <PollComposer
-          onCancel={() => setComposingPoll(false)}
-          onSubmit={onCreatePoll}
-        />
-      )}
+      <div className="shrink-0 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+        {composingPoll && (
+          <PollComposer
+            onCancel={() => setComposingPoll(false)}
+            onSubmit={onCreatePoll}
+          />
+        )}
 
-      <form
-        onSubmit={onSend}
-        className="sticky bottom-0 space-y-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2"
-      >
-        <div className="flex items-center gap-2">
+        {error && <p className="pb-1.5 text-sm text-error">{error}</p>}
+
+        {/* One composer row. Poll and anonymity are chat *actions*, alongside
+            Send — not banners stacked above the input (UAT-005 keeps anonymity
+            in the open chat room, just no longer as its own block). */}
+        <form onSubmit={onSend} className="flex items-center gap-1.5 pt-2">
           <button
             type="button"
             aria-label="Create a poll"
             aria-pressed={composingPoll}
             onClick={() => setComposingPoll((p) => !p)}
             className={cn(
-              "flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors",
+              "flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors",
               composingPoll ? "bg-aura text-white" : "glass text-fg-muted"
             )}
           >
-            <BarChart3 className="h-5 w-5" aria-hidden />
+            <BarChart3 className="h-[18px] w-[18px]" aria-hidden />
+          </button>
+          <button
+            type="button"
+            aria-label={anon ? "Posting anonymously" : "Post anonymously"}
+            aria-pressed={anon}
+            onClick={() => setAnon((a) => !a)}
+            className={cn(
+              "flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors",
+              anon ? "bg-aura text-white" : "glass text-fg-muted"
+            )}
+          >
+            <VenetianMask className="h-[18px] w-[18px]" aria-hidden />
           </button>
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder={anon ? "Message anonymously…" : "Message the community…"}
+            placeholder={anon ? "Message anonymously…" : "Message…"}
             // min-w-0 lets the input shrink so the Send button stays on-screen
             // on narrow viewports instead of being pushed off the row.
-            className="glass h-11 min-w-0 flex-1 rounded-[var(--radius-pill)] px-4 text-base text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
+            className="glass h-10 min-w-0 flex-1 rounded-[var(--radius-pill)] px-4 text-base text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
           />
           <GlassButton
             type="submit"
             size="icon"
-            className="h-11 w-11 shrink-0"
+            className="h-10 w-10 shrink-0"
             aria-label="Send"
             disabled={busy || draft.trim().length === 0}
           >
-            <Send className="h-5 w-5" aria-hidden />
+            <Send className="h-[18px] w-[18px]" aria-hidden />
           </GlassButton>
-        </div>
-
-        {/* UAT-005: anonymity lives here, in the open chat room — not in the
-            moderated Main panel where posts are attributed. */}
-        <button
-          type="button"
-          onClick={() => setAnon((a) => !a)}
-          aria-pressed={anon}
-          className={cn(
-            "flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors",
-            anon ? "bg-aura text-white" : "glass text-fg-muted"
-          )}
-        >
-          <VenetianMask className="h-3.5 w-3.5" aria-hidden />
-          {anon ? "Posting anonymously" : "Post anonymously"}
-        </button>
-      </form>
-
-      {error && <p className="pb-2 text-sm text-error">{error}</p>}
+        </form>
+      </div>
     </div>
   );
 }

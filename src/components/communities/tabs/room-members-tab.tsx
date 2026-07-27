@@ -10,10 +10,12 @@ export function RoomMembersTab({
 }) {
   return (
     <div className="space-y-4">
+      {/* Same pattern as the society Members tab: a plain heading and the text. */}
       {description && (
-        <div className="rounded-[14px] bg-card p-4">
+        <section>
+          <h2 className="mb-1 text-sm font-semibold text-fg">Description</h2>
           <p className="whitespace-pre-wrap text-[14px] text-fg-muted">{description}</p>
-        </div>
+        </section>
       )}
 
       {members.length === 0 ? (

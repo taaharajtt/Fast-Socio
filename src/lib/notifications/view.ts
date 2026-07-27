@@ -17,6 +17,7 @@ export const SYSTEM_NOTIFICATION_TYPES = new Set([
   "help_offer_accepted",
   "matching_accepted",
   "smart_match_accepted",
+  "community_join_approved",
 ]);
 
 /** Short verb phrase for a groupable actor action, e.g. "liked your post". */
@@ -46,6 +47,8 @@ export function notificationActionPhrase(type: string): string {
       return "posted in your community";
     case "community_post_review":
       return "submitted a post for review in your community";
+    case "community_join_request":
+      return "asked to join your community";
     case "event_post_request":
       return "wants to post in your event";
     case "help_offer_accepted":
@@ -146,6 +149,10 @@ export function notificationCategory(type: string): ActivityCategory {
       return "announcements";
     case "community_post_review":
       return "requests";
+    case "community_join_request":
+      return "requests";
+    case "community_join_approved":
+      return "announcements";
     case "event_post_request":
       return "requests";
     default:
@@ -315,6 +322,20 @@ export function notificationView(
           : "/communities",
       };
     }
+    case "community_join_request":
+      return {
+        text: `${who} asked to join your community`,
+        href: data.community_id
+          ? `/communities/${data.community_id}`
+          : "/communities",
+      };
+    case "community_join_approved":
+      return {
+        text: "You're in — your join request was approved 🎉",
+        href: data.community_id
+          ? `/communities/${data.community_id}`
+          : "/communities",
+      };
     case "event_post_request":
       return {
         text: `${who} wants to post in your event`,

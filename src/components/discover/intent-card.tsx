@@ -421,7 +421,7 @@ function TeamRow({
       <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-fg-muted">
         Already on the team
       </p>
-      <div className="flex gap-3 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex gap-3 overflow-x-auto no-scrollbar">
         {members.slice(0, 5).map((m) => (
           <div key={m.id} className="flex w-12 shrink-0 flex-col items-center gap-1">
             <span className="relative h-10 w-10 overflow-hidden rounded-full bg-bg-elevated ring-2 ring-white/10">

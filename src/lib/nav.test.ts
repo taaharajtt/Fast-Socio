@@ -9,14 +9,13 @@ describe("activeNavHref", () => {
     expect(activeNavHref("/home", ME)).toBe("/home");
     expect(activeNavHref("/discover", ME)).toBe("/discover");
     expect(activeNavHref("/leaderboard", ME)).toBe("/leaderboard");
-    expect(activeNavHref("/events", ME)).toBe("/events");
+    expect(activeNavHref("/communities", ME)).toBe("/communities");
     expect(activeNavHref("/chat", ME)).toBe("/chat");
     expect(activeNavHref("/profile", ME)).toBe("/profile");
   });
 
   // UAT-006: the highlight must survive drilling into a subpage.
   it("keeps a section lit on its subpages", () => {
-    expect(activeNavHref("/events/abc", ME)).toBe("/events");
     expect(activeNavHref("/chat/abc", ME)).toBe("/chat");
     expect(activeNavHref("/profile/edit", ME)).toBe("/profile");
     expect(activeNavHref("/profile/aura", ME)).toBe("/profile");
@@ -26,12 +25,13 @@ describe("activeNavHref", () => {
     expect(activeNavHref("/activity", ME)).toBe("/home");
     expect(activeNavHref("/post/abc", ME)).toBe("/home");
     // The campus-life cluster all lights the Community tab (which lives at
-    // /events); Chat is now purely 1:1 messaging.
-    expect(activeNavHref("/communities", ME)).toBe("/events");
-    expect(activeNavHref("/communities/abc", ME)).toBe("/events");
-    expect(activeNavHref("/community", ME)).toBe("/events");
-    expect(activeNavHref("/societies", ME)).toBe("/events");
-    expect(activeNavHref("/societies/abc", ME)).toBe("/events");
+    // /communities); Chat is now purely 1:1 messaging.
+    expect(activeNavHref("/communities", ME)).toBe("/communities");
+    expect(activeNavHref("/communities/abc", ME)).toBe("/communities");
+    expect(activeNavHref("/community", ME)).toBe("/communities");
+    expect(activeNavHref("/societies", ME)).toBe("/communities");
+    expect(activeNavHref("/societies/abc", ME)).toBe("/communities");
+    expect(activeNavHref("/events/abc", ME)).toBe("/communities");
     expect(activeNavHref("/settings", ME)).toBe("/profile");
     // Campus Help now lives at Me → Help, not its own dock tab.
     expect(activeNavHref("/help", ME)).toBe("/profile");

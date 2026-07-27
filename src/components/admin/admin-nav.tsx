@@ -99,7 +99,7 @@ export function AdminTopbar({ isSuper }: { isSuper: boolean }) {
   const isActive = useActive();
   const items = NAV.filter((n) => !n.super || isSuper);
   return (
-    <div className="sticky top-0 z-10 flex items-center gap-1 overflow-x-auto border-b border-glass-border bg-bg px-3 py-2 [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden">
+    <div className="sticky top-0 z-10 flex items-center gap-1 overflow-x-auto border-b border-glass-border bg-bg px-3 py-2 no-scrollbar md:hidden">
       <span className="mr-1 shrink-0 font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-fg">
         Socio·admin
       </span>

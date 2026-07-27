@@ -1,8 +1,10 @@
-import { Megaphone, ShieldCheck, Users } from "lucide-react";
+import { DoorOpen, Megaphone, ShieldCheck, Users } from "lucide-react";
 import { ReviewPostRow, type PendingPost } from "@/components/communities/review-post-row";
+import { JoinRequestQueue } from "@/components/communities/join-request-queue";
 import { MemberRoleList } from "@/components/societies/member-role-list";
 import { SocietyProfileEditor } from "@/components/societies/society-profile-editor";
 import type { Viewer } from "@/lib/societies/logic";
+import type { JoinRequestVM } from "@/lib/communities/relationship";
 import type { OfficerVM, SocietyRow } from "@/lib/societies/types";
 
 function Section({
@@ -37,16 +39,26 @@ function Section({
 export function ManageTab({
   society,
   pendingPosts,
+  joinRequests,
   officers,
   viewer,
 }: {
   society: SocietyRow;
   pendingPosts: PendingPost[];
+  joinRequests: JoinRequestVM[];
   officers: OfficerVM[];
   viewer: Viewer;
 }) {
   return (
     <div className="space-y-3">
+      <Section
+        icon={<DoorOpen className="h-4 w-4" aria-hidden />}
+        title="Join requests"
+        desc="Approve to let them chat; followers can already read broadcasts."
+      >
+        <JoinRequestQueue communityId={society.id} requests={joinRequests} />
+      </Section>
+
       <Section
         icon={<Megaphone className="h-4 w-4" aria-hidden />}
         title="Pending member posts"

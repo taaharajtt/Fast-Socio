@@ -38,10 +38,13 @@ export function MembersTab({
 
   return (
     <div className="space-y-5">
+      {/* Plain title + text, no card: the description is prose about the
+          society, not another tappable surface competing with the roster. */}
       {description && (
-        <div className="rounded-[14px] bg-card p-4">
+        <section>
+          <h2 className="mb-1 text-sm font-semibold text-fg">Description</h2>
           <p className="whitespace-pre-wrap text-[14px] text-fg-muted">{description}</p>
-        </div>
+        </section>
       )}
 
       {empty ? (

@@ -2,47 +2,21 @@ import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import {
   CommunityMainView,
-  CreationModalTrigger,
+  CreateSpaceButton,
   type YourSpaceVM,
-  type UpcomingEventVM,
+  type TileVM,
 } from "@/components/communities/community-main-view";
-import type { CommunityVM } from "@/components/communities/community-browser";
-import type { SocietyCategory } from "@/lib/societies/logic";
-import type { SocietyCardVM } from "@/lib/societies/types";
 import { eventBadge } from "@/lib/events/format";
+import type { ChatRoomCardVM } from "@/components/communities/chat-room-card";
+import type { JoinState } from "@/app/(student)/communities/actions";
+import { onlineSinceIso } from "@/lib/time";
 
-type SpaceRow = {
-  role: "owner" | "moderator" | "member";
-  community: {
-    id: string;
-    name: string;
-    avatar_url: string | null;
-    cover_url: string | null;
-    is_society: boolean;
-  } | null;
-};
-
-type VerifiedRow = {
+type CommunityLite = {
   id: string;
   name: string;
-  description: string | null;
   avatar_url: string | null;
   cover_url: string | null;
-  member_count: number;
-  society_category: string | null;
-  is_official: boolean;
-  recruitment_open: boolean;
-};
-
-type EventRow = {
-  id: string;
-  title: string;
-  location: string | null;
-  cover_url: string | null;
-  starts_at: string;
-  attendee_count: number;
-  host_id: string;
-  community_id: string | null;
+  is_society: boolean;
 };
 
 type ChatRoomRow = {
@@ -52,131 +26,206 @@ type ChatRoomRow = {
   avatar_url: string | null;
   cover_url: string | null;
   member_count: number;
-  status: string;
   owner_id: string;
 };
 
+const COMMUNITY_LITE = "id, name, avatar_url, cover_url, is_society";
+
 /**
- * The Community hub (dock tab "Community"): Your Spaces, Verified
- * Communities, Upcoming Events, and Chat Rooms — nothing else. Every space a
- * student can reach from campus life funnels through here.
+ * The Community hub (dock tab "Community"): Your Spaces → Verified Communities
+ * → Events → Chat Rooms, in that order and nothing else. The first three are
+ * compact horizontal rails; only chat rooms get full-width cards, because only
+ * they carry Follow/Join actions.
  */
 export default async function CommunitiesPage() {
   const supabase = await createClient();
   const me = (await getAuthUserId())!;
 
   const [
-    { data: spaceRows },
-    { data: officerRows },
+    { data: memberRows },
+    { data: followRows },
     { data: verifiedRows },
     { data: eventRows },
     { data: chatRoomRows },
+    { data: requestRows },
+    { data: matchRows },
   ] = await Promise.all([
     supabase
       .from("community_members")
-      .select("role, community:communities(id, name, avatar_url, cover_url, is_society)")
+      .select(`community:communities(${COMMUNITY_LITE})`)
       .eq("user_id", me),
-    supabase.from("society_roles").select("society_id").eq("user_id", me),
+    supabase
+      .from("community_followers")
+      .select(`community:communities(${COMMUNITY_LITE})`)
+      .eq("user_id", me),
     supabase
       .from("communities")
-      .select(
-        "id, name, description, avatar_url, cover_url, member_count, society_category, is_official, recruitment_open"
-      )
+      .select("id, name, avatar_url, cover_url, member_count, is_official")
       .eq("status", "approved")
       .or("is_society.eq.true,is_official.eq.true")
       .order("is_official", { ascending: false })
-      .order("member_count", { ascending: false }),
+      .order("member_count", { ascending: false })
+      .limit(20),
     supabase
       .from("events")
-      .select(
-        "id, title, location, cover_url, starts_at, attendee_count, host_id, community_id"
-      )
+      .select("id, title, cover_url, starts_at")
       .eq("status", "approved")
       .gt("starts_at", new Date().toISOString())
       .order("starts_at", { ascending: true })
-      .limit(10),
+      .limit(20),
     supabase
       .from("communities")
-      .select("id, name, description, avatar_url, cover_url, member_count, status, owner_id")
+      .select("id, name, description, avatar_url, cover_url, member_count, owner_id")
       .eq("status", "approved")
       .eq("is_society", false)
-      .order("member_count", { ascending: false }),
+      .order("member_count", { ascending: false })
+      .limit(30),
+    supabase.from("community_join_requests").select("community_id, status").eq("user_id", me),
+    supabase
+      .from("matches")
+      .select("user_low, user_high")
+      .or(`user_low.eq.${me},user_high.eq.${me}`),
   ]);
 
-  const officerSocietyIds = new Set((officerRows ?? []).map((r) => r.society_id as string));
-  const yourSpaces: YourSpaceVM[] = ((spaceRows ?? []) as unknown as SpaceRow[])
-    .filter((r) => r.community)
-    .map((r) => {
-      const c = r.community!;
-      const role: YourSpaceVM["role"] =
-        r.role === "owner"
-          ? "Owner"
-          : r.role === "moderator" || (c.is_society && officerSocietyIds.has(c.id))
-            ? "Officer"
-            : "Member";
-      return {
-        id: c.id,
-        name: c.name,
-        avatar_url: c.avatar_url,
-        cover_url: c.cover_url,
-        role,
-        isSociety: c.is_society,
-      };
-    });
+  // Your spaces = everything you follow OR participate in, deduped.
+  type Joined = { community: CommunityLite | null };
+  const spaceMap = new Map<string, CommunityLite>();
+  for (const r of [
+    ...((memberRows ?? []) as unknown as Joined[]),
+    ...((followRows ?? []) as unknown as Joined[]),
+  ]) {
+    if (r.community) spaceMap.set(r.community.id, r.community);
+  }
+  const spaceIds = [...spaceMap.keys()];
 
-  const verifiedCommunities: SocietyCardVM[] = ((verifiedRows ?? []) as VerifiedRow[]).map((s) => ({
-    id: s.id,
-    name: s.name,
-    description: s.description,
-    avatar_url: s.avatar_url,
-    cover_url: s.cover_url,
-    member_count: s.member_count,
-    category: (s.society_category as SocietyCategory | null) ?? null,
-    isOfficial: s.is_official,
-    isRecruiting: s.recruitment_open,
-    isFollowing: yourSpaces.some((sp) => sp.id === s.id),
-    upcomingEvents: 0,
+  const chatRooms = (chatRoomRows ?? []) as ChatRoomRow[];
+  const matchIds = ((matchRows ?? []) as { user_low: string; user_high: string }[]).map(
+    (m) => (m.user_low === me ? m.user_high : m.user_low)
+  );
+
+  const verified = (verifiedRows ?? []) as {
+    id: string;
+    name: string;
+    avatar_url: string | null;
+    cover_url: string | null;
+    member_count: number;
+    is_official: boolean;
+  }[];
+
+  // Second stage: who is in these spaces, and which of them are online. The
+  // roster covers both Your Spaces (for the active dot) and the verified rail
+  // (for its active/members tag), so one query serves both.
+  const rosterScope = [...new Set([...spaceIds, ...verified.map((v) => v.id)])];
+  const [{ data: rosterRows }, { data: mutualRows }] = await Promise.all([
+    rosterScope.length
+      ? supabase
+          .from("community_members")
+          .select("community_id, user_id")
+          .in("community_id", rosterScope)
+          .limit(4000)
+      : Promise.resolve({ data: [] as { community_id: string; user_id: string }[] }),
+    matchIds.length && chatRooms.length
+      ? supabase
+          .from("community_members")
+          .select("community_id, user_id")
+          .in(
+            "community_id",
+            chatRooms.map((c) => c.id)
+          )
+          .in("user_id", matchIds)
+      : Promise.resolve({ data: [] as { community_id: string; user_id: string }[] }),
+  ]);
+
+  const roster = (rosterRows ?? []) as { community_id: string; user_id: string }[];
+  const rosterIds = [...new Set(roster.map((r) => r.user_id))];
+
+  // profile_presence is RLS-gated on the owner's show_online, so this counts
+  // only students who publish their presence — an undercount, never a leak.
+  const { data: presenceRows } = rosterIds.length
+    ? await supabase
+        .from("profile_presence")
+        .select("id")
+        .in("id", rosterIds)
+        .gt("last_seen_at", onlineSinceIso())
+    : { data: [] as { id: string }[] };
+  const online = new Set((presenceRows ?? []).map((p) => p.id));
+
+  const activeBySpace = new Map<string, number>();
+  for (const r of roster) {
+    if (online.has(r.user_id))
+      activeBySpace.set(r.community_id, (activeBySpace.get(r.community_id) ?? 0) + 1);
+  }
+
+  const mutualsByRoom = new Map<string, number>();
+  for (const r of (mutualRows ?? []) as { community_id: string }[]) {
+    mutualsByRoom.set(r.community_id, (mutualsByRoom.get(r.community_id) ?? 0) + 1);
+  }
+
+  const followedIds = new Set(
+    ((followRows ?? []) as unknown as Joined[]).map((r) => r.community?.id).filter(Boolean) as string[]
+  );
+  const memberIds = new Set(
+    ((memberRows ?? []) as unknown as Joined[]).map((r) => r.community?.id).filter(Boolean) as string[]
+  );
+  const requestStatus = new Map(
+    ((requestRows ?? []) as { community_id: string; status: string }[]).map((r) => [
+      r.community_id,
+      r.status as JoinState,
+    ])
+  );
+
+  const yourSpaces: YourSpaceVM[] = [...spaceMap.values()].map((c) => ({
+    id: c.id,
+    name: c.name,
+    avatar_url: c.avatar_url,
+    cover_url: c.cover_url,
+    isSociety: c.is_society,
+    activeNow: activeBySpace.get(c.id) ?? 0,
   }));
 
-  const events = (eventRows ?? []) as EventRow[];
-  const hostIds = [...new Set(events.map((e) => e.host_id))];
-  const communityIds = [...new Set(events.map((e) => e.community_id).filter(Boolean) as string[])];
-  const [{ data: hosts }, { data: comms }] = await Promise.all([
-    hostIds.length
-      ? supabase.from("profiles").select("id, full_name").in("id", hostIds)
-      : Promise.resolve({ data: [] as { id: string; full_name: string | null }[] }),
-    communityIds.length
-      ? supabase.from("communities").select("id, name").in("id", communityIds)
-      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
-  ]);
-  const hostName = new Map((hosts ?? []).map((h) => [h.id, h.full_name]));
-  const commName = new Map((comms ?? []).map((c) => [c.id, c.name]));
-
-  const upcomingEvents: UpcomingEventVM[] = events.map((e) => {
-    const b = eventBadge(e.starts_at);
+  const verifiedCommunities: TileVM[] = verified.map((s) => {
+    const activeNow = activeBySpace.get(s.id) ?? 0;
     return {
-      id: e.id,
-      title: e.title,
-      organizer:
-        (e.community_id && commName.get(e.community_id)) || hostName.get(e.host_id) || "FAST Socio",
-      location: e.location,
-      cover_url: e.cover_url,
-      day: b.day,
-      month: b.month,
-      attendee_count: e.attendee_count,
+      id: s.id,
+      name: s.name,
+      image: s.avatar_url ?? s.cover_url,
+      href: `/societies/${s.id}`,
+      verified: s.is_official,
+      activeNow,
+      meta:
+        `${s.member_count.toLocaleString()} member${s.member_count === 1 ? "" : "s"}` +
+        (activeNow > 0 ? ` · ${activeNow} active` : ""),
     };
   });
 
-  const chatRooms: CommunityVM[] = ((chatRoomRows ?? []) as ChatRoomRow[]).map((c) => ({
-    id: c.id,
-    name: c.name,
-    description: c.description,
-    avatar_url: c.avatar_url,
-    cover_url: c.cover_url,
-    member_count: c.member_count,
-    isMember: yourSpaces.some((sp) => sp.id === c.id) || c.owner_id === me,
-    isOwner: c.owner_id === me,
-  }));
+  const upcomingEvents: TileVM[] = (
+    (eventRows ?? []) as { id: string; title: string; cover_url: string | null; starts_at: string }[]
+  ).map((e) => {
+    const b = eventBadge(e.starts_at);
+    return {
+      id: e.id,
+      name: e.title,
+      image: e.cover_url,
+      href: `/events/${e.id}`,
+      badge: `${b.day} ${b.month}`,
+    };
+  });
+
+  const chatRoomCards: ChatRoomCardVM[] = chatRooms.map((c) => {
+    const isOwner = c.owner_id === me;
+    return {
+      id: c.id,
+      name: c.name,
+      description: c.description,
+      avatar_url: c.avatar_url,
+      cover_url: c.cover_url,
+      member_count: c.member_count,
+      mutuals: mutualsByRoom.get(c.id) ?? 0,
+      isFollowing: isOwner || followedIds.has(c.id),
+      joinStatus: isOwner || memberIds.has(c.id) ? "joined" : (requestStatus.get(c.id) ?? "none"),
+      isOwner,
+    };
+  });
 
   return (
     <main className="mx-auto w-full max-w-md px-4 py-6">
@@ -185,14 +234,14 @@ export default async function CommunitiesPage() {
           <h1 className="text-[22px] font-bold tracking-tight">Community</h1>
           <p className="mt-1 text-sm text-fg-muted">Campus Spaces &amp; Societies</p>
         </div>
-        <CreationModalTrigger />
+        <CreateSpaceButton />
       </div>
 
       <CommunityMainView
         yourSpaces={yourSpaces}
         verifiedCommunities={verifiedCommunities}
         upcomingEvents={upcomingEvents}
-        chatRooms={chatRooms}
+        chatRooms={chatRoomCards}
       />
     </main>
   );

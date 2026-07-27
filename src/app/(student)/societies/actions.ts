@@ -10,37 +10,26 @@ import {
   isOfficerRole,
   type SocietyOfficerRole,
 } from "@/lib/societies/logic";
+import {
+  followCommunity,
+  unfollowCommunity,
+} from "@/app/(student)/communities/actions";
 
 type Result = { ok: true } | { ok: false; error: string };
 
 /**
- * Follow a society === join the underlying community (member_count is the
- * follower count). Mirrors joinCommunity but scoped to the society surface so
- * revalidation targets /events (the Community tab, where the societies list
- * lives). RLS still enforces approved + self + member.
+ * Follow a society = spectate it. Since mig 0119 this is community_followers,
+ * NOT community_members: following gets you the broadcast feed and its
+ * notifications, while sending a message in the general chat requires a
+ * separate, approved JOIN (see requestJoinCommunity). Societies and casual
+ * chat rooms share one implementation — a society is just a community.
  */
 export async function followSociety(societyId: string): Promise<void> {
-  const supabase = await createClient();
-  const uid = await getAuthUserId();
-  if (!uid) return;
-  await supabase
-    .from("community_members")
-    .insert({ community_id: societyId, user_id: uid, role: "member" });
-  revalidatePath(`/societies/${societyId}`);
-  revalidatePath("/communities");
+  return followCommunity(societyId);
 }
 
 export async function unfollowSociety(societyId: string): Promise<void> {
-  const supabase = await createClient();
-  const uid = await getAuthUserId();
-  if (!uid) return;
-  await supabase
-    .from("community_members")
-    .delete()
-    .eq("community_id", societyId)
-    .eq("user_id", uid);
-  revalidatePath(`/societies/${societyId}`);
-  revalidatePath("/communities");
+  return unfollowCommunity(societyId);
 }
 
 export type SocietyProfileInput = {

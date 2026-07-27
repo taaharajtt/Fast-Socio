@@ -13,6 +13,11 @@ export function absoluteTime(iso: string): string {
  */
 export const ONLINE_WINDOW_MS = 2 * 60 * 1000;
 
+/** ISO timestamp for "the oldest heartbeat that still counts as online". */
+export function onlineSinceIso(): string {
+  return new Date(Date.now() - ONLINE_WINDOW_MS).toISOString();
+}
+
 export function isOnline(lastSeenAt: string | null | undefined): boolean {
   if (!lastSeenAt) return false;
   return Date.now() - new Date(lastSeenAt).getTime() < ONLINE_WINDOW_MS;

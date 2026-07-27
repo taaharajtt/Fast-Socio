@@ -1,17 +1,12 @@
-"use client";
-
-import { useState } from "react";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { AppImage } from "@/components/ui/app-image";
 import { RsvpButton, type RsvpState } from "@/components/events/rsvp-button";
-import { cn } from "@/lib/utils";
+import { SocialProof } from "@/components/communities/social-proof";
+import { SpaceShell, type SpaceShellTab } from "@/components/communities/space-shell";
+import type { SocialProofVM } from "@/lib/communities/social-proof";
 
-export type EventShellTab = {
-  key: string;
-  label: string;
-  content: React.ReactNode;
-};
+export type EventShellTab = SpaceShellTab;
 
 const CAT_GRADIENT: Record<string, [string, string]> = {
   Social: ["#7c3aed", "#a855f7"],
@@ -31,16 +26,17 @@ function gradient(category: string): string {
 }
 
 /**
- * Stable chrome for an event: the 16:9 cover hero (title, host link, Attend/
- * RSVP) and the Overview/Members subtab bar stay mounted and visually frozen
- * while `activeTab` switches — both tabs' content is server-fetched up front
- * (see /events/[id]/page.tsx) and handed in as `tabs[].content`.
+ * An event's stable chrome: the 16:9 cover with Attend, the title, and the
+ * Overview/Members tab bar — the same shape as a society or chat room, so all
+ * three campus surfaces read as one family.
  */
 export function EventShell({
   event,
   rsvp,
+  proof,
   tabs,
 }: {
+  proof: SocialProofVM;
   event: {
     id: string;
     title: string;
@@ -58,92 +54,72 @@ export function EventShell({
   };
   tabs: EventShellTab[];
 }) {
-  const [active, setActive] = useState(tabs[0]?.key);
-  const activeTab = tabs.find((t) => t.key === active) ?? tabs[0];
-
-  return (
-    <main className="mx-auto flex w-full max-w-md flex-1 flex-col">
-      <div className="relative h-[200px] w-full overflow-hidden">
-        {event.cover_url ? (
-          <AppImage
-            src={event.cover_url}
-            alt=""
-            sizes="(max-width: 448px) 100vw, 448px"
-          />
-        ) : (
-          <div className="h-full w-full" style={{ background: gradient(event.category) }} />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
-
-        <Link
-          href="/communities"
-          aria-label="Back"
-          className="absolute left-4 top-[max(1rem,env(safe-area-inset-top))] z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white"
-        >
-          <ChevronLeft className="h-5 w-5" aria-hidden />
-        </Link>
-
-        <div className="absolute inset-x-4 bottom-3 flex items-end gap-3">
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-[18px] font-bold text-white">{event.title}</h1>
-            {event.hostName && (
-              <p className="truncate text-[13px] text-white/75">
-                {event.hostHref ? (
-                  <Link href={event.hostHref} className="hover:underline">
-                    {event.hostName}
-                  </Link>
-                ) : (
-                  event.hostName
-                )}
-              </p>
-            )}
-          </div>
-          {!event.pending && (
-            <RsvpButton
-              eventId={event.id}
-              initialState={rsvp.initialState}
-              count={rsvp.count}
-              capacity={rsvp.capacity}
-              ended={event.ended}
+  const hero = (
+    <>
+      <div className="px-4 pt-[max(0.5rem,env(safe-area-inset-top))]">
+        <div className="relative aspect-[16/9] w-full overflow-hidden rounded-[20px]">
+          {event.cover_url ? (
+            <AppImage
+              src={event.cover_url}
+              alt=""
+              sizes="(max-width: 448px) 100vw, 448px"
             />
+          ) : (
+            <div className="h-full w-full" style={{ background: gradient(event.category) }} />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-black/25" />
+
+          <Link
+            href="/communities"
+            aria-label="Back"
+            className="absolute left-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white"
+          >
+            <ChevronLeft className="h-5 w-5" aria-hidden />
+          </Link>
+
+          {!event.pending && (
+            <div className="absolute inset-x-3 bottom-3 z-10 flex items-end justify-between gap-2">
+              <SocialProof proof={proof} label="attending" />
+              <RsvpButton
+                eventId={event.id}
+                initialState={rsvp.initialState}
+                count={rsvp.count}
+                capacity={rsvp.capacity}
+                ended={event.ended}
+                compact
+              />
+            </div>
           )}
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col px-4 py-4">
-        {event.pending ? (
-          <p className="mt-2 text-center text-sm text-fg-muted">
-            This event is awaiting admin approval.
+      <div className="px-4 pt-3">
+        <h1 className="truncate text-[20px] font-bold text-fg">{event.title}</h1>
+        {event.hostName && (
+          <p className="truncate text-[13px] text-fg-muted">
+            {event.hostHref ? (
+              <Link href={event.hostHref} className="hover:underline">
+                {event.hostName}
+              </Link>
+            ) : (
+              event.hostName
+            )}
           </p>
-        ) : (
-          <>
-            <div className="flex border-b border-white/[0.08]">
-              {tabs.map((tab) => {
-                const isActive = tab.key === activeTab?.key;
-                return (
-                  <button
-                    key={tab.key}
-                    type="button"
-                    onClick={() => setActive(tab.key)}
-                    aria-current={isActive ? "page" : undefined}
-                    className={cn(
-                      "relative flex flex-1 items-center justify-center gap-1.5 pb-3 text-center text-[16px] font-semibold transition-colors",
-                      isActive ? "text-fg" : "text-fg-muted hover:text-fg"
-                    )}
-                  >
-                    {tab.label}
-                    {isActive && (
-                      <span className="absolute inset-x-0 -bottom-px h-[3px] rounded-full bg-accent" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="min-h-[300px] pt-4">{activeTab?.content}</div>
-          </>
         )}
       </div>
-    </main>
+    </>
   );
+
+  if (event.pending) {
+    return (
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col">
+        {hero}
+        <p className="px-4 pt-8 text-center text-sm text-fg-muted">
+          This event is awaiting admin approval.
+        </p>
+      </main>
+    );
+  }
+
+  return <SpaceShell hero={hero} tabs={tabs} />;
 }

@@ -1,116 +1,174 @@
-"use client";
-
 import Link from "next/link";
-import { Calendar, Compass, MapPin, MessageSquare, ShieldCheck, Users } from "lucide-react";
+import { Calendar, Compass, MessageSquare, ShieldCheck } from "lucide-react";
 import { AppImage } from "@/components/ui/app-image";
+import { VerifiedBadge } from "@/components/ui";
 import { communityIcon } from "@/lib/communities/icon";
-import { CreationModalTrigger } from "@/components/communities/creation-modal";
-import { CommunityBrowser, type CommunityVM } from "@/components/communities/community-browser";
-import { SocietyBrowser } from "@/components/societies/society-browser";
-import { QuickRsvpButton } from "@/components/communities/quick-rsvp-button";
-import type { SocietyCardVM } from "@/lib/societies/types";
+import { CreateSpaceButton } from "@/components/communities/create-space-button";
+import { ChatRoomCard, type ChatRoomCardVM } from "@/components/communities/chat-room-card";
 
 export type YourSpaceVM = {
   id: string;
   name: string;
   avatar_url: string | null;
   cover_url: string | null;
-  role: "Owner" | "Officer" | "Member";
   isSociety: boolean;
+  /** Members seen in the last two minutes. The dot lights up above 1. */
+  activeNow: number;
 };
 
-export type UpcomingEventVM = {
+/** A square tile in one of the horizontal discovery rows. */
+export type TileVM = {
   id: string;
-  title: string;
-  organizer: string;
-  location: string | null;
-  cover_url: string | null;
-  day: string;
-  month: string;
-  attendee_count: number;
+  name: string;
+  image: string | null;
+  href: string;
+  /** Purple corner tag — the event date. */
+  badge?: string;
+  /** Official communities get a check in the top-right corner. */
+  verified?: boolean;
+  /** Caption under the name, e.g. "21 members · 1 active". */
+  meta?: string;
+  /** Members seen in the last two minutes; > 0 lights the corner dot. */
+  activeNow?: number;
 };
 
 function SectionHeader({ title }: { title: string }) {
   return <h2 className="mb-3 text-[17px] font-bold">{title}</h2>;
 }
 
-function YourSpaceCard({ s }: { s: YourSpaceVM }) {
+/**
+ * Edge-to-edge horizontal rail; tiles bleed into the page gutter as they
+ * scroll. Finger-scrolled only — no scrollbar chrome, and overscroll is
+ * contained so swiping past the last tile can't trigger the browser's
+ * back-navigation gesture.
+ */
+function Rail({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="no-scrollbar -mx-4 overflow-x-auto overscroll-x-contain px-4 pb-1">
+      <div className="flex gap-3">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * Live-presence dot. It hangs off the bottom-right corner of a tile — placed on
+ * the tile's unclipped wrapper, ringed in the page background — so it floats
+ * above both the cover art and the page rather than sitting inside the artwork.
+ */
+function ActiveDot({ count }: { count: number }) {
+  return (
+    <span
+      aria-label={`${count} active now`}
+      className="absolute -bottom-0.5 -right-0.5 z-10 h-3.5 w-3.5 rounded-full border-[3px] border-bg bg-success"
+    />
+  );
+}
+
+function EmptyState({
+  icon,
+  title,
+  hint,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  hint?: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-[14px] bg-card px-5 py-6 text-center">
+      <span className="mx-auto block w-fit text-fg-muted">{icon}</span>
+      <p className="mt-2 text-sm text-fg-muted">{title}</p>
+      {hint && <p className="mt-0.5 text-xs text-fg-disabled">{hint}</p>}
+    </div>
+  );
+}
+
+/**
+ * Your Spaces: a compact 60px square per space — image, name, and nothing
+ * else. Roles ("Owner"/"Officer") deliberately do NOT appear here; they belong
+ * inside the space, on its member rows, not on a navigation tile.
+ */
+function SpaceTile({ s }: { s: YourSpaceVM }) {
+  const image = s.avatar_url ?? s.cover_url;
   return (
     <Link
       href={s.isSociety ? `/societies/${s.id}` : `/communities/${s.id}`}
-      className="flex w-24 shrink-0 flex-col items-center gap-1.5 text-center"
+      className="flex w-[68px] shrink-0 flex-col items-center gap-1.5 text-center"
     >
-      <div className="glass relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl">
-        {s.avatar_url || s.cover_url ? (
-          <AppImage src={s.avatar_url ?? s.cover_url ?? ""} alt="" sizes="64px" />
-        ) : (
-          <span className="text-2xl" aria-hidden>
-            {communityIcon(s.name)}
-          </span>
-        )}
-      </div>
-      <span className="w-full truncate text-[12px] font-medium text-fg">{s.name}</span>
-      <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-accent">
-        {s.role}
+      {/* The dot lives on this wrapper, not inside the clipped tile, so it can
+          straddle the corner and sit above both the cover and the page. */}
+      <span className="relative block h-[60px] w-[60px]">
+        <span className="glass relative flex h-full w-full items-center justify-center overflow-hidden rounded-2xl">
+          {image ? (
+            <AppImage src={image} alt="" sizes="60px" />
+          ) : (
+            <span className="text-2xl" aria-hidden>
+              {communityIcon(s.name)}
+            </span>
+          )}
+        </span>
+        {/* Only meaningful when someone else is around too — a lone dot for
+            your own heartbeat would light up on every tile, always. */}
+        {s.activeNow > 1 && <ActiveDot count={s.activeNow} />}
+      </span>
+      <span className="w-full truncate text-[11px] font-medium text-fg-muted">
+        {s.name}
       </span>
     </Link>
   );
 }
 
-function UpcomingEventCard({ e }: { e: UpcomingEventVM }) {
+/**
+ * Discovery tile: a square cover with the name underneath (wireframe rows 2–3).
+ * Corner marks are per-row — events carry a purple date tag, verified
+ * communities a check plus a live-activity dot.
+ */
+function SquareTile({ t }: { t: TileVM }) {
+  const active = t.activeNow ?? 0;
   return (
-    <div className="overflow-hidden rounded-2xl bg-card">
-      <Link href={`/events/${e.id}`} className="block">
-        <div
-          className="relative h-[90px]"
-          style={
-            e.cover_url
-              ? undefined
-              : { background: "linear-gradient(135deg, #7c3aed, #a855f7)" }
-          }
-        >
-          {e.cover_url && (
-            <AppImage src={e.cover_url} alt="" sizes="(max-width: 448px) 100vw, 448px" />
-          )}
-          <div className="absolute inset-0 bg-black/30" />
-          <span className="absolute left-3 top-2.5 rounded-full bg-accent px-2.5 py-1 text-xs font-bold text-white">
-            {e.day} {e.month}
-          </span>
-        </div>
-      </Link>
-      <div className="space-y-1.5 p-3.5">
-        <Link href={`/events/${e.id}`} className="block">
-          <p className="truncate text-[15px] font-bold text-fg">{e.title}</p>
-          <p className="truncate text-xs text-fg-muted">by {e.organizer}</p>
-        </Link>
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-3 text-xs text-fg-muted">
-            {e.location && (
-              <span className="flex min-w-0 items-center gap-1">
-                <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                <span className="truncate">{e.location}</span>
-              </span>
-            )}
-            <span className="flex shrink-0 items-center gap-1">
-              <Users className="h-3.5 w-3.5" aria-hidden />
-              {e.attendee_count}
+    <Link href={t.href} className="w-[156px] shrink-0">
+      <span className="relative block h-[156px] w-[156px]">
+        <span className="glass relative flex h-full w-full items-center justify-center overflow-hidden rounded-[22px]">
+          {t.image ? (
+            <AppImage src={t.image} alt="" sizes="156px" />
+          ) : (
+            <span className="text-4xl" aria-hidden>
+              {communityIcon(t.name)}
             </span>
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <QuickRsvpButton eventId={e.id} />
-            <Link
-              href={`/events/${e.id}`}
-              className="rounded-full bg-white/10 px-3 py-1.5 text-[13px] font-semibold text-fg"
-            >
-              View
-            </Link>
-          </div>
-        </div>
-      </div>
-    </div>
+          )}
+
+          {t.badge && (
+            <span className="absolute right-2 top-2 rounded-full bg-accent px-2 py-0.5 text-[11px] font-bold text-white">
+              {t.badge}
+            </span>
+          )}
+          {t.verified && (
+            <span className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-black/45">
+              <VerifiedBadge size={13} />
+            </span>
+          )}
+        </span>
+        {/* Presence only earns a mark when someone is actually there. */}
+        {active > 0 && <ActiveDot count={active} />}
+      </span>
+
+      <span className="mt-1.5 block truncate text-center text-[13px] font-medium text-fg">
+        {t.name}
+      </span>
+      {t.meta && (
+        <span className="block truncate text-center text-[11px] text-fg-muted">
+          {t.meta}
+        </span>
+      )}
+    </Link>
   );
 }
 
+/**
+ * The Community hub body. Four sections in a fixed order — Your Spaces,
+ * Upcoming Events, Verified Communities, Chat Rooms — with the first three as compact
+ * horizontal rails so the page stays short, and only Chat Rooms rendered as
+ * full-width cards (they carry actions, the rails do not).
+ */
 export function CommunityMainView({
   yourSpaces,
   verifiedCommunities,
@@ -118,82 +176,83 @@ export function CommunityMainView({
   chatRooms,
 }: {
   yourSpaces: YourSpaceVM[];
-  verifiedCommunities: SocietyCardVM[];
-  upcomingEvents: UpcomingEventVM[];
-  chatRooms: CommunityVM[];
+  verifiedCommunities: TileVM[];
+  upcomingEvents: TileVM[];
+  chatRooms: ChatRoomCardVM[];
 }) {
   return (
     <>
-      {/* Section 1: Your Spaces */}
       <section className="mt-6">
-        <SectionHeader title="Your Spaces" />
+        <SectionHeader title="Your spaces" />
         {yourSpaces.length === 0 ? (
-          <div className="rounded-[14px] bg-card px-5 py-6 text-center">
-            <Compass className="mx-auto h-7 w-7 text-fg-muted" aria-hidden />
-            <p className="mt-2 text-sm text-fg-muted">No spaces joined yet</p>
-            <p className="mt-0.5 text-xs text-fg-disabled">
-              Explore verified communities below
-            </p>
-          </div>
+          <EmptyState
+            icon={<Compass className="h-7 w-7" aria-hidden />}
+            title="No spaces yet"
+            hint="Follow a verified community below to get started"
+          />
         ) : (
-          <div className="flex gap-3 overflow-x-auto pb-1">
+          <Rail>
             {yourSpaces.map((s) => (
-              <YourSpaceCard key={s.id} s={s} />
+              <SpaceTile key={s.id} s={s} />
             ))}
-          </div>
+          </Rail>
         )}
       </section>
 
-      {/* Section 2: Verified Communities */}
-      <section className="mt-8">
-        <SectionHeader title="Verified Communities" />
-        {verifiedCommunities.length === 0 ? (
-          <div className="rounded-[14px] bg-card px-5 py-8 text-center">
-            <ShieldCheck className="mx-auto h-7 w-7 text-fg-muted" aria-hidden />
-            <p className="mt-2 text-sm text-fg-muted">No verified communities found</p>
-          </div>
-        ) : (
-          <SocietyBrowser societies={verifiedCommunities} />
-        )}
-      </section>
-
-      {/* Section 3: Upcoming Events */}
-      <section className="mt-8">
+      <section className="mt-7">
         <SectionHeader title="Upcoming Events" />
         {upcomingEvents.length === 0 ? (
-          <div className="rounded-[14px] bg-card px-5 py-8 text-center">
-            <Calendar className="mx-auto h-7 w-7 text-fg-muted" aria-hidden />
-            <p className="mt-2 text-sm text-fg-muted">No upcoming campus events scheduled</p>
-          </div>
+          <EmptyState
+            icon={<Calendar className="h-7 w-7" aria-hidden />}
+            title="No upcoming campus events"
+          />
         ) : (
-          <div className="space-y-3">
-            {upcomingEvents.map((e) => (
-              <UpcomingEventCard key={e.id} e={e} />
+          <Rail>
+            {upcomingEvents.map((t) => (
+              <SquareTile key={t.id} t={t} />
             ))}
-          </div>
+          </Rail>
         )}
       </section>
 
-      {/* Section 4: Chat Rooms */}
-      <section className="mt-8">
+      <section className="mt-7">
+        <SectionHeader title="Verified Communities" />
+        {verifiedCommunities.length === 0 ? (
+          <EmptyState
+            icon={<ShieldCheck className="h-7 w-7" aria-hidden />}
+            title="No verified communities yet"
+          />
+        ) : (
+          <Rail>
+            {verifiedCommunities.map((t) => (
+              <SquareTile key={t.id} t={t} />
+            ))}
+          </Rail>
+        )}
+      </section>
+
+      <section className="mt-7">
         <SectionHeader title="Chat Rooms" />
         {chatRooms.length === 0 ? (
-          <div className="rounded-[14px] bg-card px-5 py-8 text-center">
-            <MessageSquare className="mx-auto h-7 w-7 text-fg-muted" aria-hidden />
-            <p className="mt-2 text-sm text-fg-muted">No casual chat rooms available</p>
-            <Link
-              href="/communities/new"
-              className="mt-2 inline-block text-xs font-medium text-accent"
-            >
-              Create the first chat room
-            </Link>
-          </div>
+          <EmptyState
+            icon={<MessageSquare className="h-7 w-7" aria-hidden />}
+            title="No chat rooms yet"
+            hint={
+              <Link href="/communities/new" className="font-medium text-accent">
+                Create the first one
+              </Link>
+            }
+          />
         ) : (
-          <CommunityBrowser communities={chatRooms} />
+          <div className="space-y-2.5">
+            {chatRooms.map((c) => (
+              <ChatRoomCard key={c.id} c={c} />
+            ))}
+          </div>
         )}
       </section>
     </>
   );
 }
 
-export { CreationModalTrigger };
+export { CreateSpaceButton };

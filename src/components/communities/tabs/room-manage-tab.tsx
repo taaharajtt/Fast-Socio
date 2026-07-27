@@ -1,0 +1,83 @@
+import Link from "next/link";
+import { DoorOpen, Pencil, Users } from "lucide-react";
+import { JoinRequestQueue } from "@/components/communities/join-request-queue";
+import { MemberAccessList } from "@/components/communities/member-access-list";
+import type { CommunityMemberVM } from "@/components/communities/member-row";
+import type { JoinRequestVM } from "@/lib/communities/relationship";
+
+function Section({
+  icon,
+  title,
+  desc,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  desc?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-[16px] bg-bg-elevated p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <span className="text-fg-muted">{icon}</span>
+        <div>
+          <h2 className="text-sm font-bold text-fg">{title}</h2>
+          {desc && <p className="text-xs text-fg-muted">{desc}</p>}
+        </div>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/**
+ * Owner-only controls for a chat room. A room has a single owner and no
+ * officer tier, so this is the society Manage tab minus role management:
+ * who gets in, who stays, and the room's own details.
+ */
+export function RoomManageTab({
+  communityId,
+  isOwner,
+  joinRequests,
+  members,
+}: {
+  communityId: string;
+  isOwner: boolean;
+  joinRequests: JoinRequestVM[];
+  members: CommunityMemberVM[];
+}) {
+  return (
+    <div className="space-y-3">
+      <Section
+        icon={<DoorOpen className="h-4 w-4" aria-hidden />}
+        title="Join requests"
+        desc="Approve to let them send messages; followers can already spectate."
+      >
+        <JoinRequestQueue communityId={communityId} requests={joinRequests} />
+      </Section>
+
+      <Section
+        icon={<Users className="h-4 w-4" aria-hidden />}
+        title="Members"
+        desc="Removing someone revokes chat access; they stay a follower."
+      >
+        <MemberAccessList communityId={communityId} members={members} />
+      </Section>
+
+      {isOwner && (
+        <Section
+          icon={<Pencil className="h-4 w-4" aria-hidden />}
+          title="Room details"
+          desc="Name, description and cover photo."
+        >
+          <Link
+            href={`/communities/${communityId}/edit`}
+            className="inline-block rounded-full bg-white/10 px-4 py-2 text-sm font-semibold text-fg"
+          >
+            Edit chat room
+          </Link>
+        </Section>
+      )}
+    </div>
+  );
+}

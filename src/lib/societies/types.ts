@@ -7,7 +7,8 @@ export type SocietyRow = {
   description: string | null;
   avatar_url: string | null; // logo
   cover_url: string | null; // banner
-  member_count: number; // == follower count
+  member_count: number; // students who JOINED (may chat)
+  follower_count: number; // students who FOLLOW (spectate broadcasts)
   society_category: SocietyCategory | null;
   is_official: boolean;
   recruitment_open: boolean;
@@ -16,21 +17,6 @@ export type SocietyRow = {
   website_url: string | null;
   owner_id: string;
   status: string;
-};
-
-/** Directory card view-model (adds derived, viewer-scoped fields). */
-export type SocietyCardVM = {
-  id: string;
-  name: string;
-  description: string | null;
-  avatar_url: string | null;
-  cover_url: string | null;
-  member_count: number;
-  category: SocietyCategory | null;
-  isOfficial: boolean;
-  isRecruiting: boolean;
-  isFollowing: boolean;
-  upcomingEvents: number;
 };
 
 /** An officer overlay row joined with the person's safe profile fields. */

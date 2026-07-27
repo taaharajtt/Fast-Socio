@@ -1,10 +1,12 @@
 import { SocietyShell, type SocietyShellTab } from "@/components/societies/society-shell";
 import { BroadcastTab } from "@/components/societies/tabs/broadcast-tab";
-import { ChatTab } from "@/components/societies/tabs/chat-tab";
+import { SpaceChatTab } from "@/components/communities/tabs/space-chat-tab";
 import { EventsTab } from "@/components/societies/tabs/events-tab";
 import { MembersTab } from "@/components/societies/tabs/members-tab";
 import { ManageTab } from "@/components/societies/tabs/manage-tab";
 import { getSocietyContext } from "@/lib/societies/load";
+import { getJoinRequests } from "@/lib/communities/relationship";
+import { getSocialProof } from "@/lib/communities/social-proof";
 import {
   getSocietyOfficers,
   getUpcomingSocietyEvents,
@@ -33,7 +35,8 @@ export default async function SocietyPage({
   const { viewer } = ctx;
   const canManage = canManageSociety(viewer);
   const canPost = canPostAnnouncement(viewer);
-  const isMember = viewer.isFollowing;
+  // Chat is for JOINED members only; followers spectate the broadcast feed.
+  const isMember = viewer.isMember;
 
   const supabase = await createClient();
 
@@ -74,6 +77,9 @@ export default async function SocietyPage({
       : Promise.resolve({ data: [] as PendingPost[] }),
   ]);
 
+  // Pending asks to participate — the Manage tab's access queue (mig 0119).
+  const joinRequests = canManage ? await getJoinRequests(id) : [];
+
   const chatMessages = (chatRows.data as CommunityMessage[] | null) ?? [];
   const polls: Record<string, PollOptionResult[]> = await fetchPollResults(
     [...new Set(chatMessages.map((m) => m.poll_id).filter(Boolean) as string[])]
@@ -95,6 +101,13 @@ export default async function SocietyPage({
 
   const pendingPosts = (pendingRows.data as PendingPost[] | null) ?? [];
 
+  // Cover social proof, ranked from the roster we already loaded above.
+  const proof = await getSocialProof(
+    ((followerRows.data ?? []) as unknown as MemberRow[]).map((r) => r.user_id),
+    ctx.society.member_count,
+    viewer.me
+  );
+
   const tabs: SocietyShellTab[] = [
     {
       key: "broadcast",
@@ -111,11 +124,15 @@ export default async function SocietyPage({
     {
       key: "chat",
       label: "Chat",
+      // Owns the viewport below the tab bar so the composer can sit on the
+      // bottom edge and only the message feed scrolls.
+      fill: true,
       content: (
-        <ChatTab
-          societyId={id}
+        <SpaceChatTab
+          communityId={id}
           meId={viewer.me}
           isMember={isMember}
+          joinStatus={viewer.joinStatus}
           initialMessages={chatMessages}
           initialPolls={polls}
         />
@@ -145,11 +162,12 @@ export default async function SocietyPage({
     tabs.push({
       key: "manage",
       label: "Manage",
-      badge: pendingPosts.length,
+      badge: pendingPosts.length + joinRequests.length,
       content: (
         <ManageTab
           society={ctx.society}
           pendingPosts={pendingPosts}
+          joinRequests={joinRequests}
           officers={officers}
           viewer={{ role: viewer.role, isAdmin: viewer.isAdmin }}
         />
@@ -157,5 +175,5 @@ export default async function SocietyPage({
     });
   }
 
-  return <SocietyShell ctx={ctx} tabs={tabs} />;
+  return <SocietyShell ctx={ctx} proof={proof} tabs={tabs} />;
 }

@@ -18,12 +18,20 @@ export function RsvpButton({
   count: initialCount,
   capacity,
   ended = false,
+  compact = false,
 }: {
   eventId: string;
   initialState: RsvpState;
   count: number;
   capacity: number | null;
   ended?: boolean;
+  /**
+   * Cover-photo mode: the pill and nothing else, so it sits on one line beside
+   * the social proof. The "N going" caption is dropped on purpose — the proof
+   * next to it already says "…and 15 others are attending", and repeating the
+   * number twice on one line was what broke the cover layout.
+   */
+  compact?: boolean;
 }) {
   const [state, setState] = useState<RsvpState>(initialState);
   const [count, setCount] = useState(initialCount);
@@ -35,12 +43,12 @@ export function RsvpButton({
 
   if (ended) {
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         <span className="glass flex items-center gap-2 rounded-[var(--radius-pill)] px-4 py-2 text-sm font-medium text-fg-muted">
           <CalendarCheck className="h-4 w-4" aria-hidden />
           Event ended
         </span>
-        <span className="text-sm text-fg-muted">{count} attended</span>
+        {!compact && <span className="text-sm text-fg-muted">{count} attended</span>}
       </div>
     );
   }
@@ -90,29 +98,42 @@ export function RsvpButton({
     });
   }
 
+  const size = compact ? "sm" : "md";
+  const button =
+    state === "going" ? (
+      <GlassButton variant="glass" size={size} disabled={pending} onClick={leave}>
+        Going ✓
+      </GlassButton>
+    ) : state === "waitlisted" ? (
+      <GlassButton variant="glass" size={size} disabled={pending} onClick={leave}>
+        <Clock className="mr-1.5 h-4 w-4" aria-hidden />
+        On waitlist
+      </GlassButton>
+    ) : (
+      <GlassButton variant="primary" size={size} disabled={pending} onClick={register}>
+        {seatsLeft === 0 ? "Join waitlist" : "Attend"}
+      </GlassButton>
+    );
+
+  if (compact) {
+    // Errors float above the pill so a failed tap still reports itself without
+    // pushing the cover's single row out of alignment.
+    return (
+      <div className="relative shrink-0">
+        {button}
+        {error && (
+          <p className="absolute bottom-full right-0 mb-1.5 whitespace-nowrap rounded-full bg-black/75 px-2.5 py-1 text-[11px] font-medium text-white">
+            {error}
+          </p>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-3">
-        {state === "going" ? (
-          <GlassButton variant="glass" size="md" disabled={pending} onClick={leave}>
-            Going ✓
-          </GlassButton>
-        ) : state === "waitlisted" ? (
-          <GlassButton variant="glass" size="md" disabled={pending} onClick={leave}>
-            <Clock className="mr-1.5 h-4 w-4" aria-hidden />
-            On waitlist
-          </GlassButton>
-        ) : (
-          <GlassButton
-            variant="primary"
-            size="md"
-            disabled={pending}
-            onClick={register}
-          >
-            {seatsLeft === 0 ? "Join waitlist" : "Attend"}
-          </GlassButton>
-        )}
-
+        {button}
         <span className="text-sm text-fg-muted">
           {count} going
           {seatsLeft != null &&

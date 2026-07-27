@@ -47,7 +47,7 @@ export async function HomeHelpStrip() {
       {rows.length === 0 ? (
         <HelpStripEmpty />
       ) : (
-        <div className="flex gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex gap-3 overflow-x-auto pb-1 no-scrollbar">
           {rows.map((r) => {
             const cat = CATEGORY_META[r.category];
             const CatIcon = cat?.icon ?? HandHeart;

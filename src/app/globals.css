@@ -173,6 +173,20 @@ body {
   box-shadow: var(--glass-shadow);
 }
 
+/*
+  Finger-scrolled rails: swipeable, with no scrollbar chrome drawn. Every
+  horizontal row in the app (community tiles, tab bars, pill groups) uses this
+  so none of them can drift back to showing a bar. Three declarations because
+  each engine hides it differently: Firefox, old Edge/IE, and WebKit/Blink.
+*/
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @utility glass-strong {
   background: var(--glass-surface-strong);
   border: 1px solid var(--glass-border);

@@ -40,7 +40,7 @@ export function SegmentedPills({
       className={cn(
         "flex gap-2",
         scrollable &&
-          "overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+          "overflow-x-auto no-scrollbar",
         className
       )}
     >

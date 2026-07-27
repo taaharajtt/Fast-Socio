@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { isAppStorageUrl } from "@/lib/url-safety";
 import { isSocietyCategory } from "@/lib/societies/logic";
@@ -242,30 +243,127 @@ export async function moderateCommunityPost(
   return { ok: true };
 }
 
-export async function joinCommunity(communityId: string) {
+/**
+ * FOLLOW — spectate a community: read its broadcasts and get notified, with no
+ * approval and no seat in the chat room. Mirrored by JOIN below, which is the
+ * participation half of the split introduced in mig 0119.
+ */
+export async function followCommunity(communityId: string): Promise<void> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return;
+  const uid = await getAuthUserId();
+  if (!uid) return;
   await supabase
-    .from("community_members")
-    .insert({ community_id: communityId, user_id: user.id, role: "member" });
-  revalidatePath(`/communities/${communityId}`);
+    .from("community_followers")
+    .insert({ community_id: communityId, user_id: uid });
+  revalidateCommunity(communityId);
 }
 
+export async function unfollowCommunity(communityId: string): Promise<void> {
+  const supabase = await createClient();
+  const uid = await getAuthUserId();
+  if (!uid) return;
+  await supabase
+    .from("community_followers")
+    .delete()
+    .eq("community_id", communityId)
+    .eq("user_id", uid);
+  revalidateCommunity(communityId);
+}
+
+export type JoinState = "none" | "pending" | "rejected" | "joined";
+
+/**
+ * JOIN — ask to participate. The owner (or a moderator / society officer)
+ * approves; until then the student is a follower who cannot send messages.
+ * The RPC also follows on your behalf, since asking implies wanting the feed.
+ */
+export async function requestJoinCommunity(
+  communityId: string
+): Promise<{ ok: true; status: JoinState } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const uid = await getAuthUserId();
+  if (!uid) return { ok: false, error: "Not signed in." };
+
+  const allowed = await checkRateLimit("community_join_request", 20, 60 * 60);
+  if (!allowed) return { ok: false, error: "Too many join requests for now." };
+
+  const { data, error } = await supabase.rpc("request_community_join", {
+    p_community: communityId,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidateCommunity(communityId);
+  return { ok: true, status: (data as JoinState) ?? "pending" };
+}
+
+/** Withdraw a pending ask (RLS allows deleting only your own row). */
+export async function cancelJoinRequest(communityId: string): Promise<void> {
+  const supabase = await createClient();
+  const uid = await getAuthUserId();
+  if (!uid) return;
+  await supabase
+    .from("community_join_requests")
+    .delete()
+    .eq("community_id", communityId)
+    .eq("user_id", uid);
+  revalidateCommunity(communityId);
+}
+
+/** Owner / moderator / society officer approves or rejects a pending ask. */
+export async function decideJoinRequest(
+  communityId: string,
+  userId: string,
+  approve: boolean
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const uid = await getAuthUserId();
+  if (!uid) return { ok: false, error: "Not signed in." };
+
+  const { error } = await supabase.rpc("decide_community_join_request", {
+    p_community: communityId,
+    p_user: userId,
+    p_approve: approve,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidateCommunity(communityId);
+  return { ok: true };
+}
+
+/** Remove someone's participation (they keep following). Managers only. */
+export async function removeCommunityMember(
+  communityId: string,
+  userId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const uid = await getAuthUserId();
+  if (!uid) return { ok: false, error: "Not signed in." };
+
+  const { error } = await supabase.rpc("remove_community_member", {
+    p_community: communityId,
+    p_user: userId,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidateCommunity(communityId);
+  return { ok: true };
+}
+
+/** Leave a community you joined — participation only; the follow survives. */
 export async function leaveCommunity(communityId: string) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return;
+  const uid = await getAuthUserId();
+  if (!uid) return;
   await supabase
     .from("community_members")
     .delete()
     .eq("community_id", communityId)
-    .eq("user_id", user.id);
+    .eq("user_id", uid);
+  revalidateCommunity(communityId);
+}
+
+/** Both surfaces render the same community, so both must be revalidated. */
+function revalidateCommunity(communityId: string) {
   revalidatePath(`/communities/${communityId}`);
+  revalidatePath(`/societies/${communityId}`);
+  revalidatePath("/communities");
 }
 
 /** Report a community (target_type = 'community'), feeds /admin/reports?type=community. */
