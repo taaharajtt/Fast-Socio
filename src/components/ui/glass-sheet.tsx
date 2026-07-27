@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { MotionReduced } from "@/components/ui/motion-reduced";
 import { cn } from "@/lib/utils";
+
+/** Nothing mutates "is this mounted on the client" behind our back, so the
+ *  subscribe callback has no work to do. */
+const noopSubscribe = () => () => {};
 
 type GlassSheetProps = {
   open: boolean;
@@ -58,13 +62,21 @@ export function GlassSheet({
   // Rendering into body escapes any transformed/filtered ancestor, which would
   // otherwise become the containing block for our position:fixed panel and make
   // the sheet span from the post's edge instead of the app's bottom.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false
+  );
 
-  // Keep onClose in a ref so the history effect below doesn't re-run (and
-  // push a duplicate entry) every time the parent re-renders a new callback.
+  // Keep onClose in a ref so the history effect below doesn't re-run (and push
+  // a duplicate entry) every time the parent re-renders a new callback. Synced
+  // via effect rather than during render: the only reader is the popstate
+  // handler below, which can only fire from an actual Back-button press — always
+  // well after this effect has committed, so there is no stale-read window.
   const closeRef = useRef(onClose);
-  closeRef.current = onClose;
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
 
   // Back button closes the sheet instead of leaving the page. Opening pushes a
   // throwaway history entry; Back pops it and we close. If the sheet is closed

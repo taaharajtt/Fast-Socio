@@ -82,7 +82,7 @@ export function FeedList({
 
   return (
     <div>
-      {posts.map((p) => (
+      {posts.map((p, i) => (
         // content-visibility:auto skips layout/paint for off-screen cards
         // (CSS windowing → 60fps at scale); contain-intrinsic-size reserves an
         // estimated height so the scrollbar stays stable, and `auto` remembers
@@ -95,6 +95,9 @@ export function FeedList({
             post={p}
             currentUserId={currentUserId}
             onDeleted={removePost}
+            // Only the very first card in the whole feed is above the fold;
+            // every later index (including a later loadMore page) is not.
+            priority={i === 0}
           />
         </div>
       ))}

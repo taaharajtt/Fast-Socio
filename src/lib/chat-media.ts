@@ -36,6 +36,12 @@ export function isChatMediaPathFor(
 /** Signed-URL lifetime for DM attachments (P5-01): 1 hour. */
 export const CHAT_MEDIA_TTL_SECONDS = 60 * 60;
 
+/** Largest edge to request when signing a chat image attachment (perf pass).
+ *  Bubbles render at a fixed 220px CSS width — 1080px (the upload cap) was
+ *  serving ~5x more pixels than any bubble ever displays. 440 covers a ~2x
+ *  device pixel ratio at that display size. */
+export const CHAT_IMAGE_DISPLAY_SIZE = 440;
+
 /** Page size for the DM message list (kept out of the "use server" chat action
  *  module, which may only export async functions). */
 export const MESSAGE_PAGE_SIZE = 50;

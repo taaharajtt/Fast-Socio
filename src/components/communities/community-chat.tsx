@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/client";
 import { PollCard } from "@/components/communities/poll-card";
 import {
   createCommunityPoll,
+  markCommunityChatRead,
   sendCommunityMessage,
   voteCommunityPoll,
   type PollOptionResult,
@@ -119,6 +120,10 @@ export function CommunityChat({
               prev.some((x) => x.id === m.id) ? prev : [...prev, m]
             );
             if (m.poll_id) refreshPoll(m.poll_id);
+            // The room is open right now, so a message that just arrived is
+            // visible immediately — keep the read position moving instead of
+            // leaving it stamped at whenever the room was first opened.
+            markCommunityChatRead(communityId);
           }
         )
         // Ballots are private, so votes can't be broadcast via postgres_changes.
@@ -127,11 +132,20 @@ export function CommunityChat({
           const pollId = (payload as { pollId?: string })?.pollId;
           if (pollId) refreshPoll(pollId);
         })
-        .subscribe();
+        .subscribe((status, err) => {
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || err) {
+            console.error(
+              `[chat] community chat realtime subscription failed for ${communityId}`,
+              status,
+              err
+            );
+          }
+        });
 
       channelRef.current = channel;
     })();
 
+    markCommunityChatRead(communityId);
     return () => {
       if (channelRef.current) supabase.removeChannel(channelRef.current);
     };

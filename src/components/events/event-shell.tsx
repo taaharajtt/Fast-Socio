@@ -63,6 +63,7 @@ export function EventShell({
               src={event.cover_url}
               alt=""
               sizes="(max-width: 448px) 100vw, 448px"
+              priority
             />
           ) : (
             <div className="h-full w-full" style={{ background: gradient(event.category) }} />

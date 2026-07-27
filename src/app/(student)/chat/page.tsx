@@ -2,6 +2,7 @@ import Link from "next/link";
 import { RequestRow, type IncomingRequest } from "@/components/chat/request-row";
 import { OpenChatButton } from "@/components/chat/open-chat-button";
 import { ChatCommunityTabs } from "@/components/chat/chat-community-tabs";
+import { InboxRealtime } from "@/components/chat/inbox-realtime";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { AppImage } from "@/components/ui/app-image";
@@ -257,6 +258,7 @@ export default async function ChatPage({
   // swaps them without a full-page header change.
   return (
     <main className="mx-auto w-full max-w-md px-4 py-6">
+      <InboxRealtime userId={me} />
       <h1 className="text-[22px] font-bold tracking-tight">Messages</h1>
 
       <ChatCommunityTabs

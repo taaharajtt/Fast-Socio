@@ -16,7 +16,6 @@ import {
   Image as ImageIcon,
   type LucideIcon,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { AppImage } from "@/components/ui/app-image";
 
 /** Serializable, pre-rendered activity row handed down from the server. */
@@ -39,26 +38,37 @@ export type ActivityItem = {
  *  circle for actor-less system notifications), keyed by notification type. */
 const TYPE_ICON: Record<string, LucideIcon> = {
   post_like: Heart,
+  comment_like: Heart,
+  message_reaction: Heart,
   comment: MessageSquare,
   mention: AtSign,
   match: Star,
   match_post: ImageIcon,
   message: MessageSquare,
   message_request: UserPlus,
+  message_request_accepted: UserPlus,
   community_post_approved: Megaphone,
   community_post_rejected: Megaphone,
   community_approved: Megaphone,
+  community_rejected: Megaphone,
   event_approved: Megaphone,
+  event_rejected: Megaphone,
+  society_role_removed: Megaphone,
+  event_organizer_added: Megaphone,
+  event_organizer_removed: Megaphone,
   event_reminder: Clock,
   waitlist_promoted: Ticket,
   level_up: Zap,
   achievement: Award,
+  aura_adjusted: Zap,
+  leaderboard_top_finish: Award,
+  content_moderated: ShieldAlert,
   moderation_warning: ShieldAlert,
   appeal_result: Gavel,
 };
 
 /** Notification types shown with the special solid-purple Aura icon (no actor). */
-const AURA_TYPES = new Set(["aura", "aura_milestone", "level_up"]);
+const AURA_TYPES = new Set(["aura", "aura_milestone", "level_up", "aura_adjusted", "leaderboard_top_finish"]);
 
 const BUCKET_ORDER = ["Today", "Earlier"] as const;
 

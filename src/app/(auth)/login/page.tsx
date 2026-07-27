@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { GlassButton } from "@/components/ui/glass-button";
 import { GlassInput } from "@/components/ui/glass-input";
 import { createClient } from "@/lib/supabase/client";
@@ -22,17 +22,17 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
   // Surface auth-link failures. The /auth/callback and /auth/confirm handlers
   // bounce here with ?error=… when a magic / recovery link can't establish a
   // session (e.g. an expired link, or a PKCE link opened on a different browser
   // than the one that requested it). Without this the redirect was silent and a
   // broken "forgot password" link looked like it simply dumped you on login.
-  useEffect(() => {
-    const msg = new URLSearchParams(window.location.search).get("error");
-    if (msg) setError(msg);
-  }, []);
+  // Read once via a lazy initializer rather than an effect + setState on mount.
+  const [error, setError] = useState<string | null>(() =>
+    typeof window === "undefined"
+      ? null
+      : new URLSearchParams(window.location.search).get("error")
+  );
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();

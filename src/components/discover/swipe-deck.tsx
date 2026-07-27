@@ -231,7 +231,7 @@ export function SwipeDeck({ initial }: { initial: DiscoverSwipeCard[] }) {
                   onExpand={() => setDetailFor(c)}
                 />
               ) : (
-                <StackedCard key={c.key} index={i} />
+                <StackedCard key={c.key} card={c} index={i} />
               )
             )
             .reverse()}
@@ -402,17 +402,41 @@ function TopCard({
   );
 }
 
-function StackedCard({ index }: { index: number }) {
+function StackedCard({ card, index }: { card: DiscoverSwipeCard; index: number }) {
   return (
-    <div
-      className="absolute inset-0"
-      style={{
-        transform: `scale(${1 - index * 0.04}) translateY(${index * 12}px)`,
-        opacity: 1 - index * 0.25,
-        zIndex: -index,
-      }}
-    >
-      <div className="h-full w-full rounded-3xl bg-card" />
+    <div className="absolute inset-0">
+      {/* Invisible preloader, sized identically to the top card slot: by the
+          time this card is promoted to top, next/image has already requested
+          (and the browser cached) this exact URL — no blank/pulsing flash on
+          the swipe that promotes it (fix for the Discover image delay). The
+          visible stacked-card look below is completely unchanged. */}
+      <CardImagePreload card={card} />
+      <div
+        className="absolute inset-0"
+        style={{
+          transform: `scale(${1 - index * 0.04}) translateY(${index * 12}px)`,
+          opacity: 1 - index * 0.25,
+          zIndex: -index,
+        }}
+      >
+        <div className="h-full w-full rounded-3xl bg-card" />
+      </div>
+    </div>
+  );
+}
+
+/** The one image a swipe reveals immediately: a socio card's hero photo, or an
+ *  intent card's small author avatar. Rendered at zero opacity, same box size
+ *  and `sizes` as the real card will use once promoted, so next/image
+ *  resolves to the identical cached URL. */
+function CardImagePreload({ card }: { card: DiscoverSwipeCard }) {
+  const src = card.kind === "socio" ? card.profile.avatar_url : card.post.authorAvatar;
+  if (!src) return null;
+  const sizes =
+    card.kind === "socio" ? "(max-width: 448px) 100vw, 384px" : "36px";
+  return (
+    <div className="absolute inset-0 opacity-0" aria-hidden>
+      <AppImage src={src} alt="" sizes={sizes} />
     </div>
   );
 }

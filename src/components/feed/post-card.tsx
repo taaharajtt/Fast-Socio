@@ -36,12 +36,15 @@ function PostCardImpl({
   post,
   currentUserId,
   onDeleted,
+  priority = false,
 }: {
   post: FeedPost;
   /** Viewer's id — used to decide whether the options menu offers Delete (UAT-003). */
   currentUserId?: string | null;
   /** Called after the post is deleted so a list can drop it without a full reload. */
   onDeleted?: (postId: string) => void;
+  /** Above-the-fold placement (perf pass) — the very first card in a feed. */
+  priority?: boolean;
 }) {
   const router = useRouter();
   const [liked, setLiked] = useState(post.liked_by_me);
@@ -143,6 +146,7 @@ function PostCardImpl({
                     src={post.author_avatar}
                     alt={post.author_name ?? ""}
                     sizes="44px"
+                    priority={priority}
                   />
                 ) : null}
               </div>
@@ -206,6 +210,7 @@ function PostCardImpl({
             alt="Post image"
             sizes="(max-width: 448px) 100vw, 448px"
             draggable={false}
+            priority={priority}
             onNaturalSize={(size) =>
               setImageAspect(nearestAspectRatio(size.width / size.height))
             }

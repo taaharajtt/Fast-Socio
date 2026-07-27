@@ -166,6 +166,7 @@ export default async function PublicProfilePage({
             src={profile.cover_url}
             alt=""
             sizes="(max-width: 448px) 100vw, 448px"
+            priority
           />
         ) : (
           <div className="h-full w-full gradient-brand opacity-80" />
@@ -191,6 +192,7 @@ export default async function PublicProfilePage({
                   src={profile.avatar_url}
                   alt={profile.full_name ?? "Avatar"}
                   sizes="80px"
+                  priority
                 />
               ) : (
                 <span className="flex h-full w-full items-center justify-center text-xl font-bold">

@@ -132,6 +132,17 @@ export async function sendCommunityMessage(
   return { ok: true };
 }
 
+/**
+ * Stamp the caller's read position in a community's chat room (mirrors
+ * markConversationRead for DMs). Called when the room is opened and again as
+ * new messages arrive while it's open, so the room never shows stale unread
+ * state once realtime delivers a message.
+ */
+export async function markCommunityChatRead(communityId: string): Promise<void> {
+  const supabase = await createClient();
+  await supabase.rpc("mark_community_chat_read", { p_community_id: communityId });
+}
+
 export type PollOptionResult = {
   option_id: string;
   label: string;

@@ -6,7 +6,6 @@ import {
   Check,
   CornerUpRight,
   Flag,
-  ImagePlus,
   Loader2,
   Mic,
   Paperclip,
@@ -26,7 +25,8 @@ import { cn } from "@/lib/utils";
 import { useKeyboardInset } from "@/lib/use-keyboard-inset";
 import { renderLinkifiedText } from "@/lib/linkify";
 import { createClient } from "@/lib/supabase/client";
-import { chatMediaPath, CHAT_MEDIA_TTL_SECONDS } from "@/lib/chat-media";
+import { chatMediaPath } from "@/lib/chat-media";
+import { signChatMedia, signChatMediaMany } from "@/lib/chat-media-sign";
 import { uploadWithProgress } from "@/lib/storage-upload";
 import { clockTime, absoluteTime, timeAgo } from "@/lib/time";
 import { VoiceNote } from "@/components/chat/voice-note";
@@ -172,24 +172,16 @@ export function ChatThread({
     return () => clearInterval(id);
   }, [recording, recordingPaused]);
 
-  // Resolve a signed URL for a private chat-media attachment (P5-01). Images get
-  // a 1080px transform; voice notes are signed as-is.
+  // Resolve a signed URL for a private chat-media attachment (P5-01), at
+  // display size rather than the full upload — and via the shared cache/dedupe
+  // helper, so reopening a thread or a burst of realtime inserts doesn't
+  // re-sign a path that's already cached.
   const signAttachment = useCallback(async (m: ChatMessage) => {
     if (!m.attachment_url) return;
     const path = chatMediaPath(m.attachment_url);
     if (!path) return;
-    const supabase = createClient();
-    const { data } = await supabase.storage
-      .from("chat-media")
-      .createSignedUrl(
-        path,
-        CHAT_MEDIA_TTL_SECONDS,
-        m.attachment_type === "image"
-          ? { transform: { width: 1080, height: 1080, resize: "contain" } }
-          : undefined
-      );
-    if (data?.signedUrl)
-      setSignedAttachments((prev) => ({ ...prev, [m.id]: data.signedUrl }));
+    const url = await signChatMedia(path, m.attachment_type ?? "image");
+    if (url) setSignedAttachments((prev) => ({ ...prev, [m.id]: url }));
   }, []);
 
   const refreshReactions = useCallback(async (messageId: string) => {
@@ -273,7 +265,31 @@ export function ChatThread({
       const seen = new Set(prev.map((m) => m.id));
       return [...older.filter((m) => !seen.has(m.id)), ...prev];
     });
-    older.forEach((m) => m.attachment_url && signAttachment(m));
+    // Batch-sign every attachment on this page concurrently (one dispatch,
+    // all requests in flight together) instead of firing signAttachment
+    // per-message and racing 50 independent promises.
+    const attachments = older
+      .filter((m) => m.attachment_url)
+      .map((m) => ({
+        id: m.id,
+        path: chatMediaPath(m.attachment_url),
+        type: m.attachment_type ?? "image",
+      }))
+      .filter((a): a is { id: string; path: string; type: "image" | "voice" } =>
+        Boolean(a.path)
+      );
+    if (attachments.length > 0) {
+      signChatMediaMany(attachments).then((signed) => {
+        setSignedAttachments((prev) => {
+          const next = { ...prev };
+          for (const a of attachments) {
+            const url = signed.get(a.path);
+            if (url) next[a.id] = url;
+          }
+          return next;
+        });
+      });
+    }
     if (older.length < 50) setCanLoadOlder(false);
     setLoadingOlder(false);
   }
@@ -391,7 +407,15 @@ export function ChatThread({
           if (typingTimeout.current) clearTimeout(typingTimeout.current);
           typingTimeout.current = setTimeout(() => setOtherTyping(false), 2500);
         })
-        .subscribe();
+        .subscribe((status, err) => {
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || err) {
+            console.error(
+              `[chat] thread realtime subscription failed for conversation ${conversationId}`,
+              status,
+              err
+            );
+          }
+        });
 
       channelRef.current = channel;
     })();

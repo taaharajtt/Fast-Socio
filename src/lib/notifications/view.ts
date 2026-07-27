@@ -18,6 +18,11 @@ export const SYSTEM_NOTIFICATION_TYPES = new Set([
   "matching_accepted",
   "smart_match_accepted",
   "community_join_approved",
+  "community_rejected",
+  "event_rejected",
+  "aura_adjusted",
+  "leaderboard_top_finish",
+  "content_moderated",
 ]);
 
 /** Short verb phrase for a groupable actor action, e.g. "liked your post". */
@@ -71,6 +76,28 @@ export function notificationActionPhrase(type: string): string {
       return "accepted your request";
     case "smart_match_mention":
       return "tagged you as a teammate";
+    case "comment_like":
+      return "liked your comment";
+    case "message_request_accepted":
+      return "accepted your message request";
+    case "message_reaction":
+      return "reacted to your message";
+    case "community_rejected":
+      return "declined your community request";
+    case "event_rejected":
+      return "declined your event request";
+    case "society_role_removed":
+      return "updated your society role";
+    case "event_organizer_added":
+      return "added you as an event co-organizer";
+    case "event_organizer_removed":
+      return "removed you as an event co-organizer";
+    case "aura_adjusted":
+      return "adjusted your Aura score";
+    case "leaderboard_top_finish":
+      return "earned a top weekly leaderboard finish";
+    case "content_moderated":
+      return "removed content for violating community guidelines";
     default:
       return "interacted with you";
   }
@@ -103,6 +130,8 @@ export const ACTIVITY_CATEGORY_LABEL: Record<ActivityCategory, string> = {
 export function notificationCategory(type: string): ActivityCategory {
   switch (type) {
     case "post_like":
+    case "comment_like":
+    case "message_reaction":
       return "reacts";
     case "comment":
     case "comment_reply":
@@ -110,6 +139,7 @@ export function notificationCategory(type: string): ActivityCategory {
       return "replies";
     case "match":
     case "match_post":
+    case "message_request_accepted":
       return "matches";
     case "message_request":
     case "matching_request":
@@ -123,11 +153,17 @@ export function notificationCategory(type: string): ActivityCategory {
     case "message":
       return "messages";
     case "community_approved":
+    case "community_rejected":
     case "event_approved":
+    case "event_rejected":
     case "community_post_approved":
     case "community_post_rejected":
     case "society_announcement":
     case "society_role":
+    case "society_role_removed":
+    case "event_organizer_added":
+    case "event_organizer_removed":
+    case "content_moderated":
       return "announcements";
     case "waitlist_promoted":
     case "event_reminder":
@@ -136,6 +172,8 @@ export function notificationCategory(type: string): ActivityCategory {
       return "announcements";
     case "level_up":
     case "achievement":
+    case "aura_adjusted":
+    case "leaderboard_top_finish":
       return "other";
     case "help_response":
     case "help_follow":

@@ -59,7 +59,15 @@ export async function uploadWithProgress(
     // caller's original guess.
     xhr.setRequestHeader("content-type", uploadBlob.type || opts.contentType || contentType);
     xhr.setRequestHeader("x-upsert", opts.upsert ? "true" : "false");
-    xhr.setRequestHeader("cache-control", "3600");
+    // Every current caller (avatars, post-media, chat-media) embeds a
+    // Date.now()/crypto.randomUUID() token in the path itself, so the object
+    // at this exact path never changes after it's written — safe to cache as
+    // long-lived and immutable. `upsert` here only guards a same-millisecond
+    // retry, not a stable path meant to be overwritten. If a future caller
+    // ever uploads to a STABLE, reused path (e.g. no per-upload token), it
+    // must not go through this header, or the old bytes will keep serving
+    // from cache after the overwrite.
+    xhr.setRequestHeader("cache-control", "public, max-age=31536000, immutable");
 
     xhr.upload.onprogress = (e) => {
       if (!e.lengthComputable || !opts.onProgress) return;

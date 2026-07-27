@@ -63,10 +63,12 @@ export function AnnouncementModal({
     let timeout: ReturnType<typeof setTimeout> | undefined;
 
     if (open) {
-      setRenderModal(true);
+      // Deferred (not called directly in the effect body) so this doesn't
+      // chain into a synchronous re-render during commit.
+      queueMicrotask(() => setRenderModal(true));
       raf = requestAnimationFrame(() => setEntered(true));
     } else {
-      setEntered(false);
+      queueMicrotask(() => setEntered(false));
       timeout = setTimeout(() => setRenderModal(false), 220);
     }
 

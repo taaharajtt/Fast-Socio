@@ -14,6 +14,7 @@ import { isOnline, presenceLabel } from "@/lib/time";
 import {
   chatMediaPath,
   CHAT_MEDIA_TTL_SECONDS,
+  CHAT_IMAGE_DISPLAY_SIZE,
   MESSAGE_PAGE_SIZE,
 } from "@/lib/chat-media";
 
@@ -69,7 +70,8 @@ export default async function ConversationPage({
   const hasMore = (msgs?.length ?? 0) === MESSAGE_PAGE_SIZE;
 
   // chat-media is private (P5-01): resolve a short-lived signed URL for each
-  // attachment. Images are signed with a 1080px transform; voice notes as-is.
+  // attachment. Images are signed at display size (perf pass — bubbles render
+  // at a fixed ~220px, not the full 1080px upload); voice notes as-is.
   const signedAttachments: Record<string, string> = {};
   await Promise.all(
     messages
@@ -83,7 +85,13 @@ export default async function ConversationPage({
             path,
             CHAT_MEDIA_TTL_SECONDS,
             m.attachment_type === "image"
-              ? { transform: { width: 1080, height: 1080, resize: "contain" } }
+              ? {
+                  transform: {
+                    width: CHAT_IMAGE_DISPLAY_SIZE,
+                    height: CHAT_IMAGE_DISPLAY_SIZE,
+                    resize: "contain",
+                  },
+                }
               : undefined
           );
         if (signed?.signedUrl) signedAttachments[m.id] = signed.signedUrl;
@@ -157,6 +165,7 @@ export default async function ConversationPage({
                   src={other.avatar_url}
                   alt={other.full_name ?? "Match"}
                   sizes="36px"
+                  priority
                 />
               ) : null}
             </div>

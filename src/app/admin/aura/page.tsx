@@ -4,11 +4,16 @@ import { requireSuperAdmin } from "@/lib/admin/access";
 import { createClient } from "@/lib/supabase/server";
 import { auraReasonLabel } from "@/lib/aura/labels";
 
+/** Isolated from the component body: Date.now() is an impure call. */
+function dayAgoIso(): string {
+  return new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+}
+
 export default async function AdminAuraPage() {
   await requireSuperAdmin();
   const supabase = await createClient();
 
-  const dayAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+  const dayAgo = dayAgoIso();
   const [{ data: deptRows }, { data: txns }] = await Promise.all([
     supabase.from("profiles").select("department").not("department", "is", null),
     supabase

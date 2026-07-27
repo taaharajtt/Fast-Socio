@@ -35,7 +35,12 @@ export function SocietyShell({
       <div className="px-4 pt-[max(0.5rem,env(safe-area-inset-top))]">
         <div className="relative aspect-[16/9] w-full overflow-hidden rounded-[20px]">
           {s.cover_url ? (
-            <AppImage src={s.cover_url} alt="" sizes="(max-width: 448px) 100vw, 448px" />
+            <AppImage
+              src={s.cover_url}
+              alt=""
+              sizes="(max-width: 448px) 100vw, 448px"
+              priority
+            />
           ) : (
             <div className="h-full w-full" style={{ background: GRADIENT }} />
           )}

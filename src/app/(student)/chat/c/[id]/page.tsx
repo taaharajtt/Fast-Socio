@@ -81,7 +81,7 @@ export default async function CommunityConversationPage({
         <Link href={profileHref} className="flex min-w-0 flex-1 items-center gap-3">
           <span className="glass relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full">
             {image ? (
-              <AppImage src={image} alt="" sizes="36px" />
+              <AppImage src={image} alt="" sizes="36px" priority />
             ) : (
               <span className="text-base" aria-hidden>
                 {communityIcon(community.name)}

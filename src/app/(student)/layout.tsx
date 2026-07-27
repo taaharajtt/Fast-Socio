@@ -6,6 +6,7 @@ import { FloatingDock } from "@/components/floating-dock";
 import { PushAutoEnable } from "@/components/push/push-auto-enable";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { PresenceHeartbeat } from "@/components/presence/heartbeat";
+import { DockRealtime } from "@/components/chat/dock-realtime";
 import { AnnouncementModal } from "@/components/notifications/announcement-modal";
 import { ExternalLinkInterceptor } from "@/components/ui/external-link-interceptor";
 import { createClient } from "@/lib/supabase/server";
@@ -97,6 +98,9 @@ export default async function StudentLayout({
       <InstallPrompt />
       {/* Stamps last_seen_at while the tab is visible, so presence is real. */}
       <PresenceHeartbeat />
+      {/* Keeps the dock's chat badge (unread DMs + pending requests) live on
+          every student screen, not just after a navigation. */}
+      <DockRealtime userId={userId} />
       {/* Badges + announcements stream in after the shell; the fallback dock is
           identical minus the counts, so nothing shifts when they arrive. */}
       <Suspense
