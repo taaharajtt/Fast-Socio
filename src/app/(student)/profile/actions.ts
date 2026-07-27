@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import {
   ALL_DEGREES,
   BIO_MAX,
@@ -28,10 +29,8 @@ export async function updateProfile(input: {
   coverUrl: string | null;
 }): Promise<UpdateProfileResult> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You are not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { error: "You are not signed in." };
 
   const fullName = input.fullName.trim();
   if (fullName.length < 2) return { error: "Please enter your name." };
@@ -64,7 +63,7 @@ export async function updateProfile(input: {
       avatar_url: input.avatarUrl,
       cover_url: input.coverUrl,
     })
-    .eq("id", user.id);
+    .eq("id", userId);
 
   if (error) return { error: error.message };
 

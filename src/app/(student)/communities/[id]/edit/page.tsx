@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import { EditCommunityForm } from "@/components/communities/edit-community-form";
 
 export default async function EditCommunityPage({
@@ -9,9 +10,7 @@ export default async function EditCommunityPage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
   const { data: community } = await supabase
     .from("communities")
@@ -20,7 +19,7 @@ export default async function EditCommunityPage({
     .single();
   if (!community) notFound();
   // Only the owner may edit metadata.
-  if (community.owner_id !== user?.id) redirect(`/communities/${id}`);
+  if (community.owner_id !== userId) redirect(`/communities/${id}`);
 
   return (
     <EditCommunityForm

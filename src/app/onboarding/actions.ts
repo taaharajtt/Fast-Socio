@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import {
   ALL_DEGREES,
   BIO_MAX,
@@ -144,10 +145,8 @@ export async function saveOnboardingStep(
   step: number
 ): Promise<SaveProfileResult> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You are not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { error: "You are not signed in." };
 
   if (draft.avatarUrl && !isAppStorageUrl(draft.avatarUrl))
     return { error: "Invalid avatar image." };
@@ -163,7 +162,7 @@ export async function saveOnboardingStep(
   // the explicit id keep this scoped to the caller's own row.
   const { error } = await supabase
     .from("profiles")
-    .upsert({ ...patch, id: user.id }, { onConflict: "id" });
+    .upsert({ ...patch, id: userId }, { onConflict: "id" });
   if (error) return { error: error.message };
 
   // The private half (mig 0089). Sequential, not parallel: profile_private.id
@@ -173,7 +172,7 @@ export async function saveOnboardingStep(
   if (Object.keys(priv).length > 0) {
     const { error: pErr } = await supabase
       .from("profile_private")
-      .upsert({ ...priv, id: user.id }, { onConflict: "id" });
+      .upsert({ ...priv, id: userId }, { onConflict: "id" });
     if (pErr) return { error: pErr.message };
   }
   return undefined;
@@ -189,10 +188,8 @@ export async function saveProfile(
   draft: OnboardingDraft
 ): Promise<SaveProfileResult> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You are not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { error: "You are not signed in." };
 
   const fullName = (draft.fullName ?? "").trim();
   if (fullName.length < 2) return { error: "Please enter your name." };
@@ -216,7 +213,7 @@ export async function saveProfile(
   // is redirected back to /onboarding on every visit.
   const { error } = await supabase
     .from("profiles")
-    .upsert({ ...patch, id: user.id }, { onConflict: "id" });
+    .upsert({ ...patch, id: userId }, { onConflict: "id" });
   if (error) return { error: error.message };
 
   // The private half (mig 0089), before the redirect — a throw here would leave
@@ -225,7 +222,7 @@ export async function saveProfile(
   if (Object.keys(priv).length > 0) {
     const { error: pErr } = await supabase
       .from("profile_private")
-      .upsert({ ...priv, id: user.id }, { onConflict: "id" });
+      .upsert({ ...priv, id: userId }, { onConflict: "id" });
     if (pErr) return { error: pErr.message };
   }
 

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight, Trophy } from "lucide-react";
 import { GlassCard, GlassChip } from "@/components/ui";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import { auraReasonLabel } from "@/lib/aura/labels";
 import { levelProgress, levelTitle } from "@/lib/aura/levels";
 
@@ -14,10 +15,8 @@ type Txn = {
 
 export default async function AuraPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const me = user!.id;
+  const userId = await getAuthUserId();
+  const me = userId!;
 
   const [{ data: profile }, { data: txnRows }, { count: earnedCount }] =
     await Promise.all([

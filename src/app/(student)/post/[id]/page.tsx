@@ -6,7 +6,7 @@ import { CommentsSection } from "@/components/feed/comments-section";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { fetchComments } from "@/app/(student)/home/actions";
-import type { FeedPost } from "@/lib/feed/types";
+import { FEED_COLUMNS, type FeedPost } from "@/lib/feed/types";
 
 export default async function PostDetailPage({
   params,
@@ -21,7 +21,7 @@ export default async function PostDetailPage({
 
   const { data: postRow } = await supabase
     .from("feed_posts")
-    .select("*")
+    .select(FEED_COLUMNS)
     .eq("id", id)
     .single();
   if (!postRow) notFound();

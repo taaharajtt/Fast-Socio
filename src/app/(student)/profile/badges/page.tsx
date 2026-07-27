@@ -3,15 +3,14 @@ import Image from "next/image";
 import { ChevronLeft, Lock } from "lucide-react";
 import { GlassCard } from "@/components/ui";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import type { Badge } from "@/lib/badges";
 
 /** Badge catalog with the viewer's earned state (replaces Achievements). */
 export default async function BadgesPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const me = user!.id;
+  const userId = await getAuthUserId();
+  const me = userId!;
 
   const [{ data: catalog }, { data: mine }] = await Promise.all([
     supabase

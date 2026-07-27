@@ -1,20 +1,19 @@
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import { PrivacySettings } from "@/components/settings/privacy-settings";
 
 export default async function PrivacySettingsPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
   const { data: p } = await supabase
     .from("profiles")
     .select(
       "discoverable, searchable, show_online, read_receipts, show_aura, show_department, show_semester, profile_visibility"
     )
-    .eq("id", user!.id)
+    .eq("id", userId!)
     .single();
 
   return (

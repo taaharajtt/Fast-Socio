@@ -1,29 +1,17 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-
 /**
- * Onboarding shell. No dock — this is a focused, single-task flow. If the user
- * has already completed onboarding, send them into the app.
+ * Onboarding shell. No dock — this is a focused, single-task flow.
+ *
+ * Both gates that used to live here (no session → /login, already-onboarded →
+ * /home) now run in the proxy/middleware, which was already reading this user's
+ * profile row on every request. That makes this layout fully static, so the
+ * wizard's shell is part of the prerendered output instead of waiting on two
+ * sequential round trips before anything paints.
  */
-export default async function OnboardingLayout({
+export default function OnboardingLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("onboarding_completed")
-    .eq("id", user.id)
-    .single();
-
-  if (profile?.onboarding_completed) redirect("/home");
-
   return (
     <div className="relative flex min-h-full flex-1 flex-col">
       <div

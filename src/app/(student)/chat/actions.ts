@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { isChatMediaPathFor, MESSAGE_PAGE_SIZE } from "@/lib/chat-media";
+import { loadInbox, type InboxData } from "@/app/(student)/chat/inbox-data";
 
 /**
  * Fetch a page of messages older than `cursor` in a conversation (P4-01). RLS
@@ -380,4 +381,17 @@ export async function searchMessages(
     .order("created_at", { ascending: false })
     .limit(30);
   return (data as MessageSearchHit[]) ?? [];
+}
+
+/**
+ * Re-read the inbox for the caller. Used by the inbox list when realtime says a
+ * message, conversation, request or room post changed.
+ *
+ * This exists so that "something changed" costs ONE targeted read instead of
+ * `router.refresh()`, which re-rendered the entire server tree — student
+ * layout, dock, announcements and page — to update a preview line. RLS scopes
+ * the read to the caller exactly as the page render does.
+ */
+export async function refreshInbox(): Promise<InboxData> {
+  return loadInbox();
 }

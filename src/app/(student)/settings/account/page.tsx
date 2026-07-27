@@ -1,18 +1,17 @@
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import { AccountSettings } from "@/components/settings/account-settings";
 
 export default async function AccountSettingsPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
   const { data: p } = await supabase
     .from("profiles")
     .select("username, deactivated_at")
-    .eq("id", user!.id)
+    .eq("id", userId!)
     .single();
 
   return (

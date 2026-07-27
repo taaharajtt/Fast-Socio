@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import { OnboardingWizard } from "./wizard";
 import type { OnboardingDraft } from "./actions";
 
@@ -11,10 +12,8 @@ import type { OnboardingDraft } from "./actions";
  */
 export default async function OnboardingPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const userId = await getAuthUserId();
+  if (!userId) redirect("/login");
 
   // Two reads: the private half (location + matching preferences) lives in
   // profile_private, where RLS scopes it to the owner — see mig 0089. Both are
@@ -25,14 +24,14 @@ export default async function OnboardingPage() {
       .select(
         "full_name, avatar_url, department, degree, gender, interests, bio, personality, languages, pronouns, graduation_year, onboarding_step, onboarding_completed"
       )
-      .eq("id", user.id)
+      .eq("id", userId)
       .single(),
     supabase
       .from("profile_private")
       .select(
         "hostel_status, hometown, relationship_pref, pref_genders, pref_semester_min, pref_semester_max, pref_verified_only"
       )
-      .eq("id", user.id)
+      .eq("id", userId)
       // maybeSingle, not single: mig 0089 backfills and triggers a row for every
       // profile, but a missing one should resume the wizard with empty prefs
       // rather than throw.

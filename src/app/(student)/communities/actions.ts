@@ -23,10 +23,8 @@ export async function createCommunity(input: {
   societyCategory?: string | null;
 }): Promise<{ error: string } | void> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { error: "Not signed in." };
 
   const name = input.name.trim();
   if (name.length < 2 || name.length > 60)
@@ -44,7 +42,7 @@ export async function createCommunity(input: {
   const { data, error } = await supabase
     .from("communities")
     .insert({
-      owner_id: user.id,
+      owner_id: userId,
       name,
       description: input.description.trim() || null,
       cover_url: input.coverUrl ?? null,
@@ -73,10 +71,8 @@ export async function updateCommunity(input: {
   coverUrl?: string | null;
 }): Promise<{ error: string } | void> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { error: "Not signed in." };
 
   const name = input.name.trim();
   if (name.length < 2 || name.length > 60)
@@ -92,7 +88,7 @@ export async function updateCommunity(input: {
       cover_url: input.coverUrl ?? null,
     })
     .eq("id", input.id)
-    .eq("owner_id", user.id);
+    .eq("owner_id", userId);
   if (error) return { error: error.message };
 
   revalidatePath(`/communities/${input.id}`);
@@ -111,10 +107,8 @@ export async function sendCommunityMessage(
   anonymous = false
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
 
   const text = body.trim();
   if (text.length < 1 || text.length > 2000)
@@ -159,10 +153,8 @@ export async function createCommunityPoll(
   anonymous = false
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
 
   const q = question.trim();
   const opts = options.map((o) => o.trim()).filter(Boolean);
@@ -239,10 +231,8 @@ export async function moderateCommunityPost(
   approve: boolean
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
 
   const { error } = await supabase.rpc("moderate_community_post", {
     p_post_id: postId,
@@ -389,10 +379,8 @@ export async function reportCommunity(
   reason: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
 
   const allowed = await checkRateLimit(
     "report",
@@ -402,7 +390,7 @@ export async function reportCommunity(
   if (!allowed) return { ok: false, error: "Too many reports for now." };
 
   const { error } = await supabase.from("reports").insert({
-    reporter_id: user.id,
+    reporter_id: userId,
     target_type: "community",
     target_id: communityId,
     reason,

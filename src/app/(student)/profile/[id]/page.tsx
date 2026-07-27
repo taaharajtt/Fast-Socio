@@ -12,7 +12,7 @@ import { AppImage } from "@/components/ui/app-image";
 import { OnlineDot } from "@/components/ui/badges";
 import { deptMeta } from "@/lib/leaderboard/departments";
 import { isOnline, presenceLabel } from "@/lib/time";
-import type { FeedPost } from "@/lib/feed/types";
+import { FEED_COLUMNS, type FeedPost } from "@/lib/feed/types";
 import { semesterLabel } from "@/lib/profile/constants";
 import { deriveSemester } from "@/lib/profile/semester";
 
@@ -118,7 +118,7 @@ export default async function PublicProfilePage({
     // the real guard). A profile's Posts tab shows attributed posts only.
     supabase
       .from("feed_posts")
-      .select("*")
+      .select(FEED_COLUMNS)
       .eq("author_id", id)
       .eq("is_anonymous", false)
       .order("created_at", { ascending: false })

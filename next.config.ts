@@ -85,6 +85,31 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Cache Components (Next 16) — dynamic-by-default with PPR: every route emits
+  // a prerendered static shell immediately and streams the request-scoped parts
+  // in behind their Suspense boundaries. This is what makes a dock tab switch
+  // paint instantly instead of waiting on the layout's auth + flag round trips.
+  //
+  // On `unstable_instant`: routes deliberately do NOT export it. That export
+  // adds build-time VALIDATION only — prefetching is static by default either
+  // way — and the validation currently fails on every student route with:
+  //
+  //   accessed header "sentry-trace" which is not defined in the `samples`
+  //
+  // which comes from @sentry/nextjs continuing an incoming distributed trace on
+  // each server render, above any boundary we control. The two ways to satisfy
+  // it are worse than the problem: `prefetch: "runtime"` with header samples
+  // makes every prefetch do real per-user server work (a request storm against
+  // Supabase), and switching off server-side tracing gives up error/perf
+  // monitoring the launch audit requires (LR-05). The shells are verified
+  // instead by the build output — every route reports ◐ (Partial Prerender).
+  // Revisit if the instant API gains a way to declare an ambient header read.
+  cacheComponents: true,
+  experimental: {
+    // Next DevTools → "Instant Navs": freeze the UI at the static shell to see
+    // exactly what a tab switch paints before any data arrives.
+    instantNavigationDevToolsToggle: true,
+  },
   // next-pwa injects a webpack config; an empty turbopack config lets `next dev`
   // run on Turbopack without conflict (the SW is disabled in dev anyway).
   turbopack: {},

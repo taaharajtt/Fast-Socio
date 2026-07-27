@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { SkeletonRows } from "@/components/ui/skeleton";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import {
@@ -40,7 +42,35 @@ const COMMUNITY_LITE = "id, name, avatar_url, cover_url, is_society";
  * Discovery and management only — no conversation is rendered on this page or
  * anywhere under Community. Talking happens in Chat.
  */
-export default async function CommunitiesPage() {
+// No `unstable_instant` export here — it only adds build-time validation, and
+// that validation currently trips on @sentry/nextjs reading the `sentry-trace`
+// header during every server render. See the note in next.config.ts; the static
+// shell itself is unaffected (this route builds as Partial Prerender).
+
+/**
+ * Community hub. The heading and the "create a space" affordance are the same
+ * for everyone, so they prerender and the tab lands on a real screen at once;
+ * the four data-backed sections (your spaces, verified communities, upcoming
+ * events, chat rooms) stream in below as one unit.
+ */
+export default function CommunitiesPage() {
+  return (
+    <main className="mx-auto w-full max-w-md px-4 py-6">
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-[22px] font-bold tracking-tight">Community</h1>
+          <p className="mt-1 text-sm text-fg-muted">Campus Spaces &amp; Societies</p>
+        </div>
+        <CreateSpaceButton />
+      </div>
+      <Suspense fallback={<SkeletonRows count={5} />}>
+        <CommunitySections />
+      </Suspense>
+    </main>
+  );
+}
+
+async function CommunitySections() {
   const supabase = await createClient();
   const me = (await getAuthUserId())!;
 
@@ -231,21 +261,11 @@ export default async function CommunitiesPage() {
   });
 
   return (
-    <main className="mx-auto w-full max-w-md px-4 py-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-[22px] font-bold tracking-tight">Community</h1>
-          <p className="mt-1 text-sm text-fg-muted">Campus Spaces &amp; Societies</p>
-        </div>
-        <CreateSpaceButton />
-      </div>
-
-      <CommunityMainView
-        yourSpaces={yourSpaces}
-        verifiedCommunities={verifiedCommunities}
-        upcomingEvents={upcomingEvents}
-        chatRooms={chatRoomCards}
-      />
-    </main>
+    <CommunityMainView
+      yourSpaces={yourSpaces}
+      verifiedCommunities={verifiedCommunities}
+      upcomingEvents={upcomingEvents}
+      chatRooms={chatRoomCards}
+    />
   );
 }

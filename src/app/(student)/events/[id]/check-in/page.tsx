@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import { CheckInScanner } from "@/components/events/check-in-scanner";
 
 /** Organizer-only check-in console for an event (Refactor Phase 6). */
@@ -12,10 +13,8 @@ export default async function EventCheckInPage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const me = user!.id;
+  const userId = await getAuthUserId();
+  const me = userId!;
 
   const { data: event } = await supabase
     .from("events")

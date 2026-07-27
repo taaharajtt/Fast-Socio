@@ -6,9 +6,14 @@ import type { MyDiscoverData } from "@/lib/smart-match/types";
  * The only control on Discover besides the deck itself: post yourself into it.
  * Navigates to the full /discover/post page — creating and managing posts is a
  * considered action, not a quick sheet you dismiss by tapping outside it.
+ *
+ * `data` is optional so the button can render in the page shell before the
+ * viewer's own posts have been read — the link works either way, and the
+ * pending-requests badge (the only part that needs the data) fills in when it
+ * arrives without moving anything.
  */
-export function PostIntentButton({ data }: { data: MyDiscoverData }) {
-  const pending = data.incoming.length;
+export function PostIntentButton({ data }: { data?: MyDiscoverData }) {
+  const pending = data?.incoming.length ?? 0;
 
   return (
     <Link

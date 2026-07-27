@@ -26,3 +26,19 @@ export type FeedPost = {
    *  for anonymous posts by the view. Optional/back-compatible. */
   author_verified?: boolean | null;
 };
+
+/**
+ * The exact columns a FeedPost needs, as a PostgREST select list.
+ *
+ * The hot reads (campus feed, a profile's posts, a single post) used to
+ * `select("*")` on the feed_posts view. That view is wide and joins author +
+ * like/comment aggregates, so every extra column was serialised, shipped over
+ * the wire from the database and then re-serialised into the RSC payload —
+ * for fields no renderer touches. Naming them keeps the payload to what
+ * PostCard actually reads, and makes it obvious what breaks if the view
+ * changes shape.
+ */
+// Kept as one literal (rather than a joined array) so PostgREST's types can
+// still infer the row shape from it at each call site.
+// prettier-ignore
+export const FEED_COLUMNS = "id, body, image_url, is_anonymous, like_count, comment_count, created_at, author_id, author_name, author_avatar, author_department, author_verified, liked_by_me, poll_id" as const;

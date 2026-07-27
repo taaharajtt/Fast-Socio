@@ -1,14 +1,13 @@
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import { BlockedList, type RelUser } from "@/components/settings/blocked-list";
 
 export default async function BlockedPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const me = user!.id;
+  const userId = await getAuthUserId();
+  const me = userId!;
 
   const [{ data: blockedRows }, { data: mutedRows }] = await Promise.all([
     supabase

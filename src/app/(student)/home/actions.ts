@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { isAppStorageUrl } from "@/lib/url-safety";
-import { FEED_PAGE_SIZE, type FeedPost } from "@/lib/feed/types";
+import { FEED_COLUMNS, FEED_PAGE_SIZE, type FeedPost } from "@/lib/feed/types";
 import { scoreContent, blockMessage } from "@/lib/moderation/rules";
 import { postingBlockReason } from "@/lib/moderation/server";
 import {
@@ -25,7 +25,7 @@ export async function fetchFeedPage(
   const supabase = await createClient();
   let query = supabase
     .from("feed_posts")
-    .select("*")
+    .select(FEED_COLUMNS)
     .is("community_id", null)
     .order("created_at", { ascending: false })
     .limit(FEED_PAGE_SIZE);

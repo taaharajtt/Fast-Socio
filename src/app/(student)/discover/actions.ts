@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import type { DiscoverProfile } from "@/lib/profile/types";
 
@@ -18,10 +19,8 @@ export async function recordSwipe(
   direction: "like" | "pass"
 ): Promise<SwipeResult> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
 
   const limit = direction === "like" ? RATE_LIMITS.like : RATE_LIMITS.pass;
   const allowed = await checkRateLimit(
@@ -37,7 +36,7 @@ export async function recordSwipe(
   const { error } = await supabase
     .from("swipes")
     .upsert(
-      { swiper_id: user.id, target_id: targetId, direction },
+      { swiper_id: userId, target_id: targetId, direction },
       { onConflict: "swiper_id,target_id" }
     );
   if (error) {
@@ -46,7 +45,7 @@ export async function recordSwipe(
 
   let matched = false;
   if (direction === "like") {
-    const [lo, hi] = [user.id, targetId].sort();
+    const [lo, hi] = [userId, targetId].sort();
     const { data } = await supabase
       .from("matches")
       .select("id")
@@ -67,20 +66,18 @@ export async function undoSwipe(
   targetId: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
 
   const { error } = await supabase
     .from("swipes")
     .delete()
-    .eq("swiper_id", user.id)
+    .eq("swiper_id", userId)
     .eq("target_id", targetId);
   if (error) return { ok: false, error: error.message };
 
   // If a match had formed from this like, remove it too.
-  const [lo, hi] = [user.id, targetId].sort();
+  const [lo, hi] = [userId, targetId].sort();
   await supabase
     .from("matches")
     .delete()
@@ -96,10 +93,8 @@ export async function sendMessageRequest(
   message: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
 
   const text = message.trim();
   if (text.length < 1 || text.length > 500)
@@ -114,7 +109,7 @@ export async function sendMessageRequest(
 
   const { error } = await supabase
     .from("message_requests")
-    .insert({ sender_id: user.id, recipient_id: recipientId, message: text });
+    .insert({ sender_id: userId, recipient_id: recipientId, message: text });
   if (error) {
     if (error.code === "23505")
       return { ok: false, error: "You already have a pending request." };
@@ -130,10 +125,8 @@ export async function reportProfile(
   details?: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
 
   const allowed = await checkRateLimit(
     "report",
@@ -143,7 +136,7 @@ export async function reportProfile(
   if (!allowed) return { ok: false, error: "Too many reports for now." };
 
   const { error } = await supabase.from("reports").insert({
-    reporter_id: user.id,
+    reporter_id: userId,
     target_type: "profile",
     target_id: targetId,
     reason,

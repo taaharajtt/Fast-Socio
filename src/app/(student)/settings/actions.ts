@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { chatMediaPath } from "@/lib/chat-media";
 
@@ -17,11 +18,9 @@ const POST_MEDIA_MARKER = "/storage/v1/object/public/post-media/";
  */
 export async function deleteAccount(): Promise<{ error: string } | void> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You are not signed in." };
-  const uid = user.id;
+  const userId = await getAuthUserId();
+  if (!userId) return { error: "You are not signed in." };
+  const uid = userId;
 
   // Gather the user's storage objects BEFORE the DB rows cascade away.
   const [{ data: myPosts }, { data: myMsgs }] = await Promise.all([

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 
 // Boolean privacy toggles that map 1:1 to profiles columns (mig 0058). All
 // default open; flipping one immediately affects Discover / profile / chat.
@@ -26,15 +27,13 @@ export async function setPrivacy(
     return { error: "Unknown privacy setting." };
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { error: "Not signed in." };
 
   const { error } = await supabase
     .from("profiles")
     .update({ [key]: value })
-    .eq("id", user.id);
+    .eq("id", userId);
   if (error) return { error: error.message };
   revalidatePath("/settings/privacy");
 }
@@ -46,14 +45,12 @@ export async function setProfileVisibility(
   if (value !== "public" && value !== "university")
     return { error: "Invalid visibility." };
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { error: "Not signed in." };
   const { error } = await supabase
     .from("profiles")
     .update({ profile_visibility: value })
-    .eq("id", user.id);
+    .eq("id", userId);
   if (error) return { error: error.message };
   revalidatePath("/settings/privacy");
 }

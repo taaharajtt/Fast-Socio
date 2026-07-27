@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -14,10 +15,8 @@ type Result = { ok: true } | { ok: false; error: string };
  */
 export async function signOutOtherDevices(currentId: string | null): Promise<Result> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
 
   const { error: signErr } = await supabase.auth.signOut({ scope: "others" });
   if (signErr) return { ok: false, error: signErr.message };
@@ -25,7 +24,7 @@ export async function signOutOtherDevices(currentId: string | null): Promise<Res
   let q = supabase
     .from("user_sessions")
     .update({ revoked_at: new Date().toISOString() })
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .is("revoked_at", null);
   if (currentId) q = q.neq("id", currentId);
   await q;

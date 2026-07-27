@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 
 /** Persist a Web Push subscription for the current user (one row per endpoint). */
 export async function savePushSubscription(sub: {
@@ -10,14 +11,12 @@ export async function savePushSubscription(sub: {
   userAgent?: string;
 }): Promise<{ error: string } | void> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { error: "Not signed in." };
 
   const { error } = await supabase.from("push_subscriptions").upsert(
     {
-      user_id: user.id,
+      user_id: userId,
       endpoint: sub.endpoint,
       p256dh: sub.p256dh,
       auth: sub.auth,
@@ -31,13 +30,11 @@ export async function savePushSubscription(sub: {
 /** Remove a stored subscription (on disable). */
 export async function removePushSubscription(endpoint: string) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return;
+  const userId = await getAuthUserId();
+  if (!userId) return;
   await supabase
     .from("push_subscriptions")
     .delete()
     .eq("endpoint", endpoint)
-    .eq("user_id", user.id);
+    .eq("user_id", userId);
 }

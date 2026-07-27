@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import { deviceLabel } from "@/lib/device";
 import { timeAgo } from "@/lib/time";
 import { DeviceList, type DeviceRow } from "@/components/settings/device-list";
@@ -15,15 +16,13 @@ type SessionRow = {
 
 export default async function DevicesPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
   const [{ data: rows }, hdrs] = await Promise.all([
     supabase
       .from("user_sessions")
       .select("id, user_agent, ip, last_active_at")
-      .eq("user_id", user!.id)
+      .eq("user_id", userId!)
       .is("revoked_at", null)
       .order("last_active_at", { ascending: false }),
     headers(),

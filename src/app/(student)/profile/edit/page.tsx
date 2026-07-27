@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import {
   EditProfileForm,
   type EditableProfile,
@@ -8,14 +9,12 @@ import {
 
 export default async function EditProfilePage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("full_name, department, degree, gender, interests, bio, avatar_url, cover_url")
-    .eq("id", user!.id)
+    .eq("id", userId!)
     .single();
 
   return (

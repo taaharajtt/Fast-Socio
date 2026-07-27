@@ -17,7 +17,25 @@ import { createClient } from "@/lib/supabase/server";
  * the same way `user.id` was.
  */
 export const getAuthUserId = cache(async (): Promise<string | null> => {
-  const supabase = await createClient();
-  const { data } = await supabase.auth.getClaims();
+  const { data } = await getClaims();
   return (data?.claims?.sub as string | undefined) ?? null;
+});
+
+/**
+ * The authenticated user's email, from the same locally-verified claims.
+ *
+ * Supabase puts `email` in the access token, so a screen that only needs to
+ * SHOW the signed-in address (Settings → Account) does not need `getUser()` and
+ * its Auth API round trip. Anything that acts on the email — changing it,
+ * re-verifying it — must still go through the Auth API, which is authoritative.
+ */
+export const getAuthEmail = cache(async (): Promise<string | null> => {
+  const { data } = await getClaims();
+  return (data?.claims?.email as string | undefined) ?? null;
+});
+
+/** Shared claim read, so id + email cost one verification per request. */
+const getClaims = cache(async () => {
+  const supabase = await createClient();
+  return supabase.auth.getClaims();
 });

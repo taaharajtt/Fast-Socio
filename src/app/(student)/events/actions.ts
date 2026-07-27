@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { isAppStorageUrl } from "@/lib/url-safety";
 
@@ -18,10 +19,8 @@ export async function createEvent(input: {
   capacity?: number | null;
 }): Promise<{ error: string } | void> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { error: "Not signed in." };
 
   const title = input.title.trim();
   if (title.length < 2 || title.length > 120)
@@ -47,7 +46,7 @@ export async function createEvent(input: {
   const { data, error } = await supabase
     .from("events")
     .insert({
-      host_id: user.id,
+      host_id: userId,
       community_id: input.communityId ?? null,
       title,
       description: input.description.trim() || null,
@@ -86,10 +85,8 @@ type RsvpResult =
  */
 export async function rsvp(eventId: string): Promise<RsvpResult> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
 
   const { data, error } = await supabase.rpc("register_for_event", {
     p_event: eventId,
@@ -105,21 +102,19 @@ export async function cancelRsvp(
   eventId: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
   const [seat, wait] = await Promise.all([
     supabase
       .from("event_attendees")
       .delete()
       .eq("event_id", eventId)
-      .eq("user_id", user.id),
+      .eq("user_id", userId),
     supabase
       .from("event_waitlist")
       .delete()
       .eq("event_id", eventId)
-      .eq("user_id", user.id),
+      .eq("user_id", userId),
   ]);
   if (seat.error) return { ok: false, error: seat.error.message };
   if (wait.error) return { ok: false, error: wait.error.message };
@@ -133,10 +128,8 @@ export async function sendEventMessage(
   body: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
   const text = body.trim();
   if (!text) return { ok: false, error: "Message is empty." };
   if (text.length > 1000)
@@ -144,7 +137,7 @@ export async function sendEventMessage(
 
   const { error } = await supabase.from("event_messages").insert({
     event_id: eventId,
-    sender_id: user.id,
+    sender_id: userId,
     body: text,
   });
   if (error) return { ok: false, error: error.message };
@@ -160,10 +153,8 @@ export async function checkInAttendee(
   | { ok: false; error: string }
 > {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
   const trimmed = code.trim();
   if (!trimmed) return { ok: false, error: "Enter a check-in code." };
 
@@ -184,10 +175,8 @@ export async function submitEventFeedback(
   comment: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
   if (!Number.isInteger(rating) || rating < 1 || rating > 5)
     return { ok: false, error: "Pick a rating from 1 to 5." };
   const text = comment.trim().slice(0, 500);
@@ -195,7 +184,7 @@ export async function submitEventFeedback(
   const { error } = await supabase.from("event_feedback").upsert(
     {
       event_id: eventId,
-      user_id: user.id,
+      user_id: userId,
       rating,
       comment: text || null,
     },
@@ -215,10 +204,8 @@ export async function deleteEvent(
   eventId: string
 ): Promise<{ error: string } | void> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { error: "Not signed in." };
 
   const { error } = await supabase.rpc("delete_event", { p_event_id: eventId });
   if (error) return { error: error.message };
@@ -266,10 +253,9 @@ export async function addOrganizer(
   userId: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  // `userId` above is the TARGET being appointed/removed; this is the caller.
+  const callerId = await getAuthUserId();
+  if (!callerId) return { ok: false, error: "Not signed in." };
 
   const { error } = await supabase.rpc("add_event_organizer", {
     p_event: eventId,
@@ -286,10 +272,9 @@ export async function removeOrganizer(
   userId: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  // `userId` above is the TARGET being appointed/removed; this is the caller.
+  const callerId = await getAuthUserId();
+  if (!callerId) return { ok: false, error: "Not signed in." };
 
   const { error } = await supabase.rpc("remove_event_organizer", {
     p_event: eventId,
@@ -306,10 +291,8 @@ export async function reportEvent(
   reason: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
 
   const allowed = await checkRateLimit(
     "report",
@@ -319,7 +302,7 @@ export async function reportEvent(
   if (!allowed) return { ok: false, error: "Too many reports for now." };
 
   const { error } = await supabase.from("reports").insert({
-    reporter_id: user.id,
+    reporter_id: userId,
     target_type: "event",
     target_id: eventId,
     reason,

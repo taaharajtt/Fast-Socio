@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 
 const SUBJECTS = [
   "strike",
@@ -18,10 +19,8 @@ export async function submitAppeal(input: {
   explanation: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
 
   if (!SUBJECTS.includes(input.subject as (typeof SUBJECTS)[number]))
     return { ok: false, error: "Pick what you're appealing." };
@@ -33,7 +32,7 @@ export async function submitAppeal(input: {
   const { data: existing } = await supabase
     .from("appeals")
     .select("id")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .eq("subject", input.subject)
     .eq("status", "open")
     .maybeSingle();
@@ -41,7 +40,7 @@ export async function submitAppeal(input: {
     return { ok: false, error: "You already have an open appeal for this." };
 
   const { error } = await supabase.from("appeals").insert({
-    user_id: user.id,
+    user_id: userId,
     subject: input.subject,
     explanation,
     status: "open",

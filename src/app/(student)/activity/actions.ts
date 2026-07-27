@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 
 /**
  * Mark every notification read automatically when the panel is opened. Called
@@ -11,10 +12,8 @@ import { createClient } from "@/lib/supabase/server";
  */
 export async function markActivityRead(): Promise<{ ok: boolean }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false };
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false };
   await supabase.rpc("mark_notifications_read");
   return { ok: true };
 }
@@ -30,16 +29,14 @@ export async function dismissAnnouncements(
 ): Promise<{ ok: boolean }> {
   if (ids.length === 0) return { ok: true };
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false };
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false };
 
   const { error } = await supabase
     .from("notifications")
     .update({ read_at: new Date().toISOString() })
     .in("id", ids)
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .eq("type", "announcement");
   return { ok: !error };
 }

@@ -7,6 +7,7 @@ import type { Organizer } from "@/components/events/event-host-controls";
 import type { EventMessage } from "@/components/events/event-discussion";
 import type { Attendee } from "@/components/events/attendee-list";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import { formatEventDate } from "@/lib/events/format";
 import { getSocialProof } from "@/lib/communities/social-proof";
 import { checkInQrDataUrl } from "@/lib/events/qr";
@@ -37,10 +38,8 @@ export default async function EventPage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const me = user!.id;
+  const userId = await getAuthUserId();
+  const me = userId!;
 
   const { data: event } = await supabase
     .from("events")

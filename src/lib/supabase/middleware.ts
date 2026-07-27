@@ -91,7 +91,11 @@ export async function updateSession(request: NextRequest) {
   if (userId && !isPublicRoute) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("is_admin, is_banned")
+      // onboarding_completed rides along on a row we were already reading. The
+      // student layout used to do this gate itself, which forced it to await a
+      // profile query before it could render ANY of the app shell. Doing it
+      // here costs nothing extra and lets that layout become a static shell.
+      .select("is_admin, is_banned, onboarding_completed")
       .eq("id", userId)
       .single();
 
@@ -105,6 +109,31 @@ export async function updateSession(request: NextRequest) {
     if (pathname.startsWith("/admin") && !profile?.is_admin) {
       const url = request.nextUrl.clone();
       url.pathname = "/home";
+      return NextResponse.redirect(url);
+    }
+
+    // Unfinished signups are parked in the profile wizard. /admin is exempt
+    // (an admin console user was never gated on onboarding), as are the
+    // wizard itself, the maintenance interstitial and API routes.
+    const skipsOnboardingGate =
+      pathname.startsWith("/onboarding") ||
+      pathname.startsWith("/admin") ||
+      pathname.startsWith("/api/") ||
+      pathname === "/maintenance";
+    if (!profile?.onboarding_completed && !skipsOnboardingGate) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/onboarding";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+
+    // ...and the inverse: someone who has finished the wizard has no reason to
+    // be back in it. Handled here for the same reason — it lets the onboarding
+    // layout render without awaiting a query of its own.
+    if (profile?.onboarding_completed && pathname.startsWith("/onboarding")) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/home";
+      url.search = "";
       return NextResponse.redirect(url);
     }
   }

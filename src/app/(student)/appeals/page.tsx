@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft, ShieldAlert } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import { timeAgo } from "@/lib/time";
 import { AppealForm } from "@/components/moderation/appeal-form";
 
@@ -33,10 +34,8 @@ function activeRestrictionOf(
 
 export default async function AppealsPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const me = user!.id;
+  const userId = await getAuthUserId();
+  const me = userId!;
 
   const [{ data: profile }, { data: strikeRows }, { data: appealRows }] =
     await Promise.all([

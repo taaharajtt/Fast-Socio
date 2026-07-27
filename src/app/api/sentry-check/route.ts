@@ -4,10 +4,14 @@
 //
 // Hard-gated OFF in production so it can't be used to spam the error queue.
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
 
-export const dynamic = "force-dynamic";
-
-export function GET() {
+// This handler exists to throw, so it must never run during the build. It used
+// to say `dynamic = "force-dynamic"`, which Cache Components rejects; awaiting
+// connection() is the replacement — it holds rendering until a real request
+// arrives, so the prerender pass walks straight past it.
+export async function GET() {
+  await connection();
   if (process.env.VERCEL_ENV === "production") notFound();
   throw new Error("Sentry check: deliberate test error from /api/sentry-check");
 }

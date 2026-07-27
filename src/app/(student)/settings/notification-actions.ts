@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 
 const ALLOWED = [
   "matches",
@@ -20,15 +21,13 @@ export async function setNotificationPref(
     return { error: "Unknown preference." };
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { error: "Not signed in." };
 
   const { error } = await supabase
     .from("notification_preferences")
     .update({ [key]: value })
-    .eq("user_id", user.id);
+    .eq("user_id", userId);
   if (error) return { error: error.message };
 }
 
@@ -55,10 +54,8 @@ export async function setQuietHours(input: {
     return { error: "Invalid quiet-hours window." };
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { error: "Not signed in." };
 
   const { error } = await supabase
     .from("notification_preferences")
@@ -67,6 +64,6 @@ export async function setQuietHours(input: {
       quiet_start: start,
       quiet_end: end,
     })
-    .eq("user_id", user.id);
+    .eq("user_id", userId);
   if (error) return { error: error.message };
 }

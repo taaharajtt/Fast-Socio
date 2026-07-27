@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 import { SetPasswordForm } from "./set-password-form";
 
 /**
@@ -15,11 +16,9 @@ import { SetPasswordForm } from "./set-password-form";
  */
 export default async function SetPasswordPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
-  if (!user) {
+  if (!userId) {
     return (
       <main className="w-full max-w-sm text-center">
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-error/15 text-3xl">
@@ -52,7 +51,7 @@ export default async function SetPasswordPage() {
   const { data: profile } = await supabase
     .from("profiles")
     .select("onboarding_completed")
-    .eq("id", user.id)
+    .eq("id", userId)
     .single();
 
   // New signups continue into profile setup; returning users (password reset)

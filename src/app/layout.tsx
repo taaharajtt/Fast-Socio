@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
@@ -73,7 +74,14 @@ export default function RootLayout({
         <AppleSplashScreens />
       </head>
       <body className="min-h-full flex flex-col">
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          {/* Outermost route boundary. Every nested layout adds a closer one,
+              so this only ever catches the handful of standalone pages that sit
+              directly under the root (the landing redirect, /banned,
+              /maintenance, the auth callbacks) — it exists so none of them can
+              hold the document back with a blank screen. */}
+          <Suspense>{children}</Suspense>
+        </ThemeProvider>
         <Analytics />
         <SpeedInsights />
       </body>

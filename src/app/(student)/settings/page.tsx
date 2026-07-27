@@ -10,19 +10,18 @@ import { EnablePush } from "@/components/settings/enable-push";
 import { AppearanceSettings } from "@/components/settings/appearance-settings";
 import { ShieldCheck, UserCog, MonitorSmartphone, Ban, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthEmail, getAuthUserId } from "@/lib/auth/user";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const [userId, email] = await Promise.all([getAuthUserId(), getAuthEmail()]);
 
   const { data: prefs } = await supabase
     .from("notification_preferences")
     .select(
       "matches, messages, likes, events, communities, system, quiet_hours_enabled, quiet_start, quiet_end"
     )
-    .eq("user_id", user!.id)
+    .eq("user_id", userId!)
     .single();
 
   return (
@@ -42,7 +41,7 @@ export default async function SettingsPage() {
         <h2 className="text-sm font-medium text-fg-muted">Account</h2>
         <GlassCard className="space-y-1 p-5">
           <p className="text-sm text-fg-muted">Signed in as</p>
-          <p className="break-all font-medium">{user?.email ?? "—"}</p>
+          <p className="break-all font-medium">{email ?? "—"}</p>
         </GlassCard>
       </section>
 

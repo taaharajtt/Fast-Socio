@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth/user";
 
 /**
  * Deactivate: hide the profile from Discover (enforced in the RPC, mig 0058) and
@@ -9,14 +10,12 @@ import { createClient } from "@/lib/supabase/server";
  */
 export async function deactivateAccount(): Promise<{ error: string } | void> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { error: "Not signed in." };
   const { error } = await supabase
     .from("profiles")
     .update({ deactivated_at: new Date().toISOString() })
-    .eq("id", user.id);
+    .eq("id", userId);
   if (error) return { error: error.message };
   // Leave a security-timeline breadcrumb (best-effort).
   await supabase.rpc("log_security_event", { p_event: "account_deactivated" });
@@ -26,14 +25,12 @@ export async function deactivateAccount(): Promise<{ error: string } | void> {
 /** Restore a deactivated account. */
 export async function reactivateAccount(): Promise<{ error: string } | void> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in." };
+  const userId = await getAuthUserId();
+  if (!userId) return { error: "Not signed in." };
   const { error } = await supabase
     .from("profiles")
     .update({ deactivated_at: null })
-    .eq("id", user.id);
+    .eq("id", userId);
   if (error) return { error: error.message };
   await supabase.rpc("log_security_event", { p_event: "account_reactivated" });
   revalidatePath("/settings/account");

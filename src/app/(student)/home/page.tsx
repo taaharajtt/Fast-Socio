@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Activity, MapPinned } from "lucide-react";
@@ -7,34 +8,31 @@ import { NewFeaturesTour } from "@/components/tour/new-features-tour";
 import { HomeHelpStrip } from "@/components/help/home-help-strip";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
-import { FEED_PAGE_SIZE, type FeedPost } from "@/lib/feed/types";
+import { timed } from "@/lib/perf";
+import { FEED_COLUMNS, FEED_PAGE_SIZE, type FeedPost } from "@/lib/feed/types";
 
-export default async function HomePage() {
-  const supabase = await createClient();
-  // Verified locally from the JWT — no Auth API round trip (the layout has
-  // already gated this route; RLS scopes every query below).
-  const userId = (await getAuthUserId())!;
-  const [{ data }, { count: unreadActivity }, { data: viewer }] =
-    await Promise.all([
-    // Single chronological campus feed (newest first).
-    supabase
-      .from("feed_posts")
-      .select("*")
-      .is("community_id", null)
-      .order("created_at", { ascending: false })
-      .limit(FEED_PAGE_SIZE),
-    // UAT-013: the Activity icon carries an unread count. Mirrors the filter on
-    // /activity so the badge can never point at rows that page won't show.
-    supabase
-      .from("notifications")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .is("read_at", null)
-      .not("type", "in", "(message,message_request,announcement)"),
-    // First-run tour gate: null tour_seen_at = this account hasn't seen it.
-    supabase.from("profiles").select("tour_seen_at").eq("id", userId).single(),
-  ]);
-  const posts = (data as FeedPost[]) ?? [];
+// No `unstable_instant` export here — it only adds build-time validation, and
+// that validation currently trips on @sentry/nextjs reading the `sentry-trace`
+// header during every server render. See the note in next.config.ts; the static
+// shell itself is unaffected (this route builds as Partial Prerender).
+
+/**
+ * The campus feed.
+ *
+ * This component does not await anything: the masthead, the Campus Map and
+ * Activity buttons and the composer are identical for every student on every
+ * visit, so they belong in the prerendered shell and appear the instant the
+ * Home tab is tapped. The three request-scoped pieces — the Activity unread
+ * count, the feed itself, and which guided tour (if either) this account is due
+ * — each stream into their own slot.
+ *
+ * `loadFeed()` is deliberately called WITHOUT await and handed to the client
+ * shell as a promise. That starts the query immediately (it is in flight while
+ * the shell is still being serialised) but leaves this function synchronous, so
+ * nothing above the feed can be held back by it.
+ */
+export default function HomePage() {
+  const feed = loadFeed();
 
   return (
     <main className="mx-auto w-full max-w-md pb-4">
@@ -76,23 +74,11 @@ export default async function HomePage() {
           >
             <MapPinned className="h-5 w-5" aria-hidden />
           </Link>
-          <Link
-            href="/activity"
-            data-tour="activity"
-            aria-label={
-              unreadActivity
-                ? `Activity, ${unreadActivity} unread`
-                : "Activity"
-            }
-            className="glass relative flex h-9 w-9 items-center justify-center rounded-full text-fg-muted hover:text-fg"
-          >
-            <Activity className="h-5 w-5" aria-hidden />
-            {(unreadActivity ?? 0) > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold leading-none text-white ring-2 ring-bg">
-                {unreadActivity! > 99 ? "99+" : unreadActivity}
-              </span>
-            )}
-          </Link>
+          {/* The button itself is static; only its unread count is per-user, so
+              the badge alone streams on top of an already-tappable control. */}
+          <Suspense fallback={<ActivityLink />}>
+            <ActivityLinkWithBadge />
+          </Suspense>
         </div>
       </header>
 
@@ -101,15 +87,88 @@ export default async function HomePage() {
           strip sits in the belowComposer slot so the composer reads first, then
           a gap, then Campus Help (its own <section className="mt-4">). */}
       <HomeFeed
-        initialPosts={posts}
-        currentUserId={userId}
-        belowComposer={<HomeHelpStrip />}
+        feed={feed}
+        belowComposer={
+          <Suspense fallback={null}>
+            <HomeHelpStrip />
+          </Suspense>
+        }
       />
       {/* Guided tours (mutually exclusive). New accounts get the full first-run
           tour, gated per account via profiles.tour_seen_at; accounts that have
           already finished it get the release "what's new" tour instead, gated
-          per device via localStorage so it shows once after the addons rollout. */}
-      {viewer?.tour_seen_at ? <NewFeaturesTour /> : <FirstRunTour />}
+          per device via localStorage so it shows once after the addons rollout.
+          Neither is visible on first paint, so this streams in last. */}
+      <Suspense fallback={null}>
+        <TourGate />
+      </Suspense>
     </main>
   );
+}
+
+/** Single chronological campus feed (newest first), plus the viewer id the feed
+ *  rows need to know which posts are the viewer's own. */
+async function loadFeed(): Promise<{
+  posts: FeedPost[];
+  currentUserId: string | null;
+}> {
+  const supabase = await createClient();
+  // Verified locally from the JWT — no Auth API round trip (middleware has
+  // already gated this route; RLS scopes the query below).
+  const currentUserId = await getAuthUserId();
+  const { data } = await timed("home:feed", () =>
+    supabase
+      .from("feed_posts")
+      .select(FEED_COLUMNS)
+      .is("community_id", null)
+      .order("created_at", { ascending: false })
+      .limit(FEED_PAGE_SIZE)
+  );
+  return { posts: (data as unknown as FeedPost[]) ?? [], currentUserId };
+}
+
+/** The Activity button with no count — what the shell renders until the real
+ *  count arrives. Identical geometry, so the badge never shifts anything. */
+function ActivityLink({ unread = 0 }: { unread?: number }) {
+  return (
+    <Link
+      href="/activity"
+      data-tour="activity"
+      aria-label={unread ? `Activity, ${unread} unread` : "Activity"}
+      className="glass relative flex h-9 w-9 items-center justify-center rounded-full text-fg-muted hover:text-fg"
+    >
+      <Activity className="h-5 w-5" aria-hidden />
+      {unread > 0 && (
+        <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold leading-none text-white ring-2 ring-bg">
+          {unread > 99 ? "99+" : unread}
+        </span>
+      )}
+    </Link>
+  );
+}
+
+/** UAT-013: the Activity icon carries an unread count. Mirrors the filter on
+ *  /activity so the badge can never point at rows that page won't show. */
+async function ActivityLinkWithBadge() {
+  const supabase = await createClient();
+  const userId = (await getAuthUserId())!;
+  const { count } = await supabase
+    .from("notifications")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .is("read_at", null)
+    .not("type", "in", "(message,message_request,announcement)");
+  return <ActivityLink unread={count ?? 0} />;
+}
+
+/** First-run tour gate: null tour_seen_at = this account hasn't seen it. */
+async function TourGate() {
+  const supabase = await createClient();
+  const userId = (await getAuthUserId())!;
+  const { data: viewer } = await supabase
+    .from("profiles")
+    .select("tour_seen_at")
+    .eq("id", userId)
+    .single();
+  return viewer?.tour_seen_at ? <NewFeaturesTour /> : <FirstRunTour />;
 }

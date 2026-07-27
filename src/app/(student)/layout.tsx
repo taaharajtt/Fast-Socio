@@ -9,45 +9,132 @@ import { PresenceHeartbeat } from "@/components/presence/heartbeat";
 import { DockRealtime } from "@/components/chat/dock-realtime";
 import { AnnouncementModal } from "@/components/notifications/announcement-modal";
 import { ExternalLinkInterceptor } from "@/components/ui/external-link-interceptor";
+import { RouteFallback } from "@/components/ui/route-fallback";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { getMaintenanceState, resolveFlags } from "@/lib/flags";
+import { timed } from "@/lib/perf";
 
 /**
- * Shell for the logged-in student experience. Hosts the floating glass dock and
- * reserves bottom space so scrollable content clears it. All six primary
- * destinations live under this route group. New users who haven't finished
- * onboarding are sent through the profile wizard first.
+ * Shell for the logged-in student experience. Hosts the bottom dock and reserves
+ * space so scrollable content clears it. All six primary destinations live under
+ * this route group.
  *
- * PERF: this layout runs on every navigation, so it must not stack round trips.
- * Auth is verified locally from the JWT (getAuthUserId), the gate queries run
- * in ONE parallel stage, session recording is deferred to after the response,
- * and the dock badges + announcements stream in behind Suspense instead of
- * blocking the page shell.
+ * PERF — this layout is deliberately NOT async. Under Cache Components every
+ * segment is prerendered into a static shell and the request-scoped parts stream
+ * in behind their Suspense boundaries. The moment this function awaits anything
+ * (a profile row, a feature flag, the session cookie) that shell collapses and
+ * every dock tap has to wait on a server round trip before ANY pixel changes.
+ * So the layout itself renders only markup that is identical for every student —
+ * the ambient glow, the children slot, the client islands, and a fully working
+ * dock — and hands all user-specific work to <StudentShell/> below.
+ *
+ * Correctness is unaffected. Auth, the ban gate and the onboarding gate all run
+ * in the proxy/middleware BEFORE this ever renders, and RLS remains the
+ * authority on every query. The redirects kept in StudentShell are
+ * defence-in-depth, not the primary boundary.
  */
-export default async function StudentLayout({
+export default function StudentLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  return (
+    <div className="relative flex min-h-full flex-1 flex-col">
+      {/* Ambient brand glow shared across student screens */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 -z-10 opacity-60"
+        style={{
+          background:
+            "radial-gradient(40rem 30rem at 15% -10%, rgba(124,92,255,0.22), transparent), radial-gradient(35rem 25rem at 95% 5%, rgba(200,80,192,0.18), transparent)",
+        }}
+      />
+      {/* Every student route is request-scoped, so the page segment always
+          suspends. This boundary is what lets the shell above it (glow, dock,
+          client islands) prerender and paint on its own. Routes with their own
+          loading.tsx nest a closer boundary and keep using it; this fallback
+          only catches the ones that don't have one. */}
+      <div className="flex-1 pb-20">
+        <Suspense fallback={<RouteFallback />}>{children}</Suspense>
+      </div>
+      {/* Global click-delegation guard: warns before any off-origin link in a
+          post, comment, chat, help response, or profile bio is followed. */}
+      <ExternalLinkInterceptor />
+      {/* Enable push notifications by default for signed-in students. */}
+      <PushAutoEnable />
+      {/* Browser-tab users: invite them to install. On iOS this is the only way
+          they can ever receive push at all. Renders nothing once installed. */}
+      <InstallPrompt />
+      {/* Stamps last_seen_at while the tab is visible, so presence is real. */}
+      <PresenceHeartbeat />
+      {/* The fallback is a REAL dock — every tab is present, labelled and
+          navigable — so it ships in the static shell and is interactive before
+          a single query resolves. What streams in on top is only the enrichment:
+          unread counts, the viewer's dp on the Me tab, and the viewer id that
+          tells your own /profile/<id> apart from someone else's. */}
+      <Suspense fallback={<FloatingDock />}>
+        <StudentShell />
+      </Suspense>
+    </div>
+  );
+}
+
+/**
+ * Everything about the shell that depends on WHO is asking. Streams in after the
+ * static shell has painted, so none of it delays a navigation.
+ *
+ * One parallel stage covers the gate data plus the three counts that don't
+ * depend on it; the events badge needs `events_seen_at` from the profile row, so
+ * it follows in a second, single-query stage. Both are off the critical path.
+ */
+async function StudentShell() {
   const supabase = await createClient();
   const userId = await getAuthUserId();
+  // Middleware has already bounced anonymous requests; this is belt-and-braces
+  // for a session that expires between the proxy hop and this render.
   if (!userId) redirect("/login");
 
-  // Everything the shell must know before it can render, in one parallel stage.
-  const [{ data: profile }, maintenance, flags] = await Promise.all([
+  const [
+    { data: profile },
+    maintenance,
+    flags,
+    { count: unreadMsgs },
+    { count: pendingReqs },
+    { data: announcements },
+  ] = await timed("layout:shell", () =>
+    Promise.all([
     supabase
       .from("profiles")
-      .select("onboarding_completed, avatar_url, events_seen_at, admin_role")
+      .select("avatar_url, events_seen_at, admin_role")
       .eq("id", userId)
       .single(),
     getMaintenanceState(),
     resolveFlags(["discover", "events", "leaderboard"]),
-  ]);
+    supabase
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .neq("sender_id", userId)
+      .is("read_at", null),
+    supabase
+      .from("message_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("recipient_id", userId)
+      .eq("status", "pending"),
+    // UAT-012: broadcasts are delivered as a modal on a cold open, not as a row
+    // buried in Activity. Unread = not yet dismissed.
+    supabase
+      .from("notifications")
+      .select("id, data, created_at")
+      .eq("user_id", userId)
+      .eq("type", "announcement")
+      .is("read_at", null)
+      .order("created_at", { ascending: false })
+      .limit(5),
+    ])
+  );
 
-  if (!profile?.onboarding_completed) redirect("/onboarding");
-
-  const isAdmin = Boolean(profile.admin_role);
+  const isAdmin = Boolean(profile?.admin_role);
 
   // Maintenance gate (Refactor Phase 1). Admins keep operating during a window;
   // everyone else is parked on the interstitial until the flag is cleared.
@@ -55,9 +142,10 @@ export default async function StudentLayout({
 
   // Record/refresh this device's session row for Settings → Security (P8).
   // Deferred until after the response is sent — it must never block rendering.
-  const userAgent = (await headers()).get("user-agent");
-  const forwardedFor = (await headers()).get("x-forwarded-for");
-  const realIp = (await headers()).get("x-real-ip");
+  const headerList = await headers();
+  const userAgent = headerList.get("user-agent");
+  const forwardedFor = headerList.get("x-forwarded-for");
+  const realIp = headerList.get("x-real-ip");
   after(async () => {
     await supabase
       .rpc("record_session", {
@@ -70,119 +158,34 @@ export default async function StudentLayout({
       );
   });
 
+  // Approved, still-upcoming events published since the last /events visit. A
+  // user who has never opened /events sees every upcoming event as new.
+  const { count: newEvents } = await timed("layout:eventsBadge", () =>
+    supabase
+      .from("events")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "approved")
+      .gt("starts_at", new Date().toISOString())
+      .gt("created_at", profile?.events_seen_at ?? "1970-01-01T00:00:00Z")
+  );
+
+  // Feature-flagged destinations are dropped from the dock entirely. The
+  // fallback dock above shows all six, so a tab whose flag is OFF is briefly
+  // visible before this render removes it — the flags fail open and are dark-
+  // launch switches, so in the normal all-on case nothing moves at all.
   const hiddenTabs = [
     !flags.discover && "/discover",
     !flags.events && "/events",
     !flags.leaderboard && "/leaderboard",
   ].filter((h): h is string => Boolean(h));
 
-  return (
-    <div className="relative flex min-h-full flex-1 flex-col">
-      {/* Ambient brand glow shared across student screens */}
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-0 -z-10 opacity-60"
-        style={{
-          background:
-            "radial-gradient(40rem 30rem at 15% -10%, rgba(124,92,255,0.22), transparent), radial-gradient(35rem 25rem at 95% 5%, rgba(200,80,192,0.18), transparent)",
-        }}
-      />
-      <div className="flex-1 pb-20">{children}</div>
-      {/* Global click-delegation guard: warns before any off-origin link in a
-          post, comment, chat, help response, or profile bio is followed. */}
-      <ExternalLinkInterceptor />
-      {/* Enable push notifications by default for signed-in students. */}
-      <PushAutoEnable />
-      {/* Browser-tab users: invite them to install. On iOS this is the only way
-          they can ever receive push at all. Renders nothing once installed. */}
-      <InstallPrompt />
-      {/* Stamps last_seen_at while the tab is visible, so presence is real. */}
-      <PresenceHeartbeat />
-      {/* Keeps the dock's chat badge (unread DMs + pending requests) live on
-          every student screen, not just after a navigation. */}
-      <DockRealtime userId={userId} />
-      {/* Badges + announcements stream in after the shell; the fallback dock is
-          identical minus the counts, so nothing shifts when they arrive. */}
-      <Suspense
-        fallback={
-          <FloatingDock
-            badges={{}}
-            avatarUrl={profile?.avatar_url}
-            viewerId={userId}
-            hiddenHrefs={hiddenTabs}
-          />
-        }
-      >
-        <DockWithBadges
-          userId={userId}
-          avatarUrl={profile?.avatar_url}
-          eventsSeenAt={profile.events_seen_at}
-          hiddenTabs={hiddenTabs}
-        />
-      </Suspense>
-    </div>
-  );
-}
-
-/**
- * Dock badges (UAT-013) + unread broadcast modal (UAT-012), fetched in parallel
- * and streamed after the page shell. RLS scopes every query to the caller.
- *   /chat   unread incoming messages + pending message requests
- *   /events approved, still-upcoming events published since the last visit
- */
-async function DockWithBadges({
-  userId,
-  avatarUrl,
-  eventsSeenAt,
-  hiddenTabs,
-}: {
-  userId: string;
-  avatarUrl?: string | null;
-  eventsSeenAt: string | null;
-  hiddenTabs: string[];
-}) {
-  const supabase = await createClient();
-  const nowIso = new Date().toISOString();
-
-  const [
-    { count: unreadMsgs },
-    { count: pendingReqs },
-    { count: newEvents },
-    { data: announcements },
-  ] = await Promise.all([
-    supabase
-      .from("messages")
-      .select("id", { count: "exact", head: true })
-      .neq("sender_id", userId)
-      .is("read_at", null),
-    supabase
-      .from("message_requests")
-      .select("id", { count: "exact", head: true })
-      .eq("recipient_id", userId)
-      .eq("status", "pending"),
-    supabase
-      .from("events")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "approved")
-      .gt("starts_at", nowIso)
-      // A user who has never opened /events sees every upcoming event as new.
-      .gt("created_at", eventsSeenAt ?? "1970-01-01T00:00:00Z"),
-    // UAT-012: broadcasts are delivered as a modal on a cold open, not as a row
-    // buried in Activity. Unread = not yet dismissed.
-    supabase
-      .from("notifications")
-      .select("id, data, created_at")
-      .eq("user_id", userId)
-      .eq("type", "announcement")
-      .is("read_at", null)
-      .order("created_at", { ascending: false })
-      .limit(5),
-  ]);
-
   const chatBadge = (unreadMsgs ?? 0) + (pendingReqs ?? 0);
 
   return (
     <>
+      {/* Keeps the dock's chat badge (unread DMs + pending requests) live on
+          every student screen, not just after a navigation. */}
+      <DockRealtime userId={userId} initialBadge={chatBadge} />
       <AnnouncementModal
         announcements={(announcements ?? []).map((a) => ({
           id: a.id as string,
@@ -195,7 +198,7 @@ async function DockWithBadges({
       />
       <FloatingDock
         badges={{ "/chat": chatBadge, "/events": newEvents ?? 0 }}
-        avatarUrl={avatarUrl}
+        avatarUrl={profile?.avatar_url}
         viewerId={userId}
         hiddenHrefs={hiddenTabs}
       />

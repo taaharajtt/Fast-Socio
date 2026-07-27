@@ -1,9 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_ITEMS, activeNavHref } from "@/lib/nav";
 import { AppImage } from "@/components/ui/app-image";
+import { useChatBadge } from "@/lib/chat/badge-store";
+import { markDockTap, reportDockNavigation } from "@/lib/nav-perf";
 import { cn } from "@/lib/utils";
 
 /**
@@ -32,6 +35,29 @@ export function FloatingDock({
   hiddenHrefs?: string[];
 }) {
   const pathname = usePathname();
+  // The chat count is the one badge that changes while you sit on a screen, so
+  // it comes from the realtime store (seeded by, and falling back to, the
+  // server-rendered value) rather than waiting for the next navigation.
+  const chatBadge = useChatBadge(badges["/chat"] ?? 0);
+
+  // Optimistic active tab. A tab switch still has to reach the server for the
+  // new segment, and until it commits `pathname` is the OLD route — so without
+  // this the purple highlight sat on the tab you just left for the whole round
+  // trip and the dock read as unresponsive. Tapping moves the highlight on the
+  // same frame as the press; the real pathname takes over the moment it lands.
+  // Stored WITH the pathname it was tapped from, so it can be cleared during
+  // render the moment the route actually changes — no effect, no extra commit.
+  const [tapped, setTapped] = useState<{ href: string; from: string } | null>(
+    null
+  );
+  if (tapped && tapped.from !== pathname) setTapped(null);
+
+  // Dev-only: time from tapping a tab to the new route being committed. Paired
+  // with the server-side [perf] phase logs, this is the number this whole
+  // exercise is about. Logs a route path and a duration, nothing else.
+  useEffect(() => {
+    reportDockNavigation(pathname);
+  }, [pathname]);
 
   // Feature-flagged destinations are dropped from the dock entirely so a
   // disabled feature is neither shown nor reachable via the primary nav.
@@ -42,7 +68,9 @@ export function FloatingDock({
   // (/chat/c/<communityId>), which are the same screen with a different subject.
   if (/^\/chat\/.+/.test(pathname)) return null;
 
-  const activeHref = activeNavHref(pathname, viewerId);
+  const activeHref =
+    (tapped?.from === pathname ? tapped.href : null) ??
+    activeNavHref(pathname, viewerId);
 
   return (
     <nav
@@ -52,12 +80,16 @@ export function FloatingDock({
       <div className="mx-auto flex h-14 max-w-md items-stretch">
         {items.map(({ href, label, icon: Icon }) => {
           const active = activeHref === href;
-          const badge = badges[href] ?? 0;
+          const badge = href === "/chat" ? chatBadge : (badges[href] ?? 0);
           return (
             <Link
               key={href}
               href={href}
               data-tour={`nav:${href}`}
+              onClick={() => {
+                setTapped({ href, from: pathname });
+                markDockTap(href);
+              }}
               aria-label={badge ? `${label}, ${badge} unread` : label}
               aria-current={active ? "page" : undefined}
               className="flex flex-1 flex-col items-center justify-center gap-1 transition-transform duration-150 active:scale-90 focus-visible:outline-none"
