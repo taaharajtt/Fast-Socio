@@ -165,9 +165,13 @@ function SquareTile({ t }: { t: TileVM }) {
 
 /**
  * The Community hub body. Four sections in a fixed order — Your Spaces,
- * Upcoming Events, Verified Communities, Chat Rooms — with the first three as compact
- * horizontal rails so the page stays short, and only Chat Rooms rendered as
- * full-width cards (they carry actions, the rails do not).
+ * Upcoming Events, Verified Communities, Community Chats — with the first three
+ * as compact horizontal rails so the page stays short, and only the last
+ * rendered as full-width cards (they carry Follow/Join, the rails do not).
+ *
+ * Nothing here is a place to talk. The last section is a directory of rooms you
+ * can follow or ask to join; the conversation itself opens in Chat, from the
+ * room's own profile page.
  */
 export function CommunityMainView({
   yourSpaces,
@@ -232,11 +236,11 @@ export function CommunityMainView({
       </section>
 
       <section className="mt-7">
-        <SectionHeader title="Chat Rooms" />
+        <SectionHeader title="Community Chats" />
         {chatRooms.length === 0 ? (
           <EmptyState
             icon={<MessageSquare className="h-7 w-7" aria-hidden />}
-            title="No chat rooms yet"
+            title="No community chats yet"
             hint={
               <Link href="/communities/new" className="font-medium text-accent">
                 Create the first one

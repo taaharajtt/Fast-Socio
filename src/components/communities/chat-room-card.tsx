@@ -22,9 +22,12 @@ export type ChatRoomCardVM = {
 };
 
 /**
- * The one rectangular card on the Community hub. Chat rooms earn the extra
+ * The one rectangular card on the Community hub. Community chats earn the extra
  * width because they carry the Follow/Join pair — the discovery rails above
  * are pure navigation and stay square.
+ *
+ * This is a directory entry, not a conversation: it opens the room's profile,
+ * and the profile's Overview is where "Open chat" hands off to the Chat area.
  */
 export function ChatRoomCard({ c }: { c: ChatRoomCardVM }) {
   const image = c.avatar_url ?? c.cover_url;

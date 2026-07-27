@@ -108,7 +108,22 @@ export function canPostAnnouncement(viewer: Viewer): boolean {
   return canManageSociety(viewer);
 }
 
-/** Can this viewer edit the society profile? Any officer or the owner (or admin). */
+/**
+ * Can this viewer edit the society's own identity — category, bio, logo,
+ * banner, links, recruiting? President and up (or admin), the same rank that
+ * gates officer appointments. A moderator works the queues but never rewrites
+ * the society itself; upsert_society_profile() enforces the identical rank in
+ * mig 0120, so hiding the editor is not the only guard.
+ */
 export function canEditProfile(viewer: Viewer): boolean {
+  return viewer.isAdmin || roleRank(viewer.role) >= ROLE_ADMIN_MIN_RANK;
+}
+
+/**
+ * Can this viewer act on submitted content and access queues — pending posts,
+ * join requests, removing an ordinary member? Any officer, including a
+ * moderator. Mirrors can_manage_community() in mig 0119.
+ */
+export function canModerateContent(viewer: Viewer): boolean {
   return canManageSociety(viewer);
 }

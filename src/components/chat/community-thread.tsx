@@ -7,12 +7,13 @@ import { RequestJoinButton } from "@/components/communities/request-join-button"
 import type { JoinState, PollOptionResult } from "@/app/(student)/communities/actions";
 
 /**
- * The general chat room of a society or a casual chat room — one component,
- * because the two are the same surface with the same rule: only JOINED members
- * may read and send. Followers get this gate instead, which explains the
- * difference rather than just refusing.
+ * The body of a community conversation in the Chat area — the gate, then the
+ * thread. FOLLOWING a space shows you its broadcasts over in Community; SENDING
+ * here needs an approved JOIN, so a follower gets this panel instead of a
+ * composer. send_community_message() rejects a non-member outright, so the gate
+ * is a courtesy on top of the real rule, not the rule itself.
  */
-export function SpaceChatTab({
+export function CommunityThread({
   communityId,
   meId,
   isMember,

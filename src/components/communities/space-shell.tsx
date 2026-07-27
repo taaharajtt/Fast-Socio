@@ -8,19 +8,13 @@ export type SpaceShellTab = {
   label: string;
   badge?: number;
   content: React.ReactNode;
-  /**
-   * The tab owns the remaining viewport height and scrolls internally (chat).
-   * The shell then locks its own height so the hero and tab bar never move and
-   * the page itself does not scroll — only the tab's feed does.
-   */
-  fill?: boolean;
 };
 
-/** Above this many tabs the row scrolls instead of squeezing (owner/mod view). */
+/** Above this many tabs the row scrolls instead of squeezing. */
 const EQUAL_WIDTH_MAX = 4;
 
 /**
- * Shared chrome for every "space" surface — society, chat room, event.
+ * Shared chrome for every "space" profile — society, chat room, event.
  *
  * The `hero` (cover, name, Follow/Join) and the tab bar stay mounted and
  * visually frozen while `active` changes: each tab's content is server-fetched
@@ -28,8 +22,12 @@ const EQUAL_WIDTH_MAX = 4;
  * pure client state change — the indicator moves on the same frame as the tap,
  * nothing re-renders above the bar, and there is no network round trip.
  *
- * Tab bar layout: up to four tabs share the width equally; a fifth (Manage)
- * would clip them, so the row becomes horizontally scrollable instead.
+ * Tab bar layout: up to four tabs share the width equally, which covers every
+ * space today (Broadcast/Events/Members/Manage at most). A fifth would clip
+ * them, so the row becomes horizontally scrollable instead.
+ *
+ * No tab hosts a conversation any more — chat lives in /chat — so the shell
+ * scrolls normally with the page rather than locking to the viewport.
  */
 export function SpaceShell({
   hero,
@@ -40,28 +38,13 @@ export function SpaceShell({
 }) {
   const [active, setActive] = useState(tabs[0]?.key);
   const activeTab = tabs.find((t) => t.key === active) ?? tabs[0];
-  const fill = Boolean(activeTab?.fill);
   const scrolls = tabs.length > EQUAL_WIDTH_MAX;
 
   return (
-    <main
-      className={cn(
-        "mx-auto flex w-full max-w-md flex-col",
-        // 5rem = the dock clearance the student layout reserves (pb-20); --kb is
-        // the iOS keyboard overlap (use-keyboard-inset).
-        fill
-          ? "h-[calc(100dvh-5rem-var(--kb,0px))] overflow-hidden"
-          : "flex-1"
-      )}
-    >
+    <main className="mx-auto flex w-full max-w-md flex-1 flex-col">
       {hero}
 
-      <div
-        className={cn(
-          "flex flex-col px-4 pt-4",
-          fill ? "min-h-0 flex-1" : "flex-1 pb-4"
-        )}
-      >
+      <div className="flex flex-1 flex-col px-4 pb-4 pt-4">
         <div
           role="tablist"
           className={cn(
@@ -98,13 +81,7 @@ export function SpaceShell({
           })}
         </div>
 
-        <div
-          className={cn(
-            fill ? "flex min-h-0 flex-1 flex-col" : "min-h-[300px] pt-4"
-          )}
-        >
-          {activeTab?.content}
-        </div>
+        <div className="min-h-[300px] pt-4">{activeTab?.content}</div>
       </div>
     </main>
   );

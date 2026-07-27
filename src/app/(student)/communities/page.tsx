@@ -33,9 +33,12 @@ const COMMUNITY_LITE = "id, name, avatar_url, cover_url, is_society";
 
 /**
  * The Community hub (dock tab "Community"): Your Spaces → Verified Communities
- * → Events → Chat Rooms, in that order and nothing else. The first three are
- * compact horizontal rails; only chat rooms get full-width cards, because only
- * they carry Follow/Join actions.
+ * → Events → Community Chats, in that order and nothing else. The first three
+ * are compact horizontal rails; only the chats get full-width cards, because
+ * only they carry Follow/Join actions.
+ *
+ * Discovery and management only — no conversation is rendered on this page or
+ * anywhere under Community. Talking happens in Chat.
  */
 export default async function CommunitiesPage() {
   const supabase = await createClient();

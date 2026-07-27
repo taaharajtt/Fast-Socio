@@ -1,23 +1,10 @@
 import { Users } from "lucide-react";
 import { MemberRow, type CommunityMemberVM } from "@/components/communities/member-row";
 
-export function RoomMembersTab({
-  description,
-  members,
-}: {
-  description: string | null;
-  members: CommunityMemberVM[];
-}) {
+/** Who is in the room, owner first. The description lives on Overview now. */
+export function RoomMembersTab({ members }: { members: CommunityMemberVM[] }) {
   return (
     <div className="space-y-4">
-      {/* Same pattern as the society Members tab: a plain heading and the text. */}
-      {description && (
-        <section>
-          <h2 className="mb-1 text-sm font-semibold text-fg">Description</h2>
-          <p className="whitespace-pre-wrap text-[14px] text-fg-muted">{description}</p>
-        </section>
-      )}
-
       {members.length === 0 ? (
         <div className="rounded-[14px] bg-card px-5 py-10 text-center">
           <Users className="mx-auto h-8 w-8 text-fg-muted" aria-hidden />

@@ -14,7 +14,7 @@ const GRADIENT = "linear-gradient(135deg, #4c1d95, #7c3aed)";
 
 /**
  * A casual chat room's stable chrome — the simpler sibling of SocietyShell: one
- * owner, no officers, and only Chat / Members (plus Manage for the owner).
+ * owner, no officers, and only Overview / Members (plus Manage for the owner).
  */
 export function ChatRoomShell({
   community,

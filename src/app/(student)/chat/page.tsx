@@ -5,7 +5,9 @@ import { ChatCommunityTabs } from "@/components/chat/chat-community-tabs";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { AppImage } from "@/components/ui/app-image";
+import { GlassChip } from "@/components/ui";
 import { OnlineDot } from "@/components/ui/badges";
+import { communityIcon } from "@/lib/communities/icon";
 import { cn } from "@/lib/utils";
 import { isOnline, timeAgo } from "@/lib/time";
 
@@ -58,6 +60,66 @@ export default async function ChatPage({
       .select("recipient_id")
       .eq("sender_id", me),
   ]);
+
+  // Community rooms you've been approved into are conversations too, so they
+  // belong in this inbox rather than behind the Community tab. Owned spaces are
+  // unioned in because an owner participates without necessarily holding a
+  // community_members row.
+  const [{ data: joinedRows }, { data: ownedRows }] = await Promise.all([
+    supabase
+      .from("community_members")
+      .select(
+        "community:communities(id, name, avatar_url, cover_url, is_society, status)"
+      )
+      .eq("user_id", me),
+    supabase
+      .from("communities")
+      .select("id, name, avatar_url, cover_url, is_society, status")
+      .eq("owner_id", me),
+  ]);
+
+  type SpaceLite = {
+    id: string;
+    name: string;
+    avatar_url: string | null;
+    cover_url: string | null;
+    is_society: boolean;
+    status: string;
+  };
+  const spaces = new Map<string, SpaceLite>();
+  for (const r of (joinedRows ?? []) as unknown as { community: SpaceLite | null }[]) {
+    if (r.community?.status === "approved") spaces.set(r.community.id, r.community);
+  }
+  for (const c of ((ownedRows ?? []) as unknown as SpaceLite[])) {
+    if (c.status === "approved") spaces.set(c.id, c);
+  }
+  const spaceIds = [...spaces.keys()];
+
+  // Newest message per room, for the row preview and the recency sort. Read
+  // through community_chat_view so an anonymous sender stays masked here too.
+  const spacePreview = new Map<string, { text: string; ts: string }>();
+  if (spaceIds.length > 0) {
+    const { data: roomMsgs } = await supabase
+      .from("community_chat_view")
+      .select("community_id, sender_id, sender_name, body, is_anonymous, created_at")
+      .in("community_id", spaceIds)
+      .order("created_at", { ascending: false })
+      .limit(400);
+    for (const m of roomMsgs ?? []) {
+      if (spacePreview.has(m.community_id)) continue;
+      const who = m.is_anonymous
+        ? m.sender_id === me
+          ? "You (anonymous)"
+          : "Anonymous"
+        : m.sender_id === me
+          ? "You"
+          : (m.sender_name ?? "Member");
+      spacePreview.set(m.community_id, {
+        text: `${who}: ${m.body || "Shared a poll"}`,
+        ts: m.created_at,
+      });
+    }
+  }
 
   const conversations = convRows ?? [];
   const requests = reqRows ?? [];
@@ -150,19 +212,33 @@ export default async function ChatPage({
     };
   });
 
-  // A recency-sorted inbox of 1:1 conversations. Community rooms used to be
-  // folded in here (UAT-007); they now live under the Community dock tab, so
-  // Chat is strictly direct messages.
-  type Thread = { ts: string; convId: string; otherId: string };
-  const threads: Thread[] = conversations
-    .map(
+  // One recency-sorted inbox holding both kinds of conversation. Community
+  // rooms sit inline with direct messages — same row shape, distinguished by a
+  // small capsule — because Chat now owns every live conversation in the app.
+  const EPOCH = "1970-01-01T00:00:00Z";
+  type Thread =
+    | { kind: "dm"; ts: string; convId: string; otherId: string }
+    | { kind: "space"; ts: string; space: SpaceLite; preview: string | null };
+
+  const threads: Thread[] = [
+    ...conversations.map(
       (c): Thread => ({
-        ts: c.last_message_at ?? "1970-01-01T00:00:00Z",
+        kind: "dm",
+        ts: c.last_message_at ?? EPOCH,
         convId: c.id,
         otherId: c.user_low === me ? c.user_high : c.user_low,
       })
-    )
-    .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+    ),
+    ...[...spaces.values()].map((space): Thread => {
+      const p = spacePreview.get(space.id);
+      return {
+        kind: "space",
+        ts: p?.ts ?? EPOCH,
+        space,
+        preview: p?.text ?? null,
+      };
+    }),
+  ].sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
 
   // Matches that don't yet have a conversation AND that we haven't already
   // reached out to — surfaced so a chat can start. A match we've messaged
@@ -239,6 +315,49 @@ export default async function ChatPage({
             })}
 
             {threads.map((t) => {
+              if (t.kind === "space") {
+                const image = t.space.avatar_url ?? t.space.cover_url;
+                return (
+                  <Link
+                    key={`sp:${t.space.id}`}
+                    href={`/chat/c/${t.space.id}`}
+                    className="flex items-center gap-3 py-3.5 transition-transform active:scale-[0.99]"
+                  >
+                    <div className="relative h-11 w-11 shrink-0 rounded-full">
+                      <div className="glass relative flex h-full w-full items-center justify-center overflow-hidden rounded-full">
+                        {image ? (
+                          <AppImage src={image} alt="" sizes="44px" />
+                        ) : (
+                          <span className="text-lg" aria-hidden>
+                            {communityIcon(t.space.name)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="flex items-center gap-1.5">
+                        {/* The capsule is what separates a room from a person;
+                            everything else about the row is identical. */}
+                        <GlassChip className="shrink-0 px-2 py-0.5 text-[10px]">
+                          Community
+                        </GlassChip>
+                        <span className="truncate text-[15px] font-semibold text-fg">
+                          {t.space.name}
+                        </span>
+                      </p>
+                      <p className="truncate text-sm text-fg-muted">
+                        {t.preview ?? "No messages yet"}
+                      </p>
+                    </div>
+                    <span className="flex shrink-0 flex-col items-end gap-1 self-start">
+                      {t.ts !== EPOCH && (
+                        <span className="text-xs text-fg-muted">{timeAgo(t.ts)}</span>
+                      )}
+                    </span>
+                  </Link>
+                );
+              }
+
               const p = profiles.get(t.otherId);
               const preview = lastMsg.get(t.convId);
               const unreadCount = unread.get(t.convId) ?? 0;

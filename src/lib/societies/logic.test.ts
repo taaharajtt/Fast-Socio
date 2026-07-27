@@ -9,6 +9,7 @@ import {
   assignableRoles,
   canPostAnnouncement,
   canEditProfile,
+  canModerateContent,
   ROLE_RANK,
   type Viewer,
 } from "./logic";
@@ -16,6 +17,7 @@ import {
 const owner: Viewer = { role: "owner", isAdmin: false };
 const president: Viewer = { role: "president", isAdmin: false };
 const officer: Viewer = { role: "officer", isAdmin: false };
+const moderator: Viewer = { role: "moderator", isAdmin: false };
 const member: Viewer = { role: "member", isAdmin: false };
 const outsider: Viewer = { role: null, isAdmin: false };
 const admin: Viewer = { role: null, isAdmin: true };
@@ -73,11 +75,38 @@ describe("canManageSociety", () => {
     expect(canManageSociety(admin)).toBe(true);
   });
 
-  it("gates announcements and profile edits the same way", () => {
+  it("lets any officer post announcements", () => {
     expect(canPostAnnouncement(officer)).toBe(true);
     expect(canPostAnnouncement(member)).toBe(false);
+  });
+});
+
+describe("canEditProfile — society identity is president+ only", () => {
+  it("admits the owner, a president and platform admins", () => {
+    expect(canEditProfile(owner)).toBe(true);
     expect(canEditProfile(president)).toBe(true);
+    expect(canEditProfile(admin)).toBe(true);
+  });
+
+  it("shuts out moderators and lower officers (mig 0120 enforces this too)", () => {
+    expect(canEditProfile(moderator)).toBe(false);
+    expect(canEditProfile(officer)).toBe(false);
+    expect(canEditProfile(member)).toBe(false);
     expect(canEditProfile(outsider)).toBe(false);
+  });
+});
+
+describe("canModerateContent — queues stay open to moderators", () => {
+  it("admits every officer tier plus the owner and admins", () => {
+    expect(canModerateContent(moderator)).toBe(true);
+    expect(canModerateContent(officer)).toBe(true);
+    expect(canModerateContent(owner)).toBe(true);
+    expect(canModerateContent(admin)).toBe(true);
+  });
+
+  it("keeps plain members and outsiders out", () => {
+    expect(canModerateContent(member)).toBe(false);
+    expect(canModerateContent(outsider)).toBe(false);
   });
 });
 

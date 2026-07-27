@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { ChatRoomShell, type ChatRoomShellTab } from "@/components/communities/chat-room-shell";
-import { SpaceChatTab } from "@/components/communities/tabs/space-chat-tab";
+import { RoomOverviewTab } from "@/components/communities/tabs/room-overview-tab";
 import { RoomMembersTab } from "@/components/communities/tabs/room-members-tab";
 import { RoomManageTab } from "@/components/communities/tabs/room-manage-tab";
 import type { CommunityMemberVM } from "@/components/communities/member-row";
@@ -11,8 +11,6 @@ import {
   getJoinRequests,
 } from "@/lib/communities/relationship";
 import { getSocialProof } from "@/lib/communities/social-proof";
-import { fetchPollResults, type PollOptionResult } from "@/app/(student)/communities/actions";
-import type { CommunityMessage } from "@/components/communities/community-chat";
 
 const ROLE_RANK: Record<CommunityMemberVM["role"], number> = {
   owner: 0,
@@ -21,9 +19,13 @@ const ROLE_RANK: Record<CommunityMemberVM["role"], number> = {
 };
 
 /**
- * A casual chat room's page (is_society = false). Society/Event OS-registered
- * communities have their own richer shell at /societies/[id] — this page
- * redirects there so a society is never rendered as a plain room.
+ * A casual chat room's PROFILE page (is_society = false) — Overview / Members,
+ * plus Manage for the owner. Society/Event OS-registered communities have their
+ * own richer shell at /societies/[id] — this page redirects there so a society
+ * is never rendered as a plain room.
+ *
+ * The conversation is not here. Room chats are threads in the Chat area
+ * (/chat/c/[id]) beside direct messages; Overview links across to them.
  *
  * Every tab's data is fetched here in parallel and handed to the client shell
  * as ready content, so switching tabs never touches the network.
@@ -53,39 +55,22 @@ export default async function CommunityPage({
   // means "is the owner" (platform admins aside — canManage covers both).
   const canManage = rel.canManage;
 
-  const [chatRows, memberRows] = await Promise.all([
-    !pending && rel.isMember
-      ? supabase
-          .from("community_chat_view")
-          .select(
-            "id, sender_id, sender_name, sender_avatar, body, poll_id, is_anonymous, created_at"
-          )
-          .eq("community_id", id)
-          .order("created_at", { ascending: true })
-          .limit(100)
-      : Promise.resolve({ data: [] as CommunityMessage[] }),
-    !pending
-      ? supabase
-          .from("community_members")
-          .select("user_id, role, profile:profiles(id, full_name, username, avatar_url)")
-          .eq("community_id", id)
-          .limit(200)
-      : Promise.resolve({ data: [] }),
-  ]);
+  const { data: memberData } = !pending
+    ? await supabase
+        .from("community_members")
+        .select("user_id, role, profile:profiles(id, full_name, username, avatar_url)")
+        .eq("community_id", id)
+        .limit(200)
+    : { data: [] };
 
   const joinRequests = !pending && canManage ? await getJoinRequests(id) : [];
-
-  const chatMessages = (chatRows.data as CommunityMessage[] | null) ?? [];
-  const polls: Record<string, PollOptionResult[]> = await fetchPollResults(
-    [...new Set(chatMessages.map((m) => m.poll_id).filter(Boolean) as string[])]
-  );
 
   type Row = {
     user_id: string;
     role: CommunityMemberVM["role"];
     profile: { id: string; full_name: string | null; username: string | null; avatar_url: string | null } | null;
   };
-  const members: CommunityMemberVM[] = ((memberRows.data ?? []) as unknown as Row[])
+  const members: CommunityMemberVM[] = ((memberData ?? []) as unknown as Row[])
     .map((r) => ({
       user_id: r.user_id,
       role: r.role,
@@ -104,24 +89,22 @@ export default async function CommunityPage({
 
   const tabs: ChatRoomShellTab[] = [
     {
-      key: "chat",
-      label: "Chat",
-      fill: true,
+      key: "overview",
+      label: "Overview",
       content: (
-        <SpaceChatTab
+        <RoomOverviewTab
           communityId={id}
-          meId={me}
+          description={community.description}
+          memberCount={community.member_count}
           isMember={rel.isMember}
           joinStatus={rel.joinStatus}
-          initialMessages={chatMessages}
-          initialPolls={polls}
         />
       ),
     },
     {
       key: "members",
       label: "Members",
-      content: <RoomMembersTab description={community.description} members={members} />,
+      content: <RoomMembersTab members={members} />,
     },
   ];
 

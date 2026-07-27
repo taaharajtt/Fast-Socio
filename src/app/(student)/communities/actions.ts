@@ -359,11 +359,17 @@ export async function leaveCommunity(communityId: string) {
   revalidateCommunity(communityId);
 }
 
-/** Both surfaces render the same community, so both must be revalidated. */
+/**
+ * Membership drives four surfaces: the two community profiles that render the
+ * same row, the Chat inbox (a joined room appears there as a thread), and the
+ * room's own conversation screen, whose composer is gated on membership.
+ */
 function revalidateCommunity(communityId: string) {
   revalidatePath(`/communities/${communityId}`);
   revalidatePath(`/societies/${communityId}`);
   revalidatePath("/communities");
+  revalidatePath("/chat");
+  revalidatePath(`/chat/c/${communityId}`);
 }
 
 /** Report a community (target_type = 'community'), feeds /admin/reports?type=community. */
