@@ -129,7 +129,7 @@ export function IntentCardBody({
           {post.peopleNeeded != null && (
             <span className="gradient-cyan inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold text-white shadow-[0_2px_10px_-2px_rgba(59,130,246,0.5)]">
               <Users className="h-3 w-3" aria-hidden />
-              {post.peopleNeeded} needed
+              {post.peopleNeeded === 0 ? "Team full" : `${post.peopleNeeded} needed`}
             </span>
           )}
         </div>
