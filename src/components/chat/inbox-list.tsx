@@ -222,10 +222,10 @@ export function InboxList({
               >
                 <div className="relative h-11 w-11 shrink-0 rounded-full">
                   <div className="relative h-full w-full overflow-hidden rounded-full bg-card">
-                    {p?.avatar_url && (
+                    {resolveAvatarUrl(p?.avatar_url, p?.gender) && (
                       <AppImage
-                        src={p.avatar_url}
-                        alt={p.full_name ?? "Match"}
+                        src={resolveAvatarUrl(p?.avatar_url, p?.gender)!}
+                        alt={p?.full_name ?? "Match"}
                         sizes="44px"
                       />
                     )}

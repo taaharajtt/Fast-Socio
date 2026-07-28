@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { isPostMode, type PostMode } from "@/lib/smart-match/modes";
 import {
@@ -76,6 +77,7 @@ type PostRow = {
   author_id: string;
   author_name: string | null;
   author_avatar: string | null;
+  author_gender: string | null;
   author_username: string | null;
   author_department: string | null;
   author_semester: number | null;
@@ -122,13 +124,16 @@ function mapPost(r: PostRow): SmartMatchPost {
     username: string | null;
     full_name: string | null;
     avatar_url: string | null;
+    gender: string | null;
   }>;
   return {
     id: r.id,
     mode: r.mode as PostMode,
     authorId: r.author_id,
     authorName: r.author_name,
-    authorAvatar: r.author_avatar,
+    // Gender resolves to a default face here, at the one boundary every
+    // Discover surface goes through, so no card has to know about it.
+    authorAvatar: resolveAvatarUrl(r.author_avatar, r.author_gender),
     authorUsername: r.author_username,
     authorDepartment: r.author_department,
     authorSemester: r.author_semester,
@@ -164,7 +169,7 @@ function mapPost(r: PostRow): SmartMatchPost {
       id: t.id,
       username: t.username,
       fullName: t.full_name,
-      avatarUrl: t.avatar_url,
+      avatarUrl: resolveAvatarUrl(t.avatar_url, t.gender),
     })),
     teamMemberCount: r.team_member_count ?? 0,
     mutualCommunities: r.mutual_communities ?? 0,
@@ -308,7 +313,9 @@ export async function getMyDiscoverData(): Promise<MyDiscoverData | null> {
       .limit(50),
     supabase
       .from("profiles")
-      .select("full_name, username, avatar_url, department, graduation_year, verified, aura_score")
+      .select(
+        "full_name, username, avatar_url, gender, department, graduation_year, verified, aura_score"
+      )
       .eq("id", uid)
       .maybeSingle(),
   ]);
@@ -328,7 +335,7 @@ export async function getMyDiscoverData(): Promise<MyDiscoverData | null> {
     const { data: memberProfiles } = memberIds.length
       ? await supabase
           .from("profiles")
-          .select("id, full_name, username, avatar_url")
+          .select("id, full_name, username, avatar_url, gender")
           .in("id", memberIds)
       : { data: [] as unknown[] };
     const byId = new Map(
@@ -338,6 +345,7 @@ export async function getMyDiscoverData(): Promise<MyDiscoverData | null> {
           full_name: string | null;
           username: string | null;
           avatar_url: string | null;
+          gender: string | null;
         };
         return [
           m.id,
@@ -345,7 +353,7 @@ export async function getMyDiscoverData(): Promise<MyDiscoverData | null> {
             id: m.id,
             username: m.username,
             fullName: m.full_name,
-            avatarUrl: m.avatar_url,
+            avatarUrl: resolveAvatarUrl(m.avatar_url, m.gender),
           } satisfies TeamMember,
         ];
       })
@@ -361,6 +369,7 @@ export async function getMyDiscoverData(): Promise<MyDiscoverData | null> {
     full_name?: string | null;
     username?: string | null;
     avatar_url?: string | null;
+    gender?: string | null;
     department?: string | null;
     graduation_year?: number | null;
     verified?: boolean | null;
@@ -374,6 +383,7 @@ export async function getMyDiscoverData(): Promise<MyDiscoverData | null> {
         ...(r as unknown as PostRow),
         author_name: me.full_name ?? null,
         author_avatar: me.avatar_url ?? null,
+        author_gender: me.gender ?? null,
         author_username: me.username ?? null,
         author_department: me.department ?? null,
         author_semester: viewer.semester,
@@ -419,7 +429,7 @@ export async function getMyDiscoverData(): Promise<MyDiscoverData | null> {
     const { data: profs } = applicantIds.length
       ? await supabase
           .from("profiles")
-          .select("id, full_name, username, avatar_url")
+          .select("id, full_name, username, avatar_url, gender")
           .in("id", applicantIds)
       : { data: [] as unknown[] };
     const byId = new Map(
@@ -430,6 +440,7 @@ export async function getMyDiscoverData(): Promise<MyDiscoverData | null> {
           full_name: string | null;
           username: string | null;
           avatar_url: string | null;
+          gender: string | null;
         },
       ])
     );
@@ -451,7 +462,7 @@ export async function getMyDiscoverData(): Promise<MyDiscoverData | null> {
           applicantId: a.applicant_id,
           applicantName: p?.full_name ?? null,
           applicantUsername: p?.username ?? null,
-          applicantAvatar: p?.avatar_url ?? null,
+          applicantAvatar: resolveAvatarUrl(p?.avatar_url, p?.gender),
         };
       });
   }
@@ -479,7 +490,7 @@ export async function searchTeammates(query: string): Promise<TeamMember[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("profiles")
-    .select("id, full_name, username, avatar_url")
+    .select("id, full_name, username, avatar_url, gender")
     .eq("onboarding_completed", true)
     .eq("is_banned", false)
     .or(`full_name.ilike.%${safe}%,username.ilike.%${safe}%`)
@@ -489,13 +500,14 @@ export async function searchTeammates(query: string): Promise<TeamMember[]> {
     full_name: string | null;
     username: string | null;
     avatar_url: string | null;
+    gender: string | null;
   }>)
     .filter((p) => p.id !== uid)
     .map((p) => ({
       id: p.id,
       username: p.username,
       fullName: p.full_name,
-      avatarUrl: p.avatar_url,
+      avatarUrl: resolveAvatarUrl(p.avatar_url, p.gender),
     }));
 }
 

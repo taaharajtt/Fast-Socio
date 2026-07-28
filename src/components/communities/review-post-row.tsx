@@ -5,6 +5,7 @@ import { Check, X, VenetianMask } from "lucide-react";
 import { GlassCard } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
 import { moderateCommunityPost } from "@/app/(student)/communities/actions";
+import { resolveAvatarUrl } from "@/lib/avatar";
 
 export type PendingPost = {
   id: string;
@@ -13,6 +14,7 @@ export type PendingPost = {
   is_anonymous: boolean;
   author_name: string | null;
   author_avatar: string | null;
+  author_gender: string | null;
 };
 
 export function ReviewPostRow({ post }: { post: PendingPost }) {
@@ -45,8 +47,12 @@ export function ReviewPostRow({ post }: { post: PendingPost }) {
         <div className="glass relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full">
           {post.is_anonymous ? (
             <VenetianMask className="h-4 w-4 text-fg-muted" aria-hidden />
-          ) : post.author_avatar ? (
-            <AppImage src={post.author_avatar} alt="" sizes="32px" />
+          ) : resolveAvatarUrl(post.author_avatar, post.author_gender) ? (
+            <AppImage
+              src={resolveAvatarUrl(post.author_avatar, post.author_gender)!}
+              alt=""
+              sizes="32px"
+            />
           ) : null}
         </div>
         <p className="text-sm font-semibold">
