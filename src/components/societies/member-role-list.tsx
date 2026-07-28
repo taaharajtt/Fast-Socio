@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Search, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AppImage } from "@/components/ui/app-image";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import { roleLabel } from "@/lib/societies/constants";
 import {
   assignableRoles,
@@ -70,6 +71,7 @@ export function MemberRoleList({
             full_name: picked.full_name,
             username: picked.username,
             avatar_url: picked.avatar_url,
+            gender: picked.gender,
           },
         ];
       });
@@ -116,8 +118,8 @@ export function MemberRoleList({
                 className="flex w-full items-center gap-2 rounded-[10px] px-2 py-1.5 text-left hover:bg-white/5"
               >
                 <span className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-white/10 text-xs font-bold text-fg-muted">
-                  {h.avatar_url ? (
-                    <AppImage src={h.avatar_url} alt="" sizes="32px" />
+                  {resolveAvatarUrl(h.avatar_url, h.gender) ? (
+                    <AppImage src={resolveAvatarUrl(h.avatar_url, h.gender)!} alt="" sizes="32px" />
                   ) : (
                     (h.full_name ?? h.username ?? "?").charAt(0).toUpperCase()
                   )}
@@ -191,8 +193,8 @@ export function MemberRoleList({
               className="flex items-center gap-3 rounded-[14px] bg-card p-3"
             >
               <span className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/10 text-sm font-bold text-fg-muted">
-                {o.avatar_url ? (
-                  <AppImage src={o.avatar_url} alt="" sizes="36px" />
+                {resolveAvatarUrl(o.avatar_url, o.gender) ? (
+                  <AppImage src={resolveAvatarUrl(o.avatar_url, o.gender)!} alt="" sizes="36px" />
                 ) : (
                   (o.full_name ?? o.username ?? "?").charAt(0).toUpperCase()
                 )}

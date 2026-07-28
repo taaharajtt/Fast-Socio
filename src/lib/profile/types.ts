@@ -6,6 +6,7 @@ export type DiscoverProfile = {
   semester: number | null;
   bio: string | null;
   avatar_url: string | null;
+  gender?: string | null;
   aura_score: number;
   /** Whether this candidate is a verified account (UISpec V3 §2.7). */
   verified?: boolean | null;

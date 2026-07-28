@@ -59,6 +59,7 @@ export function HelpResponseCard({
     authorName: response.author_name,
     authorUsername: response.author_username,
     authorAvatarUrl: response.author_avatar_url,
+    authorGender: response.author_gender,
     authorSchool: response.author_school,
     authorSemester: response.author_semester,
   });

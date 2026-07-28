@@ -3,6 +3,7 @@ import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { timeAgo } from "@/lib/time";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import {
   notificationView,
   notificationActionPhrase,
@@ -104,10 +105,13 @@ export default async function ActivityPage() {
   if (actorIds.length > 0) {
     const { data: profs } = await supabase
       .from("profiles")
-      .select("id, full_name, avatar_url")
+      .select("id, full_name, avatar_url, gender")
       .in("id", actorIds);
     (profs ?? []).forEach((p) =>
-      actors.set(p.id, { name: p.full_name, avatar: p.avatar_url })
+      actors.set(p.id, {
+        name: p.full_name,
+        avatar: resolveAvatarUrl(p.avatar_url, p.gender),
+      })
     );
   }
 

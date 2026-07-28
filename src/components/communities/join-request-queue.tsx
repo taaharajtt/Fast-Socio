@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { Check, X } from "lucide-react";
 import { AppImage } from "@/components/ui/app-image";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import { decideJoinRequest } from "@/app/(student)/communities/actions";
 import type { JoinRequestVM } from "@/lib/communities/relationship";
 
@@ -54,8 +55,8 @@ export function JoinRequestQueue({
               href={`/profile/${r.user_id}`}
               className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/10 text-sm font-bold text-fg-muted"
             >
-              {r.avatar_url ? (
-                <AppImage src={r.avatar_url} alt="" sizes="36px" />
+              {resolveAvatarUrl(r.avatar_url, r.gender) ? (
+                <AppImage src={resolveAvatarUrl(r.avatar_url, r.gender)!} alt="" sizes="36px" />
               ) : (
                 name.charAt(0).toUpperCase()
               )}

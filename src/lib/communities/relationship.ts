@@ -8,6 +8,7 @@ export type JoinRequestVM = {
   full_name: string | null;
   username: string | null;
   avatar_url: string | null;
+  gender: string | null;
   created_at: string;
 };
 
@@ -22,7 +23,7 @@ export async function getJoinRequests(
   const supabase = await createClient();
   const { data } = await supabase
     .from("community_join_requests")
-    .select("user_id, created_at, profile:profiles(full_name, username, avatar_url)")
+    .select("user_id, created_at, profile:profiles(full_name, username, avatar_url, gender)")
     .eq("community_id", communityId)
     .eq("status", "pending")
     .order("created_at", { ascending: true })
@@ -35,6 +36,7 @@ export async function getJoinRequests(
       full_name: string | null;
       username: string | null;
       avatar_url: string | null;
+      gender: string | null;
     } | null;
   };
   return ((data ?? []) as unknown as Row[]).map((r) => ({
@@ -43,6 +45,7 @@ export async function getJoinRequests(
     full_name: r.profile?.full_name ?? null,
     username: r.profile?.username ?? null,
     avatar_url: r.profile?.avatar_url ?? null,
+    gender: r.profile?.gender ?? null,
   }));
 }
 

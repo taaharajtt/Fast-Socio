@@ -3,6 +3,7 @@ import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { BlockedList, type RelUser } from "@/components/settings/blocked-list";
+import { resolveAvatarUrl } from "@/lib/avatar";
 
 export default async function BlockedPage() {
   const supabase = await createClient();
@@ -12,17 +13,22 @@ export default async function BlockedPage() {
   const [{ data: blockedRows }, { data: mutedRows }] = await Promise.all([
     supabase
       .from("blocked_users")
-      .select("blocked:profiles!blocked_users_blocked_id_fkey(id, full_name, avatar_url)")
+      .select("blocked:profiles!blocked_users_blocked_id_fkey(id, full_name, avatar_url, gender)")
       .eq("blocker_id", me),
     supabase
       .from("muted_users")
-      .select("muted:profiles!muted_users_muted_id_fkey(id, full_name, avatar_url)")
+      .select("muted:profiles!muted_users_muted_id_fkey(id, full_name, avatar_url, gender)")
       .eq("muter_id", me),
   ]);
 
-  type Prof = { id: string; full_name: string | null; avatar_url: string | null };
+  type Prof = {
+    id: string;
+    full_name: string | null;
+    avatar_url: string | null;
+    gender: string | null;
+  };
   const toRel = (p: Prof | null): RelUser | null =>
-    p ? { id: p.id, name: p.full_name, avatar: p.avatar_url } : null;
+    p ? { id: p.id, name: p.full_name, avatar: resolveAvatarUrl(p.avatar_url, p.gender) } : null;
 
   const blocked = ((blockedRows ?? [])
     .map((r) => toRel(r.blocked as unknown as Prof | null))

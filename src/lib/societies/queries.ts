@@ -32,12 +32,18 @@ export async function getSocietyOfficers(id: string): Promise<OfficerVM[]> {
 
   const { data: profs } = await supabase
     .from("profiles")
-    .select("id, full_name, username, avatar_url")
+    .select("id, full_name, username, avatar_url, gender")
     .in("id", ids);
   const byId = new Map(
     (profs ?? []).map((p) => [
       p.id as string,
-      p as { id: string; full_name: string | null; username: string | null; avatar_url: string | null },
+      p as {
+        id: string;
+        full_name: string | null;
+        username: string | null;
+        avatar_url: string | null;
+        gender: string | null;
+      },
     ])
   );
 
@@ -51,6 +57,7 @@ export async function getSocietyOfficers(id: string): Promise<OfficerVM[]> {
       full_name: p?.full_name ?? null,
       username: p?.username ?? null,
       avatar_url: p?.avatar_url ?? null,
+      gender: p?.gender ?? null,
     });
   }
   for (const r of rows) {
@@ -63,6 +70,7 @@ export async function getSocietyOfficers(id: string): Promise<OfficerVM[]> {
       full_name: p?.full_name ?? null,
       username: p?.username ?? null,
       avatar_url: p?.avatar_url ?? null,
+      gender: p?.gender ?? null,
     });
   }
   return officers.sort((a, b) => roleRank(b.role) - roleRank(a.role));

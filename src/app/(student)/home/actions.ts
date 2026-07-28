@@ -6,6 +6,7 @@ import { getAuthUserId } from "@/lib/auth/user";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { isAppStorageUrl } from "@/lib/url-safety";
 import { FEED_COLUMNS, FEED_PAGE_SIZE, type FeedPost } from "@/lib/feed/types";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import { scoreContent, blockMessage } from "@/lib/moderation/rules";
 import { postingBlockReason } from "@/lib/moderation/server";
 import {
@@ -218,7 +219,11 @@ export async function deletePost(
   return { ok: true };
 }
 
-export type CommentAuthor = { full_name: string | null; avatar_url: string | null };
+export type CommentAuthor = {
+  full_name: string | null;
+  avatar_url: string | null;
+  gender: string | null;
+};
 
 /** A comment or reply row, enriched for the Instagram-style thread UI. */
 export type FeedComment = {
@@ -251,10 +256,14 @@ async function hydrateComments(
   if (authorIds.length > 0) {
     const { data: profs } = await supabase
       .from("profiles")
-      .select("id, full_name, avatar_url")
+      .select("id, full_name, avatar_url, gender")
       .in("id", authorIds);
     (profs ?? []).forEach((p: { id: string } & CommentAuthor) => {
-      authors[p.id] = { full_name: p.full_name, avatar_url: p.avatar_url };
+      authors[p.id] = {
+        full_name: p.full_name,
+        avatar_url: p.avatar_url,
+        gender: p.gender,
+      };
     });
   }
 
@@ -316,10 +325,10 @@ export async function fetchComments(postId: string): Promise<{
   if (userId) {
     const { data: me } = await supabase
       .from("profiles")
-      .select("avatar_url")
+      .select("avatar_url, gender")
       .eq("id", userId)
       .single();
-    viewerAvatar = me?.avatar_url ?? null;
+    viewerAvatar = resolveAvatarUrl(me?.avatar_url, me?.gender);
   }
 
   return { comments, authors, viewerAvatar, viewerId };
@@ -359,6 +368,7 @@ export type MentionTarget = {
   username: string | null;
   full_name: string | null;
   avatar_url: string | null;
+  gender: string | null;
 };
 
 /**
@@ -387,7 +397,7 @@ export async function fetchMentionRoster(): Promise<MentionTarget[]> {
 
   const { data } = await supabase
     .from("profiles")
-    .select("id, username, full_name, avatar_url")
+    .select("id, username, full_name, avatar_url, gender")
     .in("id", otherIds);
   return (data ?? []) as MentionTarget[];
 }

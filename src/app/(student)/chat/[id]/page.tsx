@@ -9,6 +9,7 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { AppImage } from "@/components/ui/app-image";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import { OnlineDot } from "@/components/ui/badges";
 import { isOnline, presenceLabel } from "@/lib/time";
 import {
@@ -40,7 +41,7 @@ export default async function ConversationPage({
   const [{ data: other }, { data: otherPresence }, { data: msgs }] = await Promise.all([
     supabase
       .from("profiles")
-      .select("full_name, avatar_url, department, read_receipts")
+      .select("full_name, avatar_url, gender, department, read_receipts")
       .eq("id", otherId)
       .single(),
     // Presence now comes from profile_presence (mig 0092). This header used to
@@ -124,7 +125,7 @@ export default async function ConversationPage({
     const { data: preRows } = await supabase
       .from("feed_posts")
       .select(
-        "id, body, image_url, is_anonymous, author_name, author_avatar, like_count, comment_count"
+        "id, body, image_url, is_anonymous, author_name, author_avatar, author_gender, like_count, comment_count"
       )
       .in("id", sharedIds);
     (preRows ?? []).forEach((p) => {
@@ -134,6 +135,7 @@ export default async function ConversationPage({
         is_anonymous: p.is_anonymous,
         author_name: p.author_name,
         author_avatar: p.author_avatar,
+        author_gender: p.author_gender,
         like_count: p.like_count ?? 0,
         comment_count: p.comment_count ?? 0,
       };
@@ -160,10 +162,10 @@ export default async function ConversationPage({
         >
           <div className="relative shrink-0">
             <div className="glass relative h-9 w-9 overflow-hidden rounded-full">
-              {other?.avatar_url ? (
+              {resolveAvatarUrl(other?.avatar_url, other?.gender) ? (
                 <AppImage
-                  src={other.avatar_url}
-                  alt={other.full_name ?? "Match"}
+                  src={resolveAvatarUrl(other?.avatar_url, other?.gender)!}
+                  alt={other?.full_name ?? "Match"}
                   sizes="36px"
                   priority
                 />

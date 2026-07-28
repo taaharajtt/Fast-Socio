@@ -14,6 +14,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { getMaintenanceState, resolveFlags } from "@/lib/flags";
 import { timed } from "@/lib/perf";
+import { resolveAvatarUrl } from "@/lib/avatar";
 
 /**
  * Shell for the logged-in student experience. Hosts the bottom dock and reserves
@@ -106,7 +107,7 @@ async function StudentShell() {
     Promise.all([
     supabase
       .from("profiles")
-      .select("avatar_url, events_seen_at, admin_role")
+      .select("avatar_url, gender, events_seen_at, admin_role")
       .eq("id", userId)
       .single(),
     getMaintenanceState(),
@@ -198,7 +199,7 @@ async function StudentShell() {
       />
       <FloatingDock
         badges={{ "/chat": chatBadge, "/events": newEvents ?? 0 }}
-        avatarUrl={profile?.avatar_url}
+        avatarUrl={resolveAvatarUrl(profile?.avatar_url, profile?.gender)}
         viewerId={userId}
         hiddenHrefs={hiddenTabs}
       />

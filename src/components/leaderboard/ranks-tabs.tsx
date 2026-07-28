@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowUp, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AppImage } from "@/components/ui/app-image";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import { SkeletonRow } from "@/components/ui/skeleton";
 import { LEADERBOARD_TITLES } from "@/lib/leaderboard/titles";
 import { deptMeta } from "@/lib/leaderboard/departments";
@@ -42,6 +43,7 @@ export type StudentRow = {
   user_id: string;
   full_name: string | null;
   avatar_url: string | null;
+  gender: string | null;
   department: string | null;
   weekly_aura: number;
   rank: number;
@@ -260,8 +262,12 @@ function StudentBoard({
                 className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full bg-bg-elevated"
                 style={medal ? { boxShadow: `0 0 0 2px ${medal.ring}` } : undefined}
               >
-                {r.avatar_url && (
-                  <AppImage src={r.avatar_url} alt={r.full_name ?? ""} sizes="48px" />
+                {resolveAvatarUrl(r.avatar_url, r.gender) && (
+                  <AppImage
+                    src={resolveAvatarUrl(r.avatar_url, r.gender)!}
+                    alt={r.full_name ?? ""}
+                    sizes="48px"
+                  />
                 )}
               </div>
 

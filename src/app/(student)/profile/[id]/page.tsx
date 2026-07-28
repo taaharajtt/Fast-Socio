@@ -9,6 +9,7 @@ import { getEarnedBadges } from "@/lib/badges";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { AppImage } from "@/components/ui/app-image";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import { OnlineDot } from "@/components/ui/badges";
 import { deptMeta } from "@/lib/leaderboard/departments";
 import { isOnline, presenceLabel } from "@/lib/time";
@@ -35,7 +36,7 @@ export default async function PublicProfilePage({
     supabase
       .from("profiles")
       .select(
-        "id, full_name, username, department, degree, bio, avatar_url, cover_url, aura_score, verified, show_online, show_aura, show_department, show_semester, deactivated_at"
+        "id, full_name, username, department, degree, bio, avatar_url, gender, cover_url, aura_score, verified, show_online, show_aura, show_department, show_semester, deactivated_at"
       )
       .eq("id", id)
       .single(),
@@ -187,9 +188,9 @@ export default async function PublicProfilePage({
         <div className="absolute -bottom-10 left-4">
           <div className="relative h-20 w-20 rounded-full">
             <div className="relative h-full w-full overflow-hidden rounded-full border-[3px] border-bg bg-card">
-              {profile.avatar_url ? (
+              {resolveAvatarUrl(profile.avatar_url, profile.gender) ? (
                 <AppImage
-                  src={profile.avatar_url}
+                  src={resolveAvatarUrl(profile.avatar_url, profile.gender)!}
                   alt={profile.full_name ?? "Avatar"}
                   sizes="80px"
                   priority

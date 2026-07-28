@@ -222,6 +222,7 @@ export type StudentHit = {
   full_name: string | null;
   username: string | null;
   avatar_url: string | null;
+  gender: string | null;
 };
 
 /** Search onboarded students to appoint as officers (name or roll number). */
@@ -234,7 +235,7 @@ export async function searchStudents(query: string): Promise<StudentHit[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("profiles")
-    .select("id, full_name, username, avatar_url")
+    .select("id, full_name, username, avatar_url, gender")
     .eq("onboarding_completed", true)
     .eq("is_banned", false)
     .or(`full_name.ilike.%${safe}%,username.ilike.%${safe}%`)

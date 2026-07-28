@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { timed } from "@/lib/perf";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import { SkeletonRows } from "@/components/ui/skeleton";
 import {
   RanksTabs,
@@ -70,9 +71,10 @@ async function Rankings() {
       s.department,
       (weeklyByDept.get(s.department) ?? 0) + Number(s.weekly_aura)
     );
-    if (s.avatar_url) {
+    const src = resolveAvatarUrl(s.avatar_url, s.gender);
+    if (src) {
       const list = avatarsByDept.get(s.department) ?? [];
-      if (list.length < 4) list.push(s.avatar_url);
+      if (list.length < 4) list.push(src);
       avatarsByDept.set(s.department, list);
     }
   }

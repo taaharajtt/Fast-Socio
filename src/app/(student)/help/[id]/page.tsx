@@ -72,6 +72,7 @@ export default async function HelpDetailPage({
     authorName: req.author_name,
     authorUsername: req.author_username,
     authorAvatarUrl: req.author_avatar_url,
+    authorGender: req.author_gender,
     authorSchool: req.author_school,
     authorSemester: req.author_semester,
   });

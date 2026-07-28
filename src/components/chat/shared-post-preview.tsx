@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { AppImage } from "@/components/ui/app-image";
 import { cn } from "@/lib/utils";
+import { resolveAvatarUrl } from "@/lib/avatar";
 
 export type SharedPostPreview = {
   body: string | null;
   image_url: string | null;
   author_name: string | null;
   author_avatar: string | null;
+  author_gender?: string | null;
   is_anonymous: boolean;
   like_count: number;
   comment_count: number;
@@ -70,9 +72,14 @@ export function SharedPostCard({
             mine ? "bg-white/20" : "bg-card"
           )}
         >
-          {!preview.is_anonymous && preview.author_avatar && (
-            <AppImage src={preview.author_avatar} alt="" sizes="20px" />
-          )}
+          {!preview.is_anonymous &&
+            resolveAvatarUrl(preview.author_avatar, preview.author_gender) && (
+              <AppImage
+                src={resolveAvatarUrl(preview.author_avatar, preview.author_gender)!}
+                alt=""
+                sizes="20px"
+              />
+            )}
         </div>
         <span
           className={cn(

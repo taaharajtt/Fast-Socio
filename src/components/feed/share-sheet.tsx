@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Check, Send } from "lucide-react";
 import { GlassSheet } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import { cn } from "@/lib/utils";
 import {
   listMatchedFriends,
@@ -95,8 +96,12 @@ function ShareSheetContent({
                   className="glass flex items-center gap-3 rounded-[var(--radius-sm)] p-3"
                 >
                   <div className="glass relative h-10 w-10 shrink-0 overflow-hidden rounded-full">
-                    {f.avatar_url ? (
-                      <AppImage src={f.avatar_url} alt="" sizes="40px" />
+                    {resolveAvatarUrl(f.avatar_url, f.gender) ? (
+                      <AppImage
+                        src={resolveAvatarUrl(f.avatar_url, f.gender)!}
+                        alt=""
+                        sizes="40px"
+                      />
                     ) : null}
                   </div>
                   <span className="flex-1 truncate text-sm font-medium">

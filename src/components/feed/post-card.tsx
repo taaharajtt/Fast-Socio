@@ -21,6 +21,7 @@ import { CommentsSheet } from "@/components/feed/comments-sheet";
 import { PostPoll } from "@/components/feed/post-poll";
 import { timeAgo, absoluteTime } from "@/lib/time";
 import { AppImage } from "@/components/ui/app-image";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import { ASPECT_RATIOS, nearestAspectRatio } from "@/lib/crop";
 import type { FeedPost } from "@/lib/feed/types";
 
@@ -141,9 +142,9 @@ function PostCardImpl({
               <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-card">
                 {anon ? (
                   <VenetianMask className="h-5 w-5 text-fg-muted" aria-hidden />
-                ) : post.author_avatar ? (
+                ) : resolveAvatarUrl(post.author_avatar, post.author_gender) ? (
                   <AppImage
-                    src={post.author_avatar}
+                    src={resolveAvatarUrl(post.author_avatar, post.author_gender)!}
                     alt={post.author_name ?? ""}
                     sizes="44px"
                     priority={priority}

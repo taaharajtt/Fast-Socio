@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import type { IncomingRequest } from "@/components/chat/request-row";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import {
   EPOCH,
   type InboxData,
@@ -195,7 +196,7 @@ export async function loadInbox(): Promise<InboxData> {
     const [{ data: profRows }, { data: presRows }] = await Promise.all([
       supabase
         .from("profiles")
-        .select("id, full_name, avatar_url, department")
+        .select("id, full_name, avatar_url, gender, department")
         .in("id", ids),
       supabase.from("profile_presence").select("id, last_seen_at").in("id", ids),
     ]);
@@ -213,7 +214,7 @@ export async function loadInbox(): Promise<InboxData> {
       id: r.id,
       message: r.message,
       senderName: p?.full_name ?? "Student",
-      senderAvatar: p?.avatar_url ?? null,
+      senderAvatar: resolveAvatarUrl(p?.avatar_url, p?.gender),
       senderDept: p?.department ?? null,
     };
   });

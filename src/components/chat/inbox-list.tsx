@@ -5,6 +5,7 @@ import Link from "next/link";
 import { RequestRow } from "@/components/chat/request-row";
 import { OpenChatButton } from "@/components/chat/open-chat-button";
 import { AppImage } from "@/components/ui/app-image";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import { GlassChip } from "@/components/ui";
 import { OnlineDot } from "@/components/ui/badges";
 import { communityIcon } from "@/lib/communities/icon";
@@ -142,10 +143,10 @@ export function InboxList({
                   href={`/profile/${otherId}`}
                   className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full bg-card"
                 >
-                  {p?.avatar_url && (
+                  {resolveAvatarUrl(p?.avatar_url, p?.gender) && (
                     <AppImage
-                      src={p.avatar_url}
-                      alt={p.full_name ?? "Match"}
+                      src={resolveAvatarUrl(p?.avatar_url, p?.gender)!}
+                      alt={p?.full_name ?? "Match"}
                       sizes="44px"
                     />
                   )}

@@ -11,6 +11,7 @@ import { getAuthUserId } from "@/lib/auth/user";
 import { formatEventDate } from "@/lib/events/format";
 import { getSocialProof } from "@/lib/communities/social-proof";
 import { checkInQrDataUrl } from "@/lib/events/qr";
+import { resolveAvatarUrl } from "@/lib/avatar";
 
 /** Whether an event's end (or start, if open-ended) is in the past. */
 function hasEnded(startsAt: string, endsAt: string | null): boolean {
@@ -22,13 +23,13 @@ type DiscussionRow = {
   sender_id: string;
   body: string;
   created_at: string;
-  sender: { full_name: string | null; avatar_url: string | null } | null;
+  sender: { full_name: string | null; avatar_url: string | null; gender: string | null } | null;
 };
 
 type AttendeeRow = {
   user_id: string;
   checked_in_at: string | null;
-  user: { id: string; full_name: string | null; username: string | null; avatar_url: string | null } | null;
+  user: { id: string; full_name: string | null; username: string | null; avatar_url: string | null; gender: string | null } | null;
 };
 
 export default async function EventPage({
@@ -77,7 +78,7 @@ export default async function EventPage({
       .eq("event_id", id)
       .eq("user_id", me)
       .maybeSingle(),
-    supabase.from("profiles").select("id, full_name, avatar_url").eq("id", event.host_id).single(),
+    supabase.from("profiles").select("id, full_name, avatar_url, gender").eq("id", event.host_id).single(),
     event.community_id
       ? supabase
           .from("communities")
@@ -96,20 +97,20 @@ export default async function EventPage({
       : Promise.resolve({ data: null }),
     supabase
       .from("event_messages")
-      .select("id, sender_id, body, created_at, sender:profiles(full_name, avatar_url)")
+      .select("id, sender_id, body, created_at, sender:profiles(full_name, avatar_url, gender)")
       .eq("event_id", id)
       .order("created_at", { ascending: true })
       .limit(100),
     supabase
       .from("event_organizers")
       .select(
-        "user_id, user:profiles!event_organizers_user_id_fkey(id, full_name, username, avatar_url)"
+        "user_id, user:profiles!event_organizers_user_id_fkey(id, full_name, username, avatar_url, gender)"
       )
       .eq("event_id", id)
       .order("created_at", { ascending: true }),
     supabase
       .from("event_attendees")
-      .select("user_id, checked_in_at, user:profiles(id, full_name, username, avatar_url)")
+      .select("user_id, checked_in_at, user:profiles(id, full_name, username, avatar_url, gender)")
       .eq("event_id", id)
       .order("created_at", { ascending: true })
       .limit(1000),
@@ -141,7 +142,7 @@ export default async function EventPage({
       body: r.body,
       created_at: r.created_at,
       sender_name: r.sender?.full_name ?? null,
-      sender_avatar: r.sender?.avatar_url ?? null,
+      sender_avatar: resolveAvatarUrl(r.sender?.avatar_url, r.sender?.gender),
     })
   );
 
@@ -152,6 +153,7 @@ export default async function EventPage({
       full_name: r.user!.full_name,
       username: r.user!.username,
       avatar_url: r.user!.avatar_url,
+      gender: r.user!.gender,
       checked_in: r.checked_in_at != null,
     }));
 

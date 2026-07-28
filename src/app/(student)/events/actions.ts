@@ -220,6 +220,7 @@ export type OrganizerCandidate = {
   full_name: string | null;
   username: string | null;
   avatar_url: string | null;
+  gender: string | null;
 };
 
 /**
@@ -239,7 +240,7 @@ export async function searchStudents(
   const supabase = await createClient();
   const { data } = await supabase
     .from("profiles")
-    .select("id, full_name, username, avatar_url")
+    .select("id, full_name, username, avatar_url, gender")
     .eq("onboarding_completed", true)
     .eq("is_banned", false)
     .or(`full_name.ilike.%${safe}%,username.ilike.%${safe}%`)

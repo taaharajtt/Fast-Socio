@@ -12,6 +12,7 @@ type AttendeeRow = {
     full_name: string | null;
     username: string | null;
     avatar_url: string | null;
+    gender: string | null;
   } | null;
 };
 
@@ -39,7 +40,7 @@ export default async function EventAttendeesPage({
   const { data: rows } = await supabase
     .from("event_attendees")
     .select(
-      "user_id, checked_in_at, user:profiles(id, full_name, username, avatar_url)"
+      "user_id, checked_in_at, user:profiles(id, full_name, username, avatar_url, gender)"
     )
     .eq("event_id", id)
     .order("created_at", { ascending: true })
@@ -52,6 +53,7 @@ export default async function EventAttendeesPage({
       full_name: r.user!.full_name,
       username: r.user!.username,
       avatar_url: r.user!.avatar_url,
+      gender: r.user!.gender,
       checked_in: r.checked_in_at != null,
     }));
 

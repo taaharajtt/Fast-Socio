@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ShieldCheck } from "lucide-react";
 import { AppImage } from "@/components/ui/app-image";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import { roleLabel } from "@/lib/societies/constants";
 import type { OfficerVM } from "@/lib/societies/types";
 
@@ -21,8 +22,8 @@ export function OfficerRow({
         className="flex min-w-0 flex-1 items-center gap-3"
       >
         <span className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/10 text-sm font-bold text-fg-muted">
-          {officer.avatar_url ? (
-            <AppImage src={officer.avatar_url} alt="" sizes="40px" />
+          {resolveAvatarUrl(officer.avatar_url, officer.gender) ? (
+            <AppImage src={resolveAvatarUrl(officer.avatar_url, officer.gender)!} alt="" sizes="40px" />
           ) : (
             name.charAt(0).toUpperCase()
           )}

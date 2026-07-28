@@ -11,6 +11,7 @@ import Link from "next/link";
 import { Heart, Loader2, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { AppImage } from "@/components/ui/app-image";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import { CommentBody } from "@/components/feed/comment-body";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/time";
@@ -75,7 +76,7 @@ export const CommentThread = forwardRef<
       if (prev[id]) return prev;
       createClient()
         .from("profiles")
-        .select("full_name, avatar_url")
+        .select("full_name, avatar_url, gender")
         .eq("id", id)
         .single()
         .then(({ data }) => {
@@ -366,10 +367,10 @@ function CommentRow({
           avatarSize
         )}
       >
-        {author?.avatar_url ? (
+        {resolveAvatarUrl(author?.avatar_url, author?.gender) ? (
           <AppImage
-            src={author.avatar_url}
-            alt={author.full_name ?? ""}
+            src={resolveAvatarUrl(author?.avatar_url, author?.gender)!}
+            alt={author?.full_name ?? ""}
             sizes={isReply ? "28px" : "36px"}
           />
         ) : null}

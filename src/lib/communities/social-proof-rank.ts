@@ -9,6 +9,7 @@ export type ProofCandidate = {
   full_name: string | null;
   username: string | null;
   avatar_url: string | null;
+  gender: string | null;
   department: string | null;
   degree: string | null;
 };

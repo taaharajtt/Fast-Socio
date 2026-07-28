@@ -8,6 +8,8 @@
  * RPC guards remain the real enforcement.
  */
 
+import { resolveAvatarUrl } from "@/lib/avatar";
+
 export const HELP_CATEGORIES = [
   "academic",
   "advice",
@@ -283,6 +285,7 @@ export type HelpAuthorFields = {
   authorName: string | null;
   authorUsername: string | null;
   authorAvatarUrl: string | null;
+  authorGender?: string | null;
   /** Non-identifying facts, shown even for anonymous authors. */
   authorSchool?: string | null;
   authorSemester?: number | null;
@@ -352,7 +355,7 @@ export function resolveHelpAuthor(f: HelpAuthorFields): HelpAuthorDisplay {
     anonymous: false,
     name: f.authorName,
     username: f.authorUsername,
-    avatarUrl: f.authorAvatarUrl,
+    avatarUrl: resolveAvatarUrl(f.authorAvatarUrl, f.authorGender),
     href: f.authorId ? `/profile/${f.authorId}` : null,
     school,
     semester,
@@ -372,6 +375,7 @@ export function resolveHelpResponseAuthor(f: {
   authorName: string | null;
   authorUsername: string | null;
   authorAvatarUrl: string | null;
+  authorGender?: string | null;
   authorSchool?: string | null;
   authorSemester?: number | null;
 }): HelpAuthorDisplay {
@@ -394,7 +398,7 @@ export function resolveHelpResponseAuthor(f: {
     anonymous: false,
     name: f.authorName,
     username: f.authorUsername,
-    avatarUrl: f.authorAvatarUrl,
+    avatarUrl: resolveAvatarUrl(f.authorAvatarUrl, f.authorGender),
     href: f.authorId ? `/profile/${f.authorId}` : null,
     school,
     semester,

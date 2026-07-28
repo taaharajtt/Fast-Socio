@@ -48,7 +48,7 @@ export default async function SocietyPage({
       getSocietyAnnouncements(id, 50),
       supabase
         .from("community_members")
-        .select("user_id, profile:profiles(id, full_name, username, avatar_url)")
+        .select("user_id, profile:profiles(id, full_name, username, avatar_url, gender)")
         .eq("community_id", id)
         .limit(200),
       canManage
@@ -66,7 +66,7 @@ export default async function SocietyPage({
   const officerIds = new Set(officers.map((o) => o.user_id));
   type MemberRow = {
     user_id: string;
-    profile: { id: string; full_name: string | null; username: string | null; avatar_url: string | null } | null;
+    profile: { id: string; full_name: string | null; username: string | null; avatar_url: string | null; gender: string | null } | null;
   };
   const allMembers = (memberRows.data ?? []) as unknown as MemberRow[];
   // Officers are listed (and demoted) under their own heading, so the plain
@@ -78,6 +78,7 @@ export default async function SocietyPage({
       full_name: r.profile?.full_name ?? null,
       username: r.profile?.username ?? null,
       avatar_url: r.profile?.avatar_url ?? null,
+      gender: r.profile?.gender ?? null,
     }));
 
   // remove_community_member() refuses to kick the owner or another manager, so
@@ -87,6 +88,7 @@ export default async function SocietyPage({
     full_name: f.full_name,
     username: f.username,
     avatar_url: f.avatar_url,
+    gender: f.gender,
     role: "member",
   }));
 

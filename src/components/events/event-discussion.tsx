@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Send } from "lucide-react";
 import { GlassButton } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import { cn } from "@/lib/utils";
 import { clockTime, absoluteTime } from "@/lib/time";
 import { createClient } from "@/lib/supabase/client";
@@ -19,14 +20,14 @@ export type EventMessage = {
 };
 
 const SELECT =
-  "id, sender_id, body, created_at, sender:profiles(full_name, avatar_url)";
+  "id, sender_id, body, created_at, sender:profiles(full_name, avatar_url, gender)";
 
 type Row = {
   id: string;
   sender_id: string;
   body: string;
   created_at: string;
-  sender: { full_name: string | null; avatar_url: string | null } | null;
+  sender: { full_name: string | null; avatar_url: string | null; gender: string | null } | null;
 };
 
 function toMessage(r: Row): EventMessage {
@@ -36,7 +37,7 @@ function toMessage(r: Row): EventMessage {
     body: r.body,
     created_at: r.created_at,
     sender_name: r.sender?.full_name ?? null,
-    sender_avatar: r.sender?.avatar_url ?? null,
+    sender_avatar: resolveAvatarUrl(r.sender?.avatar_url, r.sender?.gender),
   };
 }
 

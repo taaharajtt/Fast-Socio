@@ -10,6 +10,7 @@ import {
 import { Send, Smile, X } from "lucide-react";
 import { GlassButton } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import {
   addComment,
   fetchMentionRoster,
@@ -180,8 +181,12 @@ export function AddComment({
                 }
               >
                 <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full bg-card">
-                  {t.avatar_url && (
-                    <AppImage src={t.avatar_url} alt="" sizes="32px" />
+                  {resolveAvatarUrl(t.avatar_url, t.gender) && (
+                    <AppImage
+                      src={resolveAvatarUrl(t.avatar_url, t.gender)!}
+                      alt=""
+                      sizes="32px"
+                    />
                   )}
                 </div>
                 <span className="min-w-0 flex-1">

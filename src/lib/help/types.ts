@@ -14,12 +14,12 @@ export const HELP_REQUEST_COLUMNS =
   "id, title, body, category, urgency, department, semester, course_code, " +
   "is_anonymous, allow_dms, status, selected_response_id, response_count, " +
   "follower_count, created_at, updated_at, resolved_at, is_mine, is_following, " +
-  "author_id, author_name, author_username, author_avatar_url, " +
+  "author_id, author_name, author_username, author_avatar_url, author_gender, " +
   "author_school, author_semester";
 
 export const HELP_RESPONSE_COLUMNS =
   "id, request_id, body, kind, is_selected, created_at, is_mine, is_anonymous, " +
-  "author_is_anon, author_id, author_name, author_username, author_avatar_url, " +
+  "author_is_anon, author_id, author_name, author_username, author_avatar_url, author_gender, " +
   "author_school, author_semester, status, accepted_at, viewer_owns_request, " +
   "seeker_reply, seeker_reply_at";
 
@@ -48,6 +48,7 @@ export type HelpRequestRow = {
   author_name: string | null;
   author_username: string | null;
   author_avatar_url: string | null;
+  author_gender: string | null;
   /** Seeker's school + derived semester (non-identifying; shown when anonymous). */
   author_school: string | null;
   author_semester: number | null;
@@ -74,6 +75,7 @@ export type HelpResponseRow = {
   author_name: string | null;
   author_username: string | null;
   author_avatar_url: string | null;
+  author_gender: string | null;
   /** Helper's school + derived semester (non-identifying; shown when anonymous). */
   author_school: string | null;
   author_semester: number | null;

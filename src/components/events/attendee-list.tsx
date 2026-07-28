@@ -4,12 +4,14 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Search, Check } from "lucide-react";
 import { AppImage } from "@/components/ui/app-image";
+import { resolveAvatarUrl } from "@/lib/avatar";
 
 export type Attendee = {
   id: string;
   full_name: string | null;
   username: string | null;
   avatar_url: string | null;
+  gender: string | null;
   checked_in: boolean;
 };
 
@@ -68,9 +70,9 @@ export function AttendeeList({ attendees }: { attendees: Attendee[] }) {
               className="flex items-center gap-3 rounded-[12px] px-2 py-2.5 transition-colors hover:bg-card"
             >
               <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-card">
-                {a.avatar_url ? (
+                {resolveAvatarUrl(a.avatar_url, a.gender) ? (
                   <AppImage
-                    src={a.avatar_url}
+                    src={resolveAvatarUrl(a.avatar_url, a.gender)!}
                     alt={a.full_name ?? ""}
                     sizes="40px"
                   />

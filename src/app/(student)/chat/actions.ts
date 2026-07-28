@@ -142,6 +142,7 @@ export type MatchedFriend = {
   id: string;
   full_name: string | null;
   avatar_url: string | null;
+  gender: string | null;
 };
 
 /** List the current user's matched friends (for the share sheet, CR-010). */
@@ -164,7 +165,7 @@ export async function listMatchedFriends(): Promise<MatchedFriend[]> {
 
   const { data: profs } = await supabase
     .from("profiles")
-    .select("id, full_name, avatar_url")
+    .select("id, full_name, avatar_url, gender")
     .in("id", otherIds);
   return (profs as MatchedFriend[]) ?? [];
 }

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { notificationView } from "@/lib/notifications/view";
 import { timeAgo } from "@/lib/time";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import {
   NotificationBellMenu,
   type BellItem,
@@ -55,10 +56,13 @@ export async function NotificationBell() {
   if (actorIds.length > 0) {
     const { data: profs } = await supabase
       .from("profiles")
-      .select("id, full_name, avatar_url")
+      .select("id, full_name, avatar_url, gender")
       .in("id", actorIds);
     (profs ?? []).forEach((p) =>
-      actors.set(p.id, { name: p.full_name, avatar: p.avatar_url })
+      actors.set(p.id, {
+        name: p.full_name,
+        avatar: resolveAvatarUrl(p.avatar_url, p.gender),
+      })
     );
   }
 

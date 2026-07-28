@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import {
   batchOf,
   firstName,
@@ -62,7 +63,7 @@ export async function getSocialProof(
       .single(),
     supabase
       .from("profiles")
-      .select("id, full_name, username, avatar_url, department, degree")
+      .select("id, full_name, username, avatar_url, gender, department, degree")
       .in("id", candidates),
   ]);
 
@@ -78,7 +79,7 @@ export async function getSocialProof(
   };
 
   const ranked = rankProof((profiles ?? []) as ProofCandidate[], viewer, limit).map(
-    (p) => ({ id: p.id, name: firstName(p), avatar_url: p.avatar_url })
+    (p) => ({ id: p.id, name: firstName(p), avatar_url: resolveAvatarUrl(p.avatar_url, p.gender) })
   );
 
   return { people: ranked, others: Math.max(0, withoutMe - ranked.length) };

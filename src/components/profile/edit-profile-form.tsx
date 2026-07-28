@@ -11,6 +11,7 @@ import { CoverUpload } from "@/components/communities/cover-upload";
 import { ImageCropper, type CropResult } from "@/components/ui/image-cropper";
 import { UploadProgressRing } from "@/components/ui/upload-progress";
 import { uploadWithProgress, publicStorageUrl } from "@/lib/storage-upload";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import {
   BIO_MAX,
   DEPARTMENTS,
@@ -225,10 +226,10 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
           onClick={() => fileInput.current?.click()}
           className="glass relative flex h-28 w-28 items-center justify-center overflow-hidden rounded-full text-fg-muted"
         >
-          {avatarUrl ? (
+          {resolveAvatarUrl(avatarUrl, gender) ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={avatarUrl}
+              src={resolveAvatarUrl(avatarUrl, gender)!}
               alt="Your avatar"
               className="h-full w-full object-cover"
               loading="lazy"

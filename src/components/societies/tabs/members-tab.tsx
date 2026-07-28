@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Search, Users } from "lucide-react";
 import { AppImage } from "@/components/ui/app-image";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import { OfficerRow } from "@/components/societies/officer-row";
 import type { OfficerVM } from "@/lib/societies/types";
 
@@ -12,6 +13,7 @@ type FollowerVM = {
   full_name: string | null;
   username: string | null;
   avatar_url: string | null;
+  gender: string | null;
 };
 
 export function MembersTab({
@@ -104,8 +106,8 @@ export function MembersTab({
                       className="flex items-center gap-3 rounded-[14px] bg-card p-3"
                     >
                       <span className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/10 text-sm font-bold text-fg-muted">
-                        {p.avatar_url ? (
-                          <AppImage src={p.avatar_url} alt="" sizes="36px" />
+                        {resolveAvatarUrl(p.avatar_url, p.gender) ? (
+                          <AppImage src={resolveAvatarUrl(p.avatar_url, p.gender)!} alt="" sizes="36px" />
                         ) : (
                           name.charAt(0).toUpperCase()
                         )}

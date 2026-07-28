@@ -58,7 +58,7 @@ export default async function CommunityPage({
   const { data: memberData } = !pending
     ? await supabase
         .from("community_members")
-        .select("user_id, role, profile:profiles(id, full_name, username, avatar_url)")
+        .select("user_id, role, profile:profiles(id, full_name, username, avatar_url, gender)")
         .eq("community_id", id)
         .limit(200)
     : { data: [] };
@@ -68,7 +68,7 @@ export default async function CommunityPage({
   type Row = {
     user_id: string;
     role: CommunityMemberVM["role"];
-    profile: { id: string; full_name: string | null; username: string | null; avatar_url: string | null } | null;
+    profile: { id: string; full_name: string | null; username: string | null; avatar_url: string | null; gender: string | null } | null;
   };
   const members: CommunityMemberVM[] = ((memberData ?? []) as unknown as Row[])
     .map((r) => ({
@@ -77,6 +77,7 @@ export default async function CommunityPage({
       full_name: r.profile?.full_name ?? null,
       username: r.profile?.username ?? null,
       avatar_url: r.profile?.avatar_url ?? null,
+      gender: r.profile?.gender ?? null,
     }))
     .sort((a, b) => ROLE_RANK[a.role] - ROLE_RANK[b.role]);
 

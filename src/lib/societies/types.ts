@@ -27,6 +27,7 @@ export type OfficerVM = {
   full_name: string | null;
   username: string | null;
   avatar_url: string | null;
+  gender: string | null;
 };
 
 /** A row from the society_announcement_feed definer view. */

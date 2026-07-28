@@ -12,6 +12,7 @@ function person(over: Partial<ProofCandidate> & { id: string }): ProofCandidate 
     full_name: "Test Student",
     username: "24i0001",
     avatar_url: "https://example.test/a.jpg",
+    gender: null,
     department: "CS",
     degree: "BS",
     ...over,

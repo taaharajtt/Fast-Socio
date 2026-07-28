@@ -8,6 +8,7 @@ import { getEarnedBadges } from "@/lib/badges";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { AppImage } from "@/components/ui/app-image";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import { Skeleton, SkeletonCards } from "@/components/ui/skeleton";
 import { deptMeta } from "@/lib/leaderboard/departments";
 import { FEED_COLUMNS, type FeedPost } from "@/lib/feed/types";
@@ -108,7 +109,7 @@ const loadProfile = cache(async () => {
   const { data } = await supabase
     .from("profiles")
     .select(
-      "full_name, username, department, degree, bio, avatar_url, cover_url, aura_score, verified, level, xp"
+      "full_name, username, department, degree, bio, avatar_url, gender, cover_url, aura_score, verified, level, xp"
     )
     .eq("id", me)
     .single();
@@ -141,14 +142,10 @@ async function CoverName() {
 
 async function Avatar() {
   const { profile } = await loadProfile();
-  if (!profile?.avatar_url) return <span className="block h-full w-full" />;
+  const src = resolveAvatarUrl(profile?.avatar_url, profile?.gender);
+  if (!src) return <span className="block h-full w-full" />;
   return (
-    <AppImage
-      src={profile.avatar_url}
-      alt={profile.full_name ?? "Avatar"}
-      sizes="80px"
-      priority
-    />
+    <AppImage src={src} alt={profile?.full_name ?? "Avatar"} sizes="80px" priority />
   );
 }
 

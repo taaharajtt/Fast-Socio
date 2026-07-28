@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { UserPlus, Trash2, X, Search, Loader2 } from "lucide-react";
 import { GlassSheet } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import {
   addOrganizer,
   removeOrganizer,
@@ -18,6 +19,7 @@ export type Organizer = {
   full_name: string | null;
   username: string | null;
   avatar_url: string | null;
+  gender: string | null;
 };
 
 /**
@@ -163,8 +165,8 @@ function ManageOrganizers({
           {organizers.map((o) => (
             <div key={o.id} className="flex items-center gap-3 rounded-[12px] px-1 py-2">
               <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-bg-elevated">
-                {o.avatar_url && (
-                  <AppImage src={o.avatar_url} alt="" sizes="36px" />
+                {resolveAvatarUrl(o.avatar_url, o.gender) && (
+                  <AppImage src={resolveAvatarUrl(o.avatar_url, o.gender)!} alt="" sizes="36px" />
                 )}
               </div>
               <div className="min-w-0 flex-1">
@@ -228,8 +230,8 @@ function ManageOrganizers({
                   className="flex w-full items-center gap-3 rounded-[12px] px-1 py-2 text-left transition-colors hover:bg-glass disabled:opacity-50"
                 >
                   <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-bg-elevated">
-                    {r.avatar_url && (
-                      <AppImage src={r.avatar_url} alt="" sizes="36px" />
+                    {resolveAvatarUrl(r.avatar_url, r.gender) && (
+                      <AppImage src={resolveAvatarUrl(r.avatar_url, r.gender)!} alt="" sizes="36px" />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">

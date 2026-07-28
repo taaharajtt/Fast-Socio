@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { UserMinus } from "lucide-react";
 import { AppImage } from "@/components/ui/app-image";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import { removeCommunityMember } from "@/app/(student)/communities/actions";
 import type { CommunityMemberVM } from "@/components/communities/member-row";
 
@@ -55,8 +56,8 @@ export function MemberAccessList({
               href={`/profile/${m.user_id}`}
               className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/10 text-sm font-bold text-fg-muted"
             >
-              {m.avatar_url ? (
-                <AppImage src={m.avatar_url} alt="" sizes="36px" />
+              {resolveAvatarUrl(m.avatar_url, m.gender) ? (
+                <AppImage src={resolveAvatarUrl(m.avatar_url, m.gender)!} alt="" sizes="36px" />
               ) : (
                 name.charAt(0).toUpperCase()
               )}

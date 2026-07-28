@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Calendar, MapPin, QrCode, Star, Users } from "lucide-react";
 import { GlassCard } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import { EventTicket } from "@/components/events/event-ticket";
 import {
   EventHostControls,
@@ -47,7 +48,7 @@ export function EventOverviewTab({
   location: string | null;
   attendeeCount: number;
   capacity: number | null;
-  host: { id: string; full_name: string | null; avatar_url: string | null } | null;
+  host: { id: string; full_name: string | null; avatar_url: string | null; gender: string | null } | null;
   organizerRating: { avg_rating: number | null; review_count: number } | null;
   organizers: Organizer[];
   isHost: boolean;
@@ -97,7 +98,9 @@ export function EventOverviewTab({
         <Link href={`/profile/${host.id}`} className="block">
           <GlassCard className="flex items-center gap-3 p-4">
             <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-bg-elevated">
-              {host.avatar_url && <AppImage src={host.avatar_url} alt="" sizes="40px" />}
+              {resolveAvatarUrl(host.avatar_url, host.gender) && (
+                <AppImage src={resolveAvatarUrl(host.avatar_url, host.gender)!} alt="" sizes="40px" />
+              )}
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-xs text-fg-muted">Organized by</p>
@@ -125,7 +128,9 @@ export function EventOverviewTab({
             {organizers.map((o) => (
               <Link key={o.id} href={`/profile/${o.id}`} className="flex items-center gap-3">
                 <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full bg-bg-elevated">
-                  {o.avatar_url && <AppImage src={o.avatar_url} alt="" sizes="32px" />}
+                  {resolveAvatarUrl(o.avatar_url, o.gender) && (
+                    <AppImage src={resolveAvatarUrl(o.avatar_url, o.gender)!} alt="" sizes="32px" />
+                  )}
                 </div>
                 <span className="truncate text-sm font-medium text-fg">
                   {o.full_name ?? "Organizer"}

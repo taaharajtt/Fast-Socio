@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { GlassButton, GlassSheet } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import { ImageCropper, type CropResult } from "@/components/ui/image-cropper";
 import { cn } from "@/lib/utils";
 import { useKeyboardInset } from "@/lib/use-keyboard-inset";
@@ -1463,8 +1464,12 @@ function ForwardSheetContent({
                     className="glass flex items-center gap-3 rounded-[var(--radius-sm)] p-3"
                   >
                     <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-card">
-                      {f.avatar_url && (
-                        <AppImage src={f.avatar_url} alt="" sizes="40px" />
+                      {resolveAvatarUrl(f.avatar_url, f.gender) && (
+                        <AppImage
+                          src={resolveAvatarUrl(f.avatar_url, f.gender)!}
+                          alt=""
+                          sizes="40px"
+                        />
                       )}
                     </div>
                     <span className="flex-1 truncate text-sm font-medium">

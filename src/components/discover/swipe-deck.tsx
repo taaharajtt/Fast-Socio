@@ -14,6 +14,7 @@ import { MotionReduced } from "@/components/ui/motion-reduced";
 import { VerifiedBadge } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { AppImage } from "@/components/ui/app-image";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import type { DiscoverProfile } from "@/lib/profile/types";
 import { semesterLabel } from "@/lib/profile/constants";
 import { ReportSheet } from "@/components/discover/report-sheet";
@@ -430,7 +431,10 @@ function StackedCard({ card, index }: { card: DiscoverSwipeCard; index: number }
  *  and `sizes` as the real card will use once promoted, so next/image
  *  resolves to the identical cached URL. */
 function CardImagePreload({ card }: { card: DiscoverSwipeCard }) {
-  const src = card.kind === "socio" ? card.profile.avatar_url : card.post.authorAvatar;
+  const src =
+    card.kind === "socio"
+      ? resolveAvatarUrl(card.profile.avatar_url, card.profile.gender)
+      : card.post.authorAvatar;
   if (!src) return null;
   const sizes =
     card.kind === "socio" ? "(max-width: 448px) 100vw, 384px" : "36px";
@@ -452,9 +456,9 @@ function ProfileCardBody({
   const shared = new Set(profile.shared_interests ?? []);
   return (
     <div className="relative h-full w-full overflow-hidden rounded-3xl bg-card">
-      {profile.avatar_url ? (
+      {resolveAvatarUrl(profile.avatar_url, profile.gender) ? (
         <AppImage
-          src={profile.avatar_url}
+          src={resolveAvatarUrl(profile.avatar_url, profile.gender)!}
           alt={profile.full_name ?? "Profile"}
           sizes="(max-width: 448px) 100vw, 384px"
           draggable={false}

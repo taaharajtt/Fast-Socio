@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { ShieldCheck } from "lucide-react";
 import { AppImage } from "@/components/ui/app-image";
+import { resolveAvatarUrl } from "@/lib/avatar";
 
 export type CommunityMemberVM = {
   user_id: string;
   full_name: string | null;
   username: string | null;
   avatar_url: string | null;
+  gender: string | null;
   role: "owner" | "moderator" | "member";
 };
 
@@ -26,8 +28,8 @@ export function MemberRow({ member }: { member: CommunityMemberVM }) {
       className="flex items-center gap-3 rounded-[14px] bg-card p-3"
     >
       <span className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/10 text-sm font-bold text-fg-muted">
-        {member.avatar_url ? (
-          <AppImage src={member.avatar_url} alt="" sizes="40px" />
+        {resolveAvatarUrl(member.avatar_url, member.gender) ? (
+          <AppImage src={resolveAvatarUrl(member.avatar_url, member.gender)!} alt="" sizes="40px" />
         ) : (
           name.charAt(0).toUpperCase()
         )}
