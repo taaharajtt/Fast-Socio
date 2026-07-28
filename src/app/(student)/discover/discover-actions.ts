@@ -606,6 +606,23 @@ export async function createGroupFromDiscoverPost(
   return { ok: true, conversationId: data as string };
 }
 
+/**
+ * Delete a Discover team room (mig 0130). Owner-only, and the RPC refuses any
+ * id that isn't a Discover group, so this can never reach a real community.
+ * The post stays 'filled' — dropping the chat isn't re-opening the search.
+ */
+export async function deleteDiscoverGroupChat(
+  communityId: string
+): Promise<Result> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("delete_discover_group_chat", {
+    p_id: communityId,
+  });
+  if (error) return { ok: false, error: friendly(error.message) };
+  revalidatePath("/chat");
+  return { ok: true };
+}
+
 /** Delete one of the caller's own posts. RLS restricts this to author_id = me. */
 export async function deleteDiscoverPost(postId: string): Promise<Result> {
   const uid = await getAuthUserId();

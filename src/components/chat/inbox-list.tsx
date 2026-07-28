@@ -10,6 +10,7 @@ import { GlassChip } from "@/components/ui";
 import { OnlineDot } from "@/components/ui/badges";
 import { communityIcon } from "@/lib/communities/icon";
 import { discoverGroupLabel } from "@/lib/discover/group-label";
+import { DiscoverGroupAvatar } from "@/components/discover/discover-group-avatar";
 import { createClient } from "@/lib/supabase/client";
 import { refreshInbox } from "@/app/(student)/chat/actions";
 import { EPOCH, type InboxData } from "@/lib/chat/inbox-types";
@@ -174,7 +175,9 @@ export function InboxList({
                 >
                   <div className="relative h-11 w-11 shrink-0 rounded-full">
                     <div className="glass relative flex h-full w-full items-center justify-center overflow-hidden rounded-full">
-                      {image ? (
+                      {t.space.is_discover_group ? (
+                        <DiscoverGroupAvatar sizes="44px" />
+                      ) : image ? (
                         <AppImage src={image} alt="" sizes="44px" />
                       ) : (
                         <span className="text-lg" aria-hidden>

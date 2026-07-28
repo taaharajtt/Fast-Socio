@@ -8,6 +8,8 @@ import { AppImage } from "@/components/ui/app-image";
 import { GlassChip } from "@/components/ui";
 import { communityIcon } from "@/lib/communities/icon";
 import { discoverGroupLabel } from "@/lib/discover/group-label";
+import { DiscoverGroupAvatar } from "@/components/discover/discover-group-avatar";
+import { DiscoverGroupMenu } from "@/components/discover/discover-group-menu";
 import { getCommunityRelationship } from "@/lib/communities/relationship";
 import { fetchPollResults, type PollOptionResult } from "@/app/(student)/communities/actions";
 import type { CommunityMessage } from "@/components/communities/community-chat";
@@ -111,7 +113,9 @@ export default async function CommunityConversationPage({
             of tapping a person's avatar in a DM. */}
         <HeaderShell href={profileHref}>
           <span className="glass relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full">
-            {image ? (
+            {isDiscoverGroup ? (
+              <DiscoverGroupAvatar sizes="36px" priority />
+            ) : image ? (
               <AppImage src={image} alt="" sizes="36px" priority />
             ) : (
               <span className="text-base" aria-hidden>
@@ -120,15 +124,17 @@ export default async function CommunityConversationPage({
             )}
           </span>
           <span className="min-w-0 flex-1">
+            {/* Capsule leads the name here exactly as it does in the inbox row,
+                so a room identifies itself the same way on both screens. */}
             <span className="flex items-center gap-1.5">
-              <span className="truncate font-semibold">{community.name}</span>
               {isDiscoverGroup ? (
                 <span className="gradient-brand shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold text-white">
                   {discoverGroupLabel(community.discover_mode)}
                 </span>
               ) : (
-                <GlassChip>Community</GlassChip>
+                <GlassChip className="shrink-0">Community</GlassChip>
               )}
+              <span className="truncate font-semibold">{community.name}</span>
             </span>
             <span className="block truncate text-[11px] text-fg-muted">
               {community.member_count.toLocaleString()} member
@@ -140,6 +146,8 @@ export default async function CommunityConversationPage({
             </span>
           </span>
         </HeaderShell>
+        {/* Only the author who minted the room can dissolve it. */}
+        {isDiscoverGroup && rel.isOwner && <DiscoverGroupMenu communityId={id} />}
       </header>
 
       <CommunityThread
