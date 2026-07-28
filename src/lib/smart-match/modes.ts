@@ -441,6 +441,21 @@ export function modeLabel(mode: DiscoverMode): string {
   return mode === "socio" ? "SOCIO" : MODE_META[mode].label;
 }
 
+/**
+ * Modes that end with a real team, and so can be turned into a group chat when
+ * the author fills the post (mig 0129). Recruitment and Open-to-Contribute are
+ * excluded: they end in a form submission or an invite, not a fixed roster.
+ * Mirrors the CHECK on communities.discover_mode.
+ */
+export function modeFormsTeam(mode: PostMode): boolean {
+  return (
+    mode === "project_partner" ||
+    mode === "fyp_teammate" ||
+    mode === "hackathon_team" ||
+    mode === "sports"
+  );
+}
+
 /** Modes whose forms include the team-member mention picker. */
 export function modeUsesTeamMembers(mode: PostMode): boolean {
   return (

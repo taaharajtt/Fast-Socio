@@ -584,6 +584,28 @@ export async function setDiscoverPostStatus(
   return { ok: true };
 }
 
+/**
+ * Fill the post AND give the team a room (mig 0129). The RPC is idempotent on
+ * post id, so a double-tap returns the same conversation rather than a second
+ * one. Returns the community id, which is what /chat/c/[id] is keyed on.
+ */
+export async function createGroupFromDiscoverPost(
+  postId: string,
+  groupName: string
+): Promise<{ ok: true; conversationId: string } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("create_discover_group_chat", {
+    p_post_id: postId,
+    p_group_name: groupName,
+  });
+  if (error) return { ok: false, error: friendly(error.message) };
+  if (!data) return { ok: false, error: "Could not create the group chat." };
+  revalidatePath("/discover");
+  revalidatePath("/discover/post");
+  revalidatePath("/chat");
+  return { ok: true, conversationId: data as string };
+}
+
 /** Delete one of the caller's own posts. RLS restricts this to author_id = me. */
 export async function deleteDiscoverPost(postId: string): Promise<Result> {
   const uid = await getAuthUserId();

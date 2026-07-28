@@ -42,12 +42,14 @@ export default async function CommunityPage({
   const { data: community } = await supabase
     .from("communities")
     .select(
-      "id, name, description, avatar_url, cover_url, member_count, status, owner_id, is_society"
+      "id, name, description, avatar_url, cover_url, member_count, status, owner_id, is_society, is_discover_group"
     )
     .eq("id", id)
     .single();
   if (!community) notFound();
   if (community.is_society) redirect(`/societies/${id}`);
+  // A Discover team room has no community profile — it lives only in /chat.
+  if (community.is_discover_group) notFound();
 
   const pending = community.status !== "approved";
   const rel = await getCommunityRelationship(id, me, community.owner_id);

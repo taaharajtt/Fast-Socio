@@ -25,6 +25,16 @@ export type InboxSpace = {
   cover_url: string | null;
   is_society: boolean;
   status: string;
+  /**
+   * Discover team rooms (mig 0129) are communities carrying a flag, so they
+   * arrive as spaces and reuse the whole group-chat stack. These three fields
+   * are what makes one render as a Discover thread instead of a community:
+   * the row shows a gradient "Discover · <Mode>" capsule and the name the
+   * author chose, and it is never browsable under /communities.
+   */
+  is_discover_group: boolean;
+  discover_mode: string | null;
+  discover_title: string | null;
 };
 
 export type InboxThread =

@@ -7,11 +7,30 @@ import { getAuthUserId } from "@/lib/auth/user";
 import { AppImage } from "@/components/ui/app-image";
 import { GlassChip } from "@/components/ui";
 import { communityIcon } from "@/lib/communities/icon";
+import { discoverGroupLabel } from "@/lib/discover/group-label";
 import { getCommunityRelationship } from "@/lib/communities/relationship";
 import { fetchPollResults, type PollOptionResult } from "@/app/(student)/communities/actions";
 import type { CommunityMessage } from "@/components/communities/community-chat";
 
 const CHAT_PAGE_SIZE = 100;
+
+/** The identity block: a link to the space's profile, unless there isn't one. */
+function HeaderShell({
+  href,
+  children,
+}: {
+  href: string | null;
+  children: React.ReactNode;
+}) {
+  const className = "flex min-w-0 flex-1 items-center gap-3";
+  return href ? (
+    <Link href={href} className={className}>
+      {children}
+    </Link>
+  ) : (
+    <div className={className}>{children}</div>
+  );
+}
 
 /**
  * A community's conversation — the same screen as a DM (/chat/[id]): the same
@@ -33,12 +52,19 @@ export default async function CommunityConversationPage({
 
   const { data: community } = await supabase
     .from("communities")
-    .select("id, name, avatar_url, cover_url, member_count, owner_id, is_society, status")
+    .select(
+      "id, name, avatar_url, cover_url, member_count, owner_id, is_society, status, is_discover_group, discover_mode, discover_title"
+    )
     .eq("id", id)
     .single();
   if (!community || community.status !== "approved") notFound();
 
   const rel = await getCommunityRelationship(id, me, community.owner_id);
+
+  // A Discover team room is private and un-joinable (mig 0129 narrows the
+  // self-join policy), so a non-member has no gate to pass — the room simply
+  // doesn't exist for them.
+  if (community.is_discover_group && !rel.isMember) notFound();
 
   // Only a joined member can read the room, so the fetch is skipped entirely
   // for a follower — they get the join gate below instead of an empty thread.
@@ -59,9 +85,14 @@ export default async function CommunityConversationPage({
   ]);
 
   const image = community.avatar_url ?? community.cover_url;
-  const profileHref = community.is_society
-    ? `/societies/${id}`
-    : `/communities/${id}`;
+  const isDiscoverGroup = Boolean(community.is_discover_group);
+  // A Discover room has no public profile page to open, so its header is inert
+  // rather than a link to a 404.
+  const profileHref = isDiscoverGroup
+    ? null
+    : community.is_society
+      ? `/societies/${id}`
+      : `/communities/${id}`;
 
   // The shell height shrinks by --kb when the iOS keyboard overlays the
   // viewport (see use-keyboard-inset.ts); 0 elsewhere. Identical to the DM
@@ -78,7 +109,7 @@ export default async function CommunityConversationPage({
         </Link>
         {/* Tapping the avatar/name opens the space's profile — the counterpart
             of tapping a person's avatar in a DM. */}
-        <Link href={profileHref} className="flex min-w-0 flex-1 items-center gap-3">
+        <HeaderShell href={profileHref}>
           <span className="glass relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full">
             {image ? (
               <AppImage src={image} alt="" sizes="36px" priority />
@@ -91,14 +122,24 @@ export default async function CommunityConversationPage({
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-1.5">
               <span className="truncate font-semibold">{community.name}</span>
-              <GlassChip>Community</GlassChip>
+              {isDiscoverGroup ? (
+                <span className="gradient-brand shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold text-white">
+                  {discoverGroupLabel(community.discover_mode)}
+                </span>
+              ) : (
+                <GlassChip>Community</GlassChip>
+              )}
             </span>
             <span className="block truncate text-[11px] text-fg-muted">
               {community.member_count.toLocaleString()} member
               {community.member_count === 1 ? "" : "s"}
+              {/* The post this team formed around, so the room keeps its origin. */}
+              {isDiscoverGroup && community.discover_title
+                ? ` · ${community.discover_title}`
+                : ""}
             </span>
           </span>
-        </Link>
+        </HeaderShell>
       </header>
 
       <CommunityThread

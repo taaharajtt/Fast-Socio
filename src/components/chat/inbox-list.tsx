@@ -9,6 +9,7 @@ import { resolveAvatarUrl } from "@/lib/avatar";
 import { GlassChip } from "@/components/ui";
 import { OnlineDot } from "@/components/ui/badges";
 import { communityIcon } from "@/lib/communities/icon";
+import { discoverGroupLabel } from "@/lib/discover/group-label";
 import { createClient } from "@/lib/supabase/client";
 import { refreshInbox } from "@/app/(student)/chat/actions";
 import { EPOCH, type InboxData } from "@/lib/chat/inbox-types";
@@ -185,10 +186,18 @@ export function InboxList({
                   <div className="min-w-0 flex-1">
                     <p className="flex items-center gap-1.5">
                       {/* The capsule is what separates a room from a person;
-                          everything else about the row is identical. */}
-                      <GlassChip className="shrink-0 px-2 py-0.5 text-[10px]">
-                        Community
-                      </GlassChip>
+                          everything else about the row is identical. A Discover
+                          team room takes the brand gradient instead of glass so
+                          it reads as its own thing at a glance. */}
+                      {t.space.is_discover_group ? (
+                        <span className="gradient-brand shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold text-white">
+                          {discoverGroupLabel(t.space.discover_mode)}
+                        </span>
+                      ) : (
+                        <GlassChip className="shrink-0 px-2 py-0.5 text-[10px]">
+                          Community
+                        </GlassChip>
+                      )}
                       <span className="truncate text-[15px] font-semibold text-fg">
                         {t.space.name}
                       </span>

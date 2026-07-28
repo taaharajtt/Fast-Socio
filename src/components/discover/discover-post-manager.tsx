@@ -6,12 +6,13 @@ import Link from "next/link";
 import { AlertTriangle, Check, Trash2, X as XIcon } from "lucide-react";
 import { AppImage } from "@/components/ui/app-image";
 import { DiscoverPostForm } from "@/components/discover/discover-post-form";
-import { MODE_META } from "@/lib/smart-match/modes";
+import { MODE_META, modeFormsTeam } from "@/lib/smart-match/modes";
 import { INTENT_KINDS, KIND_CAPSULE, type IntentKind } from "@/lib/discover/cards";
 import {
   acceptDiscoverResponse,
   declineDiscoverResponse,
   closeDiscoverPost,
+  createGroupFromDiscoverPost,
   deleteDiscoverPost,
 } from "@/app/(student)/discover/discover-actions";
 import type { MyDiscoverData, MyIntent } from "@/lib/smart-match/types";
@@ -187,6 +188,114 @@ function IncomingRequests({
   );
 }
 
+/**
+ * Closing a post that produced a team is the one moment everyone involved is
+ * known and still in the same headspace — so it's where the group chat gets
+ * offered. Declining is a first-class button, not a dismissal, because plenty
+ * of teams already have a room elsewhere.
+ */
+function CloseWithGroupDialog({
+  post,
+  onCancel,
+  onDone,
+}: {
+  post: MyIntent;
+  onCancel: () => void;
+  onDone: (conversationId?: string) => void;
+}) {
+  const [name, setName] = useState(post.title);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const memberCount = post.teamMembers.length + 1; // + you
+
+  function createGroup() {
+    setError(null);
+    start(async () => {
+      const res = await createGroupFromDiscoverPost(post.id, name.trim());
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      onDone(res.conversationId);
+    });
+  }
+
+  function closeOnly() {
+    setError(null);
+    start(async () => {
+      await closeDiscoverPost(post.id);
+      onDone();
+    });
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-4 pb-6 backdrop-blur-sm sm:items-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="close-group-title"
+      onClick={onCancel}
+    >
+      <div
+        className="glass w-full max-w-md rounded-[20px] p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 id="close-group-title" className="text-base font-bold tracking-tight">
+          Create a group chat for your team?
+        </h2>
+        <p className="mt-1 text-sm text-fg-muted">
+          {memberCount} {memberCount === 1 ? "person" : "people"} — you and
+          everyone you accepted for “{post.title}”.
+        </p>
+
+        <label
+          htmlFor="discover-group-name"
+          className="mt-4 block text-xs font-semibold uppercase tracking-wide text-fg-muted"
+        >
+          Group name
+        </label>
+        <input
+          id="discover-group-name"
+          value={name}
+          maxLength={60}
+          onChange={(e) => setName(e.target.value)}
+          placeholder={post.title}
+          className="glass mt-1.5 w-full rounded-[12px] px-3.5 py-2.5 text-sm outline-none placeholder:text-fg-muted focus:ring-1 focus:ring-accent/50"
+        />
+
+        {error && <p className="mt-2 text-xs font-medium text-error">{error}</p>}
+
+        <div className="mt-4 flex flex-col gap-2">
+          <button
+            type="button"
+            disabled={pending || name.trim().length < 2}
+            onClick={createGroup}
+            className="gradient-brand w-full rounded-full px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+          >
+            {pending ? "Creating…" : "Create Group & Close"}
+          </button>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={closeOnly}
+            className="glass w-full rounded-full px-4 py-2.5 text-sm font-semibold text-fg-muted"
+          >
+            Close Without Group
+          </button>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={onCancel}
+            className="w-full px-4 py-1.5 text-xs font-medium text-fg-muted hover:text-fg"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const STATUS_LABEL: Record<MyIntent["status"], string> = {
   open: "Open",
   closed: "Closed",
@@ -204,8 +313,10 @@ function MyPosts({
   onEdit: (p: MyIntent) => void;
   onDone: () => void;
 }) {
+  const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [groupPost, setGroupPost] = useState<MyIntent | null>(null);
   const [pending, start] = useTransition();
 
   function run(id: string, fn: () => Promise<unknown>) {
@@ -253,7 +364,13 @@ function MyPosts({
                     <button
                       type="button"
                       disabled={busyNow}
-                      onClick={() => run(p.id, () => closeDiscoverPost(p.id))}
+                      onClick={() =>
+                        // Only a post that formed an actual team gets the group
+                        // offer; everything else closes in one tap as before.
+                        canGroup(p)
+                          ? setGroupPost(p)
+                          : run(p.id, () => closeDiscoverPost(p.id))
+                      }
                       className="rounded-full px-2.5 py-1.5 text-xs font-medium text-fg-muted hover:text-fg"
                     >
                       Close
@@ -303,6 +420,23 @@ function MyPosts({
           </div>
         );
       })}
+
+      {groupPost && (
+        <CloseWithGroupDialog
+          post={groupPost}
+          onCancel={() => setGroupPost(null)}
+          onDone={(conversationId) => {
+            setGroupPost(null);
+            if (conversationId) router.push(`/chat/c/${conversationId}`);
+            else onDone();
+          }}
+        />
+      )}
     </section>
   );
+}
+
+/** A post can form a group once it's a team-shaped mode with people on it. */
+function canGroup(p: MyIntent): boolean {
+  return modeFormsTeam(p.mode) && p.teamMembers.length > 0;
 }

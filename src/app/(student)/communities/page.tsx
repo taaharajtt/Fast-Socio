@@ -111,6 +111,9 @@ async function CommunitySections() {
       .select("id, name, description, avatar_url, cover_url, member_count, owner_id")
       .eq("status", "approved")
       .eq("is_society", false)
+      // Discover team rooms (mig 0129) are communities under the hood, but they
+      // are private to the team that formed them — never browsable here.
+      .eq("is_discover_group", false)
       .order("member_count", { ascending: false })
       .limit(30),
     supabase.from("community_join_requests").select("community_id, status").eq("user_id", me),
