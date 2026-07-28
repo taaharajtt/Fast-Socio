@@ -192,6 +192,11 @@ export function IntentCardBody({
                   Course: {post.courseCode}
                 </p>
               )}
+              {post.description && (
+                <p className="line-clamp-4 text-[15px] leading-snug text-fg-muted">
+                  {post.description}
+                </p>
+              )}
             </>
           ) : isFyp ? (
             <>

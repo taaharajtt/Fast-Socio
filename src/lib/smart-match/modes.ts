@@ -130,6 +130,21 @@ export const MODE_META: Record<PostMode, ModeMeta> = {
         required: true,
       },
       {
+        key: "description",
+        label: "Project Description (150 words)",
+        type: "textarea",
+        placeholder: "Describe the project scope, requirements, and responsibilities…",
+        required: true,
+      },
+      {
+        key: "people_needed",
+        label: "People still needed",
+        type: "number",
+        placeholder: "e.g. 1",
+        help: "How many partners are you looking for?",
+        required: true,
+      },
+      {
         key: "team_members",
         label: "Current team members",
         type: "mentions",
