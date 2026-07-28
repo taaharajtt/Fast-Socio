@@ -5,7 +5,12 @@
 -- rankings list (leaderboard/actions.ts) — both are live call sites.
 set check_function_bodies = off;
 
-create or replace function public.get_weekly_leaderboard(p_limit integer default 50)
+-- Adding a column mid-return-table changes the function's OUT-parameter row
+-- type, which CREATE OR REPLACE FUNCTION refuses (42P13); drop first.
+drop function if exists public.get_weekly_leaderboard(integer);
+drop function if exists public.get_scoped_leaderboard(text, text, smallint, integer);
+
+create function public.get_weekly_leaderboard(p_limit integer default 50)
 returns table (
   user_id     uuid,
   full_name   text,
@@ -38,7 +43,7 @@ as $$
   limit greatest(1, least(p_limit, 100));
 $$;
 
-create or replace function public.get_scoped_leaderboard(
+create function public.get_scoped_leaderboard(
   p_period     text default 'weekly',
   p_department text default null,
   p_semester   smallint default null,
