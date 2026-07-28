@@ -46,7 +46,7 @@ export default async function CommunityConversationPage({
     ? await supabase
         .from("community_chat_view")
         .select(
-          "id, sender_id, sender_name, sender_avatar, body, poll_id, is_anonymous, created_at"
+          "id, sender_id, sender_name, sender_avatar, sender_gender, body, poll_id, is_anonymous, created_at"
         )
         .eq("community_id", id)
         .order("created_at", { ascending: true })

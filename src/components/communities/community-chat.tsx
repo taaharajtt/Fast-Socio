@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { BarChart3, MessageCircle, Plus, Send, VenetianMask, X } from "lucide-react";
 import { GlassButton } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import { cn } from "@/lib/utils";
 import { clockTime, absoluteTime } from "@/lib/time";
 import { useKeyboardInset } from "@/lib/use-keyboard-inset";
@@ -27,6 +28,7 @@ export type CommunityMessage = {
   sender_id: string | null;
   sender_name: string | null;
   sender_avatar: string | null;
+  sender_gender: string | null;
   body: string;
   poll_id: string | null;
   is_anonymous: boolean;
@@ -34,7 +36,7 @@ export type CommunityMessage = {
 };
 
 const VIEW_COLUMNS =
-  "id, sender_id, sender_name, sender_avatar, body, poll_id, is_anonymous, created_at";
+  "id, sender_id, sender_name, sender_avatar, sender_gender, body, poll_id, is_anonymous, created_at";
 
 export function CommunityChat({
   communityId,
@@ -234,8 +236,12 @@ export function CommunityChat({
                 <div className="glass relative mt-auto flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full">
                   {anonymous ? (
                     <VenetianMask className="h-3.5 w-3.5 text-fg-muted" aria-hidden />
-                  ) : m.sender_avatar ? (
-                    <AppImage src={m.sender_avatar} alt="" sizes="28px" />
+                  ) : resolveAvatarUrl(m.sender_avatar, m.sender_gender) ? (
+                    <AppImage
+                      src={resolveAvatarUrl(m.sender_avatar, m.sender_gender)!}
+                      alt=""
+                      sizes="28px"
+                    />
                   ) : null}
                 </div>
               )}
