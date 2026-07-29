@@ -180,11 +180,6 @@ export default async function PublicProfilePage({
         >
           <ChevronLeft className="h-5 w-5" aria-hidden />
         </Link>
-        {profile.full_name && (
-          <span className="absolute bottom-3 left-[108px] text-[13px] font-semibold text-white/70">
-            {profile.full_name}
-          </span>
-        )}
         <div className="absolute -bottom-10 left-4">
           <div className="relative h-20 w-20 rounded-full">
             <div className="relative h-full w-full overflow-hidden rounded-full border-[3px] border-bg bg-card">

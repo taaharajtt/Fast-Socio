@@ -65,8 +65,8 @@ export default function LoginPage() {
         <Image
           src="/brand/logo.png"
           alt="Fast Socio"
-          width={180}
-          height={90}
+          width={270}
+          height={135}
           priority
         />
         <p className="mt-1 text-[13px] text-fg-muted">Your campus, alive.</p>

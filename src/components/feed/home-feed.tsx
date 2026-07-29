@@ -22,12 +22,29 @@ type FeedData = { posts: FeedPost[]; currentUserId: string | null };
  * wait, behind their own boundary. Awaiting the feed on the server instead
  * would have held every one of them hostage to the slowest query on the page.
  */
+/** Unwraps the placeholder promise in isolation, so suspending on it can only
+ *  ever hold back the composer itself (fix-038). */
+function PersonalisedComposer({
+  placeholder,
+  onPosted,
+}: {
+  placeholder?: Promise<string>;
+  onPosted: () => void;
+}) {
+  const resolved = placeholder ? use(placeholder) : undefined;
+  return <PostComposer placeholder={resolved} onPosted={onPosted} />;
+}
+
 export function HomeFeed({
   feed,
   belowComposer,
+  composerPlaceholder,
 }: {
   feed: Promise<FeedData>;
   belowComposer?: React.ReactNode;
+  /** fix-038: "Yo, {name}! What's on your mind?". A PROMISE, for the same reason
+   *  `feed` is one — resolving it on the server would hold back the whole shell. */
+  composerPlaceholder?: Promise<string>;
 }) {
   const [refreshToken, setRefreshToken] = useState(0);
 
@@ -36,7 +53,19 @@ export function HomeFeed({
       <div className="px-4">
         {/* data-tour anchors the first-run tour's spotlight on the composer. */}
         <div data-tour="composer">
-          <PostComposer onPosted={() => setRefreshToken((t) => t + 1)} />
+          {/* Only the composer waits on the personalised placeholder — never the
+              shell. The fallback is the same composer with its built-in default,
+              so the card's geometry is identical and nothing shifts. */}
+          <Suspense
+            fallback={
+              <PostComposer onPosted={() => setRefreshToken((t) => t + 1)} />
+            }
+          >
+            <PersonalisedComposer
+              placeholder={composerPlaceholder}
+              onPosted={() => setRefreshToken((t) => t + 1)}
+            />
+          </Suspense>
         </div>
         {belowComposer}
       </div>

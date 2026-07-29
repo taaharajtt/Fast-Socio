@@ -63,7 +63,11 @@ function PostCardImpl({
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleted, setDeleted] = useState(false);
-  const [editingOpen, setEditingOpen] = useState(false);
+  // fix-009 (round 2): editing happens INLINE on the card. There is deliberately no
+  // second GlassSheet — two sibling sheets both portal to document.body at the same
+  // z-50, so DOM order (not intent) decided stacking and the options sheet painted
+  // over the edit sheet while it animated out, making Edit unreachable.
+  const [editing, setEditing] = useState(false);
   const [editDraft, setEditDraft] = useState(post.body ?? "");
   const [body, setBody] = useState(post.body);
   const [editedAt, setEditedAt] = useState(post.edited_at ?? null);
@@ -156,13 +160,13 @@ function PostCardImpl({
       setEditError(res.error);
       return;
     }
-    setEditingOpen(false);
+    setEditing(false);
   }
 
   function onCancelEdit() {
     setEditDraft(body ?? "");
     setEditError(null);
-    setEditingOpen(false);
+    setEditing(false);
   }
 
   // Once deleted, collapse the card in place for immediate feedback.
@@ -234,10 +238,45 @@ function PostCardImpl({
         </button>
       </div>
 
-      {body && (
-        <p className="mt-2.5 whitespace-pre-wrap text-[15px] leading-[22px] text-fg">
-          {renderLinkifiedText(body)}
-        </p>
+      {editing ? (
+        /* Inline edit-in-place: the post body itself becomes editable in the feed. */
+        <div className="mt-2.5 space-y-2">
+          <textarea
+            value={editDraft}
+            onChange={(e) => setEditDraft(e.target.value)}
+            rows={4}
+            maxLength={2000}
+            autoFocus
+            aria-label="Edit post"
+            className="glass w-full resize-none rounded-[var(--radius-sm)] px-3 py-2.5 text-[15px] leading-[22px] text-fg outline-none"
+            placeholder="Write something…"
+          />
+          {editError && <p className="text-sm text-error">{editError}</p>}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={saving}
+              onClick={onSaveEdit}
+              className="rounded-[var(--radius-sm)] bg-aura px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={onCancelEdit}
+              className="glass rounded-[var(--radius-sm)] px-4 py-2 text-sm text-fg disabled:opacity-60"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        body && (
+          <p className="mt-2.5 whitespace-pre-wrap text-[15px] leading-[22px] text-fg">
+            {renderLinkifiedText(body)}
+          </p>
+        )
       )}
       {post.image_url && (
         <div
@@ -329,42 +368,6 @@ function PostCardImpl({
       />
 
       <GlassSheet
-        open={editingOpen}
-        onClose={onCancelEdit}
-        label="Edit post"
-      >
-        <div className="space-y-3">
-          <h3 className="text-lg font-bold">Edit post</h3>
-          <textarea
-            value={editDraft}
-            onChange={(e) => setEditDraft(e.target.value)}
-            rows={5}
-            maxLength={2000}
-            autoFocus
-            className="glass w-full resize-none rounded-[var(--radius-sm)] px-4 py-3 text-[15px] text-fg outline-none"
-            placeholder="Write something…"
-          />
-          {editError && <p className="text-sm text-error">{editError}</p>}
-          <button
-            type="button"
-            disabled={saving}
-            onClick={onSaveEdit}
-            className="w-full rounded-[var(--radius-sm)] bg-aura px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
-          >
-            {saving ? "Saving…" : "Save"}
-          </button>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={onCancelEdit}
-            className="glass w-full rounded-[var(--radius-sm)] px-4 py-3 text-sm text-fg"
-          >
-            Cancel
-          </button>
-        </div>
-      </GlassSheet>
-
-      <GlassSheet
         open={optionsOpen}
         onClose={() => setOptionsOpen(false)}
         label="Post options"
@@ -406,8 +409,9 @@ function PostCardImpl({
                     onClick={() => {
                       setEditDraft(body ?? "");
                       setEditError(null);
+                      // Close the only sheet, then edit in place on the card itself.
                       setOptionsOpen(false);
-                      setEditingOpen(true);
+                      setEditing(true);
                     }}
                     className="glass flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm font-medium text-fg"
                   >

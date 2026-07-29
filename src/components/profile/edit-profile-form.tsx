@@ -381,7 +381,9 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
             (pick at least {MIN_INTERESTS} · {interests.length} selected)
           </span>
         </label>
-        <div className="flex max-h-72 flex-wrap gap-2 overflow-y-auto pr-1">
+        {/* fix-033: no inner scroll container and no fixed height — the edit card itself
+            grows and the PAGE scrolls. Chips wrap over as many rows as needed. */}
+        <div className="flex flex-wrap gap-2">
           {INTERESTS.map((tag) => (
             <Pill
               key={tag}

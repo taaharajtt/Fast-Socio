@@ -4,6 +4,7 @@ import { getAuthUserId } from "@/lib/auth/user";
 import { timed } from "@/lib/perf";
 import { resolveAvatarUrl } from "@/lib/avatar";
 import { SkeletonRows } from "@/components/ui/skeleton";
+import { SectionLogo } from "@/components/ui/section-logo";
 import {
   RanksTabs,
   type StudentRow,
@@ -31,10 +32,15 @@ type RpcDeptRow = {
 export default function LeaderboardPage() {
   return (
     <main className="mx-auto w-full max-w-md px-4 py-6">
-      <h1 className="text-[28px] font-bold tracking-tight">Leaderboard</h1>
-      <p className="mb-5 mt-1 text-sm text-fg-muted">
-        Who&rsquo;s running campus this week?
-      </p>
+      <div className="mb-5 flex items-center gap-2.5">
+        <SectionLogo />
+        <div>
+          <h1 className="text-[28px] font-bold tracking-tight">Leaderboard</h1>
+          <p className="mt-1 text-sm text-fg-muted">
+            Who&rsquo;s running campus this week?
+          </p>
+        </div>
+      </div>
 
       <Suspense fallback={<SkeletonRows count={6} />}>
         <Rankings />
