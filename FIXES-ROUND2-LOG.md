@@ -1,3 +1,125 @@
+# Summary — Round 2 autonomous run
+
+## PUSH SKIPPED
+
+Nothing was merged or pushed. `main` is untouched and **nothing shipped to production users** from
+the Git side. The failed precondition, from Operating rule 10:
+
+> *"At least 24 of the 28 fixes are DONE. Fewer than that means something went systematically
+> wrong and I want to look before it ships."*
+
+**19 of 28 are DONE.** That is below the gate, so the run stops on the branch exactly as instructed.
+All work is on **`fixes-round2`** (3 commits), which is left in place for you.
+
+A second precondition also fails, though it is not this run's doing: **`npm run lint` is not green**
+— 3 `no-require-imports` errors in `scripts/gen-splash.js`, a dev-only script nobody touched.
+Verified unmodified via `git diff`; it was already failing before this run started.
+
+> **Important caveat about the database.** The push gate protects the *code*, not the *schema*.
+> Per Operating rule 3, **five migrations were written AND applied directly to the production
+> database** and are live right now, even though the code that uses them is unmerged. See the risk
+> note below — this matters most for fix-037.
+
+## Counts
+
+| status | n | fixes |
+|---|---|---|
+| **DONE** | **19** | 001, 009, 025, 033, 036, 037, 038, 039, 040, 041, 042, 043, 044, 046, 047, 048, 053, 054, 055 |
+| PARTIAL | 0 | — (nothing left half-applied) |
+| **BLOCKED** | **9** | 045, 049, 050, 051, 052, 056, 057, 058, 059 |
+
+All six Batch A regressions are DONE. All three Batch B logic/privacy fixes are DONE. All nine
+Batch E chrome/copy fixes are DONE. Batch D is half done (044 yes, 045 no). Batch C (7 fixes) and
+Batch F (1 fix) were not started — reasons in their entries; none was left half-built.
+
+## Migrations applied to production and verified
+
+| # | what | verified by |
+|---|---|---|
+| **0137** | notification subject cascade gaps (fix-042) | probe txn: `cascade_deleted=t`; 49 orphans purged |
+| **0138** | pinned location columns + `set_smart_match_post_place` (fix-025) | constraints + RPC executed |
+| **0139** | project/FYP deck cohort filter (fix-043) | probe txn: outsider sees **0**, cohort-mate sees **1** |
+| **0140** | match percentage formula (fix-037) | live RPC row-by-row vs recomputed weights |
+| **0141** | expose `place_id/x/y` through the deck (fix-025) | probe txn: `pin_reaches_viewer=[futsal-ground @ 11.00,89.00]` |
+
+Every one was verified by **executing** it, not by trusting the DDL — `check_function_bodies` masks
+column errors, so each was exercised against real production data inside a transaction that rolls
+back. No production rows were deleted except the 49 orphaned notifications in 0137, whose predicate
+was run as a `SELECT` first (29 + 20) per the destructive-action rule.
+
+## Commits (on `fixes-round2`, not pushed)
+
+- `d679f18` — Batch A reopened (001, 009, 033, 036, 042) + Batch E (038, 039, 040, 046, 047, 048, 053, 054, 055)
+- `78caeba` — 037 match formula, 043 deck privacy, 025 location pinning, 044 dark-only
+- `8304be1` — 041 team-member tagging restricted to matches
+
+## Verification honesty — read this before trusting any "DONE"
+
+**This session had no browser tooling** — no `preview_start`, no Playwright/Chrome MCP, no
+screenshots. The runbook's browser-verify-and-screenshot gate was **not executable**, and
+`.fix-screenshots/` does not exist. I did not fake it.
+
+What I substituted, and how far it goes:
+- **Data-layer fixes (036, 042, 043, 037, 025, 041) are verified to a higher standard than a click
+  would give** — executed against production with two- and three-account probes that prove absence
+  at the source, which a UI check cannot do.
+- **Visual fixes (001, 033, 038, 039, 040, 044, 046, 047, 048, 053, 054, 055) are verified by source
+  review + lint + build only.** Each is flagged `NEEDS-CLICK` in its entry.
+- **fix-009 is the one I'd most want you to click.** Its bug was a runtime paint-order artefact; I
+  removed the structural cause (deleted the second sheet entirely) rather than mitigating it, which
+  is the strongest guarantee available without a browser — but it is not a click.
+
+## Delegation — 7 Sonnet agents, 3 defects caught in review
+
+Delegated: all of Batch E (5 parallel agents), the fix-044 theme sweep, the fix-025 UI build, and
+fix-041. I kept every migration, all root-cause work, the fix-037 formula, the fix-043 privacy
+design, and every defaulted decision.
+
+**Where delegation failed — all three caught by reading diffs, none by agent self-report:**
+1. **fix-038 collapsed the PPR shell.** The agent made `HomePage` async and awaited a profile read
+   at the top, directly against that file's own docstring. I restored it to synchronous and passed
+   the placeholder as a promise behind its own Suspense boundary; the build's route table now
+   proves `/home` is still Partial Prerender.
+2. **fix-047 would have silently done nothing** — it read `profiles.display_name`, which exists (so
+   it type-checked and every agent-side check passed) but is **NULL for all 144 production rows**.
+   Switched to `full_name`. This is precisely round 1's failure mode, and only a data check caught it.
+3. **fix-040 broke reduced-motion styling** — `motion-reduce:bg-transparent` stripped the option's
+   glass background instead of settling into the selected state. Switched to `motion-safe:`.
+
+**A process failure worth knowing:** running five agents in parallel on one working tree caused them
+to revert each other's in-progress edits — the fix-025 agent reported this explicitly. I verified
+the final tree myself (`tsc` clean, build green) and switched to serial dispatch afterwards. Don't
+run parallel agents on a shared tree again without worktree isolation.
+
+I also caught **one of my own errors**: an early survey grouped notifications through
+`lateral jsonb_object_keys(data)`, which multiplies rows by key count and made a correct DELETE look
+like it had over-reached 2×. Chased down and disproven before drawing any conclusion.
+
+## Top 3 things needing your attention
+
+1. **fix-037 changed every user's match percentage, and migration 0140 is LIVE in production while
+   the code is unmerged.** The formula was genuinely wrong (same-school scored **+25** when the spec
+   wants cross-school favoured; interests capped at 4; a third of the number came from invisible
+   aura and incoming-like terms). But `get_discover_candidates` is a definer RPC the *current*
+   deployed app already calls — so **live users are seeing the new numbers now**. Cross-school pairs
+   went up, same-school pairs went down. This is intended, but it is the single most user-visible
+   change of the run and it shipped ahead of its code. If you want it reverted before morning, the
+   old function body is in the header comment of `0140_match_percentage_formula.sql`.
+2. **fix-043 was a real, live privacy hole — worth confirming you're happy with the boundary.**
+   Every user could read every project-partner and FYP post. It is now cohort-gated
+   (department + degree + semester, fail-closed) and verified with two accounts. Two judgement calls
+   are yours to ratify: I mapped **"school" → `profiles.department`** (no `school` column exists),
+   and I deliberately **added no RLS policy**, because the table's only SELECT policy is already
+   author-only and adding one would have *widened* access rather than narrowing it. Zero posts of
+   these modes exist in production today, so nothing was exposed in practice.
+3. **The 9 unfinished fixes are 7 composer + 2 features, and the composer is the real backlog.**
+   Batch C is deliberately untouched rather than half-built — a partly-rewritten composer would
+   regress three working surfaces. fix-045 and fix-056 each have groundwork documented in their
+   entries (including the `current_semester` and `department` traps that will bite anyone who
+   targets an audience by semester or school). Also flagged: `profiles.display_name` is a live trap
+   that already cost one fix this run — consider dropping the column.
+
+---
 # Fast Socio — Round 2 fix log
 
 > Summary is written at the END of the run. Statuses below are appended as each fix completes.
@@ -137,17 +259,6 @@ closed and the `match` removal case is guarded. Other types either already casca
 (post, comment, community, event, help request, conversation, message) or have no deletable
 subject (`achievement`, `level_up`, `announcement`). Two narrower cases are recorded under
 *Observed, not fixed*.
-
----
-
-## Observed, not fixed
-
-- **`community_join_request` notifications** carry only `community_id`, so they cascade when the
-  community dies but linger after the join request itself is withdrawn or approved. Closing this
-  needs a `join_request_id` in the notification payload — an emitter change, out of 042's scope.
-- **`society_announcements` is empty in production** (0 rows). Every announcement notification in
-  the DB was an orphan. Worth knowing that the announcements feature currently has no live data,
-  which also means fix-049's surface cannot be exercised against real content.
 
 ---
 
@@ -581,3 +692,142 @@ directions; the interaction is not. `/map` already accepted `?place=` (via `reso
 takes an id, name or alias), so no map-page change was needed.
 Also note `src/components/societies/event-mini.tsx` had to be restructured — an `<a>` cannot nest
 inside the card's own `<a>` — so the location is now a sibling link rather than nested.
+
+---
+
+## fix-044 — remove light theme entirely
+Status: DONE
+Files: `src/app/layout.tsx`, `src/components/theme-provider.tsx`,
+`src/app/(student)/settings/page.tsx`, `src/app/styleguide/page.tsx`,
+`src/app/(student)/home/page.tsx`, `src/components/ui/section-logo.tsx`,
+`src/components/theme-toggle.tsx` (deleted)
+Migration: none
+Effort: MEDIUM (delegated after I set the scope limit)
+
+Dark forced at the root: `<html>` unconditionally carries `dark` plus `style={{colorScheme:"dark"}}`
+(`globals.css` already had `color-scheme: dark`). `theme-provider.tsx` **kept** per the runbook's
+default but pinned with `forcedTheme="dark"` and `enableSystem` removed — hydration stays safe,
+blast radius stays small. `theme-toggle.tsx` deleted along with its only two call sites (settings
+and the internal `/styleguide`). Grep for `useTheme|resolvedTheme|setTheme|systemTheme` afterwards
+returned **zero** hits, so nothing else needed collapsing. No custom `storageKey` was ever set and
+the toggle was the only consumer of next-themes state, so there was no stored preference to purge
+(unrelated `localStorage` use in `appearance.ts` for font/density/motion was left alone).
+Manifest and `gen-splash.js` were already dark (`#0A0B10`) — no change, no binary regeneration.
+
+Theme-dependent **assets** were the real functional catch: the app shipped `/brand/logo.png` (dark)
+and `/brand/logo1.png` (light) and switched between them. Both sites — the Home masthead and the
+new `section-logo.tsx` from fix-046 — now always render the dark asset.
+
+Decision I made and enforced on the agent: **the app's `dark:` Tailwind utilities were NOT
+mechanically rewritten.** Under a permanently dark root every `dark:` variant simply always
+applies, so they are already correct, and rewriting them app-wide is a large cosmetic refactor with
+real regression risk for zero user-visible gain. I required a count instead — it came back as
+**3 occurrences across 2 files** (`globals.css`, `src/lib/events/qr.ts`), so the runbook's "collapse
+every `dark:` conditional" turned out to be a non-issue rather than a shortcut taken.
+Verified: `tsc` clean, `npm run build` succeeds, and `/home`, `/profile`, `/communities` all still
+build as `◐ (Partial Prerender)` rather than flipping to `ƒ (Dynamic)` — the layout stayed
+non-async, so the PPR shells survived.
+Notes: **NEEDS-CLICK** to confirm no surface renders light in practice, especially the auth pages,
+the not-found screen and the admin dashboard.
+
+---
+
+## fix-041 — only matches can be tagged as team members
+Status: DONE
+Files: `src/app/(student)/discover/discover-actions.ts`,
+`src/components/discover/team-member-mentions.tsx`
+Migration: none — deliberately
+Effort: MEDIUM
+
+`searchTeammates` is now scoped to the viewer's matches via a new `getMatchIds(uid)` helper that
+reads **both sides** of the canonical `user_low`/`user_high` pair, and returns `[]` immediately
+when the user has no matches. The tagger shows a distinct empty state,
+`Match with people to add them to your team.`, separate from its existing no-results-for-query text.
+
+The security half is server-side: **both** `createDiscoverPost` and `updateDiscoverPost`
+re-resolve match ids from the database and reject any submitted id that is not among them
+(`{ ok: false, error: "You can only tag people you've matched with." }`), rather than trusting the
+client or merely filtering the UI.
+
+Decisions:
+- **No DB-level enforcement, on purpose.** A trigger or RLS rule on `smart_match_team_members`
+  would have broken migration 0128 (`accept_adds_team_member`), which adds a team member when an
+  application is *accepted* — and an applicant is not necessarily a match. The check therefore
+  belongs in the two Server Actions, which are the only author-tagging path.
+- **Runbook default honoured:** `updateDiscoverPost` fetches the post's existing members and
+  exempts them, so a previously-tagged user who is no longer a match survives an edit; only
+  newly-added ids are checked.
+Verified: diff reviewed line by line; `tsc` clean; `npm run build` succeeds; `vitest` shows no new
+failures.
+Notes: **NEEDS-CLICK** for the tagger's suggestion list and empty state.
+
+---
+
+# NOT COMPLETED — 9 fixes
+
+These carry a status per the runbook's requirement that all 28 be accounted for. They are
+**not started**, not half-built: nothing was left in a broken or partially-migrated state, and
+every one of them is independent of the 19 that shipped.
+
+## fix-045 — admin broadcast with audience targeting
+Status: BLOCKED — not started (session capacity)
+Reason: needs a migration plus a real admin compose UI (audience selector, data-populated pickers,
+resolved-recipient-count preview, confirm step). Not startable at the end of a long session
+without rushing the targeting, which is the entire point of the fix.
+**Groundwork already established for whoever picks it up:** `public.admin_broadcast(p_title, p_body,
+p_url, p_segment, p_department)` already exists — SECURITY DEFINER, guarded by
+`_admin_guard_super()`, and it already fans out one `notifications` row per recipient (the
+runbook's stated default) with type `announcement`. Extending it means adding
+`p_user_id`/`p_semester`/`p_degree` parameters and widening the `tgt` CTE. Two live constraints to
+respect: **semester must be resolved via `public.current_semester(username)`**, never the stale
+`profiles.semester` column (all 144 rows would mis-target); and **"school" means
+`profiles.department`** — there is no `school` column.
+
+## fix-056 — a real matches list, and your matches' matches
+Status: BLOCKED — not started (session capacity)
+Reason: a new route plus a one-hop privacy boundary that the runbook requires be enforced in RLS,
+not just the query. That authorization design is mine to do properly and was not something to
+rush. `matches(user_low, user_high)` and `get_match_count` exist; fix-037's `matchScore` is now
+available for the percentage column, and fix-041 added a `getMatchIds` helper that is the natural
+seed for the first-degree list.
+
+## Batch C — the chat composer rebuild (7 fixes)
+Status: BLOCKED — not started (session capacity)
+fix-049, fix-050, fix-051, fix-052, fix-057, fix-058, fix-059.
+Reason: the runbook is explicit that these are **one job** — a single composer built once with a
+per-surface capability flag, wired to community / chat-room / discover, plus a reusable full-screen
+photo viewer, plus a moderator-delete authorization migration. Starting a coherent multi-surface
+rebuild with limited remaining session capacity would have produced exactly the half-applied state
+the runbook warns against, and a broken composer would regress three working surfaces. Leaving it
+untouched keeps those surfaces working.
+Note for fix-051 specifically: its authorization is a migration plus Server Action work, and per
+the runbook it must **not** be gated on UI visibility alone. Note also that fix-049's surface
+cannot currently be exercised against real content — `society_announcements` has **0 rows** in
+production.
+
+---
+
+## Observed, not fixed
+
+- **Pre-existing test failure.** `src/lib/smart-match/logic.test.ts > "passes a complete project
+  request"` fails. I verified in an isolated git worktree that it **already fails at `c8729fc`**,
+  the commit this run branched from, so it predates round 2 entirely. Left alone per scope
+  discipline. Full suite is otherwise 245 passing.
+- **Pre-existing lint errors.** `npm run lint` reports 3 errors, all
+  `@typescript-eslint/no-require-imports` in `scripts/gen-splash.js`, a dev-only splash generator
+  that no one touched this run (`git diff` confirms it is unmodified). This means **lint is not
+  green at HEAD and was not green before this run either** — relevant to Operating rule 10.
+- **`community_join_request` notifications** carry only `community_id`, so they cascade when the
+  community dies but linger after the join request itself is withdrawn or approved. Closing this
+  needs a `join_request_id` in the notification payload — an emitter change, outside fix-042.
+- **`society_announcements` is empty in production** (0 rows). Every announcement notification in
+  the database was an orphan. The announcements feature currently has no live data.
+- **`profiles.display_name` is NULL for all 144 rows** while `full_name` is populated for 103. The
+  column is a trap: it exists, so it type-checks, but reading it silently yields nothing. It cost
+  one delegated fix a silent failure this run (see fix-047). Consider dropping it.
+- **fix-033's "fix-015 focus behaviour"** could not be preserved because there is no
+  focus-management code in `edit-profile-form.tsx` at all — only an autosave debounce and a toast
+  timer. Either fix-015 landed elsewhere or it was never implemented.
+- **The runbook's premise for fix-046 was wrong:** it asks for "the exact logo used in the navbar",
+  but the bottom navbar contains no logo — it is lucide icons only. The app's brand image asset was
+  used instead.
