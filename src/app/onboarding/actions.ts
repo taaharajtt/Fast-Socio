@@ -11,7 +11,6 @@ import {
   HOSTEL_STATUS,
   INTERESTS,
   LANGUAGES,
-  MAX_INTERESTS,
   MAX_LANGUAGES,
   MAX_PERSONALITY,
   MIN_INTERESTS,
@@ -53,11 +52,14 @@ const GENDER_VALUES = GENDERS.map((g) => g.value) as string[];
 const HOSTEL_VALUES = HOSTEL_STATUS.map((h) => h.value) as string[];
 const REL_VALUES = RELATIONSHIP_PREFS.map((r) => r.value) as string[];
 
-/** Keep only members of `allowed`, de-duplicated and capped at `max`. */
+/**
+ * Keep only members of `allowed`, de-duplicated and capped at `max` (omit
+ * `max` — or pass Infinity — for fields with no upper bound, e.g. interests).
+ */
 function sanitizeTags(
   values: string[] | undefined,
   allowed: readonly string[],
-  max: number
+  max: number = Infinity
 ): string[] {
   if (!values) return [];
   const set = new Set(allowed);
@@ -82,7 +84,7 @@ function toProfilePatch(d: OnboardingDraft): Record<string, unknown> {
   if (d.gender !== undefined)
     patch.gender = d.gender && GENDER_VALUES.includes(d.gender) ? d.gender : null;
   if (d.interests !== undefined)
-    patch.interests = sanitizeTags(d.interests, INTERESTS, MAX_INTERESTS);
+    patch.interests = sanitizeTags(d.interests, INTERESTS);
   if (d.bio !== undefined) patch.bio = d.bio.slice(0, BIO_MAX).trim() || null;
   if (d.personality !== undefined)
     patch.personality = sanitizeTags(
@@ -194,11 +196,13 @@ export async function saveProfile(
   const fullName = (draft.fullName ?? "").trim();
   if (fullName.length < 2) return { error: "Please enter your name." };
   if (!draft.department) return { error: "Please choose your department." };
+  if (!draft.gender || !GENDER_VALUES.includes(draft.gender))
+    return { error: "Please select your gender." };
   // Semester is not collected — it's derived from the roll number on read
   // (see lib/profile/semester.ts).
-  const interests = sanitizeTags(draft.interests, INTERESTS, MAX_INTERESTS);
+  const interests = sanitizeTags(draft.interests, INTERESTS);
   if (interests.length < MIN_INTERESTS)
-    return { error: `Pick ${MIN_INTERESTS}–${MAX_INTERESTS} interests.` };
+    return { error: `Pick at least ${MIN_INTERESTS} interests.` };
   if ((draft.bio ?? "").length > BIO_MAX)
     return { error: `Bio must be ${BIO_MAX} characters or fewer.` };
   if (draft.avatarUrl && !isAppStorageUrl(draft.avatarUrl))

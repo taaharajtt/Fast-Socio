@@ -8,6 +8,8 @@ import {
   Moon,
   Trees,
   MapPin,
+  BedDouble,
+  Store,
   type LucideIcon,
 } from "lucide-react";
 
@@ -31,7 +33,9 @@ export type PlaceType =
   | "parking"
   | "library"
   | "prayer"
-  | "hangout";
+  | "hangout"
+  | "hostel"
+  | "service";
 
 export type CampusPlace = {
   id: string;
@@ -59,6 +63,8 @@ export const PLACE_TYPE_META: Record<
   library: { label: "Library", icon: BookOpen, color: "#c850c0" },
   prayer: { label: "Prayer", icon: Moon, color: "#4fd1c5" },
   hangout: { label: "Hangout", icon: Trees, color: "#7bc86c" },
+  hostel: { label: "Hostels", icon: BedDouble, color: "#f472b6" },
+  service: { label: "Services", icon: Store, color: "#ffb020" },
 };
 
 /** Fallback icon when a type is somehow unknown. */
@@ -274,6 +280,286 @@ export const CAMPUS_MAP_PLACES: CampusPlace[] = [
     y: 42,
     description: "Popular campus sitting/hangout spot.",
     aliases: ["wisdom tree", "tree", "hangout", "sitting spot"],
+  },
+
+  // ── Cafeterias ────────────────────────────────────────────────────────────
+  {
+    id: "d-block-cafeteria",
+    name: "D Block Cafeteria",
+    shortLabel: "D Cafeteria",
+    type: "cafe",
+    x: 34,
+    y: 15, // TODO: verify position
+    description: "Cafeteria near D Block.",
+    aliases: ["d block cafeteria", "cafeteria", "d cafe", "food"],
+  },
+  {
+    id: "b-block-cafeteria",
+    name: "B Block Cafeteria",
+    shortLabel: "B Cafeteria",
+    type: "cafe",
+    x: 84,
+    y: 16, // TODO: verify position
+    description: "Cafeteria near B Block.",
+    aliases: ["b block cafeteria", "cafeteria", "b cafe", "food"],
+  },
+  {
+    id: "a-block-cafeteria",
+    name: "A Block Cafeteria",
+    shortLabel: "A Cafeteria",
+    type: "cafe",
+    x: 86,
+    y: 62, // TODO: verify position
+    description: "Cafeteria near A Block.",
+    aliases: ["a block cafeteria", "cafeteria", "a cafe", "food"],
+  },
+
+  // ── Labs ──────────────────────────────────────────────────────────────────
+  {
+    id: "d-block-computer-labs",
+    name: "D Block Computer Labs",
+    shortLabel: "CS Labs",
+    type: "building",
+    x: 38,
+    y: 13, // TODO: verify position
+    description: "Computer labs in D Block.",
+    aliases: ["computer lab", "cs lab", "d block lab", "labs"],
+  },
+  {
+    id: "c-block-networking-lab",
+    name: "C Block Networking Lab",
+    shortLabel: "Networking Lab",
+    type: "building",
+    x: 61,
+    y: 13, // TODO: verify position
+    description: "Networking lab in C Block.",
+    aliases: ["networking lab", "c block lab", "labs"],
+  },
+  {
+    id: "b-block-electronics-lab",
+    name: "B Block Electronics Lab",
+    shortLabel: "Electronics Lab",
+    type: "building",
+    x: 84,
+    y: 14, // TODO: verify position
+    description: "Electronics/hardware lab in B Block.",
+    aliases: ["electronics lab", "hardware lab", "b block lab", "labs"],
+  },
+  {
+    id: "a-block-software-labs",
+    name: "A Block Software Labs",
+    shortLabel: "Software Labs",
+    type: "building",
+    x: 90,
+    y: 60, // TODO: verify position
+    description: "Software engineering labs in A Block.",
+    aliases: ["software lab", "a block lab", "labs"],
+  },
+
+  // ── Department offices ───────────────────────────────────────────────────
+  {
+    id: "cs-department-office",
+    name: "CS Department Office",
+    shortLabel: "CS Dept",
+    type: "building",
+    x: 57,
+    y: 8, // TODO: verify position
+    description: "Computer Science department office, near C Block.",
+    aliases: ["cs department", "computer science department", "department office"],
+  },
+  {
+    id: "ee-department-office",
+    name: "EE Department Office",
+    shortLabel: "EE Dept",
+    type: "building",
+    x: 83,
+    y: 8, // TODO: verify position
+    description: "Electrical Engineering department office, near B Block.",
+    aliases: ["ee department", "electrical engineering department", "department office"],
+  },
+  {
+    id: "ms-department-office",
+    name: "Management Sciences Department Office",
+    shortLabel: "MS Dept",
+    type: "building",
+    x: 34,
+    y: 8, // TODO: verify position
+    description: "Management Sciences department office, near D Block.",
+    aliases: ["management sciences department", "ms department", "department office"],
+  },
+  {
+    id: "ss-department-office",
+    name: "Social Sciences Department Office",
+    shortLabel: "SS Dept",
+    type: "building",
+    x: 85,
+    y: 54, // TODO: verify position
+    description: "Social Sciences department office, near A Block.",
+    aliases: ["social sciences department", "ss department", "department office"],
+  },
+
+  // ── Auditoriums ───────────────────────────────────────────────────────────
+  {
+    id: "main-auditorium",
+    name: "Main Auditorium",
+    shortLabel: "Auditorium",
+    type: "building",
+    x: 70,
+    y: 45, // TODO: verify position
+    description: "Main campus auditorium, used for large events and ceremonies.",
+    aliases: ["auditorium", "main auditorium", "hall"],
+  },
+  {
+    id: "c-block-seminar-hall",
+    name: "C Block Seminar Hall",
+    shortLabel: "Seminar Hall",
+    type: "building",
+    x: 65,
+    y: 18, // TODO: verify position
+    description: "Seminar hall near C Block LRC.",
+    aliases: ["seminar hall", "c block auditorium", "auditorium"],
+  },
+
+  // ── Sports facilities ─────────────────────────────────────────────────────
+  {
+    id: "gymnasium",
+    name: "Gymnasium",
+    shortLabel: "Gym",
+    type: "sports",
+    x: 23,
+    y: 58, // TODO: verify position
+    description: "Campus gymnasium near the cricket ground.",
+    aliases: ["gym", "gymnasium", "fitness"],
+  },
+  {
+    id: "squash-courts",
+    name: "Squash Courts",
+    shortLabel: "Squash",
+    type: "sports",
+    x: 40,
+    y: 64, // TODO: verify position
+    description: "Squash courts near the basketball and tennis courts.",
+    aliases: ["squash", "squash court"],
+  },
+  {
+    id: "volleyball-court",
+    name: "Volleyball Court",
+    shortLabel: "Volleyball",
+    type: "sports",
+    x: 14,
+    y: 85, // TODO: verify position
+    description: "Volleyball court near the futsal ground.",
+    aliases: ["volleyball", "volleyball court"],
+  },
+
+  // ── Parking ───────────────────────────────────────────────────────────────
+  {
+    id: "visitor-parking",
+    name: "Visitor Parking",
+    shortLabel: "Visitor Parking",
+    type: "parking",
+    x: 75,
+    y: 93, // TODO: verify position
+    description: "Visitor parking area near Gate 1.",
+    aliases: ["visitor parking", "guest parking", "parking"],
+  },
+  {
+    id: "student-car-parking",
+    name: "Student Car Parking",
+    shortLabel: "Student Parking",
+    type: "parking",
+    x: 5,
+    y: 30, // TODO: verify position
+    description: "Student car parking near Gate 3.",
+    aliases: ["student car parking", "student parking", "parking"],
+  },
+
+  // ── Mosque / prayer ───────────────────────────────────────────────────────
+  {
+    id: "ladies-prayer-area",
+    name: "Ladies Prayer Area",
+    shortLabel: "Ladies Prayer",
+    type: "prayer",
+    x: 37,
+    y: 76, // TODO: verify position
+    description: "Ladies prayer area next to the main masjid.",
+    aliases: ["ladies prayer area", "ladies masjid", "prayer", "namaz"],
+  },
+
+  // ── Medical, bank/ATM, photocopy — grouped under the new "service" type ──
+  {
+    id: "medical-center",
+    name: "Medical Center",
+    shortLabel: "Medical",
+    type: "service",
+    x: 38,
+    y: 16, // TODO: verify position
+    description: "Campus medical/first-aid room near D Block.",
+    aliases: ["medical center", "medical room", "clinic", "first aid", "nurse"],
+  },
+  {
+    id: "bank-atm",
+    name: "Bank & ATM",
+    shortLabel: "Bank/ATM",
+    type: "service",
+    x: 58,
+    y: 17, // TODO: verify position
+    description: "Bank branch and ATM near the C Block basement cafe.",
+    aliases: ["bank", "atm", "cash machine"],
+  },
+  {
+    id: "photocopy-stationery",
+    name: "Photocopy & Stationery Shop",
+    shortLabel: "Photocopy",
+    type: "service",
+    x: 65,
+    y: 21, // TODO: verify position
+    description: "Photocopy and stationery shop near the C Block LRC.",
+    aliases: ["photocopy", "stationery", "print shop", "xerox"],
+  },
+
+  // ── Hostels ───────────────────────────────────────────────────────────────
+  {
+    id: "boys-hostel-1",
+    name: "Boys Hostel 1",
+    shortLabel: "Boys Hostel 1",
+    type: "hostel",
+    x: 8,
+    y: 60, // TODO: verify position
+    description: "Boys hostel block 1.",
+    aliases: ["boys hostel 1", "boys hostel", "hostel"],
+  },
+  {
+    id: "boys-hostel-2",
+    name: "Boys Hostel 2",
+    shortLabel: "Boys Hostel 2",
+    type: "hostel",
+    x: 8,
+    y: 68, // TODO: verify position
+    description: "Boys hostel block 2.",
+    aliases: ["boys hostel 2", "boys hostel", "hostel"],
+  },
+  {
+    id: "girls-hostel",
+    name: "Girls Hostel",
+    shortLabel: "Girls Hostel",
+    type: "hostel",
+    x: 14,
+    y: 60, // TODO: verify position
+    description: "Girls hostel block.",
+    aliases: ["girls hostel", "hostel"],
+  },
+
+  // ── Gates ─────────────────────────────────────────────────────────────────
+  {
+    id: "gate-5",
+    name: "Gate 5",
+    shortLabel: "Gate 5",
+    type: "gate",
+    x: 95,
+    y: 50, // TODO: verify position
+    description: "Gate 5 campus entrance near A Block.",
+    aliases: ["gate 5", "entrance 5"],
   },
 ];
 

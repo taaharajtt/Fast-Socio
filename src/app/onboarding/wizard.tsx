@@ -16,7 +16,6 @@ import {
   HOSTEL_STATUS,
   INTERESTS,
   LANGUAGES,
-  MAX_INTERESTS,
   MAX_LANGUAGES,
   MAX_PERSONALITY,
   MIN_INTERESTS,
@@ -158,7 +157,7 @@ export function OnboardingWizard({
   // steps are always skippable (they enrich, they don't block).
   const stepValid = [
     fullName.trim().length >= 2,
-    Boolean(department),
+    Boolean(department) && Boolean(gender),
     interests.length >= MIN_INTERESTS,
     true, // personality
     true, // about you
@@ -286,13 +285,13 @@ export function OnboardingWizard({
               </PillRow>
             </Field>
           )}
-          <Field label="Gender" optional>
+          <Field label="Gender">
             <PillRow>
               {GENDERS.map((g) => (
                 <Pill
                   key={g.value}
                   active={gender === g.value}
-                  onClick={() => setGender(gender === g.value ? null : g.value)}
+                  onClick={() => setGender(g.value)}
                 >
                   {g.label}
                 </Pill>
@@ -325,20 +324,26 @@ export function OnboardingWizard({
           <div>
             <h1 className="text-2xl font-bold">Your interests</h1>
             <p className="mt-1 text-fg-muted">
-              Pick {MIN_INTERESTS}–{MAX_INTERESTS}. ({interests.length} selected)
+              Pick at least {MIN_INTERESTS}. ({interests.length} selected)
             </p>
           </div>
-          <PillRow>
+          <div className="flex max-h-96 flex-wrap gap-2 overflow-y-auto pr-1">
             {INTERESTS.map((tag) => (
               <Pill
                 key={tag}
                 active={interests.includes(tag)}
-                onClick={() => toggle(tag, interests, setInterests, MAX_INTERESTS)}
+                onClick={() =>
+                  setInterests((prev) =>
+                    prev.includes(tag)
+                      ? prev.filter((t) => t !== tag)
+                      : [...prev, tag]
+                  )
+                }
               >
                 {tag}
               </Pill>
             ))}
-          </PillRow>
+          </div>
         </section>
       )}
 

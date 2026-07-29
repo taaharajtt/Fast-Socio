@@ -26,6 +26,8 @@ export type FeedPost = {
   /** Whether the author is a verified account (UISpec V3 §2.7). Masked to false
    *  for anonymous posts by the view. Optional/back-compatible. */
   author_verified?: boolean | null;
+  /** Set once the author edits this post's text (fix-009); null if untouched. */
+  edited_at?: string | null;
 };
 
 /**
@@ -42,4 +44,4 @@ export type FeedPost = {
 // Kept as one literal (rather than a joined array) so PostgREST's types can
 // still infer the row shape from it at each call site.
 // prettier-ignore
-export const FEED_COLUMNS = "id, body, image_url, is_anonymous, like_count, comment_count, created_at, author_id, author_name, author_avatar, author_gender, author_department, author_verified, liked_by_me, poll_id" as const;
+export const FEED_COLUMNS = "id, body, image_url, is_anonymous, like_count, comment_count, created_at, author_id, author_name, author_avatar, author_gender, author_department, author_verified, liked_by_me, poll_id, edited_at" as const;

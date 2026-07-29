@@ -35,6 +35,42 @@ export async function fetchFeedPage(
   return (data as FeedPost[]) ?? [];
 }
 
+/**
+ * Edit your own post's text (fix-009). Body only — media, anonymity, community
+ * and moderation status are untouchable here. Ownership and the same content
+ * rules as the create path are enforced inside `edit_post` (mig 0134), which is
+ * SECURITY DEFINER precisely so `body`/`edited_at` are the only columns any
+ * client can move — the same reason `delete_post` exists.
+ */
+export async function editPost(
+  postId: string,
+  body: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
+
+  const text = body.trim();
+  if (text.length > 2000)
+    return { ok: false, error: "Posts are limited to 2000 characters." };
+
+  const { error } = await supabase.rpc("edit_post", {
+    p_post_id: postId,
+    p_body: text,
+  });
+  if (error) {
+    if (error.message.includes("not authorized"))
+      return { ok: false, error: "You can only edit your own posts." };
+    if (error.message.includes("write something"))
+      return { ok: false, error: "Write something." };
+    return { ok: false, error: error.message };
+  }
+
+  revalidatePath("/home");
+  revalidatePath(`/post/${postId}`);
+  return { ok: true };
+}
+
 /** Create a post (text and/or image, or a poll), optionally anonymous and/or in
  *  a community. When `pollOptions` is present the post carries a poll: `body` is
  *  the question and no image is attached. */

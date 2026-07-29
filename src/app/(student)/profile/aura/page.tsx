@@ -1,17 +1,17 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Trophy } from "lucide-react";
-import { GlassCard, GlassChip } from "@/components/ui";
+import { GlassCard } from "@/components/ui";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { auraReasonLabel } from "@/lib/aura/labels";
 import { levelProgress, levelTitle } from "@/lib/aura/levels";
 
-type Txn = {
-  id: string;
-  delta: number;
-  reason: string;
-  created_at: string;
-};
+/**
+ * Only what the Breakdown totals need. The per-transaction "Recent activity"
+ * list that used to sit below the breakdown was removed (fix-035), and with it
+ * the need for each row's id and timestamp.
+ */
+type Txn = { delta: number; reason: string };
 
 export default async function AuraPage() {
   const supabase = await createClient();
@@ -27,7 +27,7 @@ export default async function AuraPage() {
         .single(),
       supabase
         .from("aura_transactions")
-        .select("id, delta, reason, created_at")
+        .select("delta, reason")
         .eq("user_id", me)
         .order("created_at", { ascending: false })
         .limit(100),
@@ -144,33 +144,6 @@ export default async function AuraPage() {
         </section>
       )}
 
-      <section className="mt-5">
-        <h2 className="mb-2 text-sm font-medium text-fg-muted">
-          Recent activity
-        </h2>
-        {txns.length === 0 ? (
-          <GlassCard className="p-5">
-            <p className="text-sm text-fg-muted">
-              No Aura activity yet. Match, post, and attend events to earn Aura.
-            </p>
-          </GlassCard>
-        ) : (
-          <div className="space-y-2">
-            {txns.slice(0, 30).map((t) => (
-              <GlassCard
-                key={t.id}
-                className="flex items-center justify-between p-3"
-              >
-                <span className="text-sm">{auraReasonLabel(t.reason)}</span>
-                <GlassChip tone={t.delta >= 0 ? "aura" : "error"}>
-                  {t.delta >= 0 ? "+" : ""}
-                  {t.delta}
-                </GlassChip>
-              </GlassCard>
-            ))}
-          </div>
-        )}
-      </section>
     </main>
   );
 }

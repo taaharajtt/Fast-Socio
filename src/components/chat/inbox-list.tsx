@@ -186,11 +186,16 @@ export function InboxList({
                     </div>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="flex items-center gap-1.5">
+                    <p className="flex min-w-0 items-center gap-1.5">
                       {/* The capsule is what separates a room from a person;
                           everything else about the row is identical. A Discover
                           team room takes the brand gradient instead of glass so
-                          it reads as its own thing at a glance. */}
+                          it reads as its own thing at a glance. The capsule
+                          always sits to the right of the name, pinned and
+                          non-shrinking, so a long name truncates first. */}
+                      <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-fg">
+                        {t.space.name}
+                      </span>
                       {t.space.is_discover_group ? (
                         <span className="gradient-brand shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold text-white">
                           {discoverGroupLabel(t.space.discover_mode)}
@@ -200,9 +205,6 @@ export function InboxList({
                           Community
                         </span>
                       )}
-                      <span className="truncate text-[15px] font-semibold text-fg">
-                        {t.space.name}
-                      </span>
                     </p>
                     <p className="truncate text-sm text-fg-muted">
                       {t.preview ?? "No messages yet"}

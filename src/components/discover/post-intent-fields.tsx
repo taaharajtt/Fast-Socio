@@ -181,8 +181,12 @@ export function TagInput({
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === ",") {
+              // Never let Enter bubble up — it must not submit the form or
+              // move focus to whatever the browser considers "next" (fix-015).
               e.preventDefault();
+              e.stopPropagation();
               commit();
+              requestAnimationFrame(() => inputRef.current?.focus());
             } else if (e.key === "Backspace" && !draft && value.length) {
               onChange(value.slice(0, -1));
             } else if (e.key === "Escape") {

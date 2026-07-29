@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ZoomIn, ZoomOut, RotateCcw, Maximize } from "lucide-react";
+import { ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   PLACE_TYPE_META,

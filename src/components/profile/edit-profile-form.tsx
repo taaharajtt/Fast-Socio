@@ -18,7 +18,6 @@ import {
   GENDERS,
   getDegreesForSchool,
   INTERESTS,
-  MAX_INTERESTS,
   MIN_INTERESTS,
 } from "@/lib/profile/constants";
 
@@ -86,9 +85,15 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
   const valid =
     fullName.trim().length >= 2 &&
     Boolean(department) &&
+    Boolean(gender) &&
     interests.length >= MIN_INTERESTS &&
-    interests.length <= MAX_INTERESTS &&
     bio.length <= BIO_MAX;
+
+  const interestsError =
+    interests.length < MIN_INTERESTS
+      ? `Pick at least ${MIN_INTERESTS} interests`
+      : null;
+  const genderError = !gender ? "Please select your gender" : null;
 
   /** Pick → crop (UAT-008) → upload. Only the square crop reaches storage. */
   function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -128,11 +133,7 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
 
   function toggleInterest(tag: string) {
     setInterests((prev) =>
-      prev.includes(tag)
-        ? prev.filter((t) => t !== tag)
-        : prev.length < MAX_INTERESTS
-          ? [...prev, tag]
-          : prev
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
     );
   }
 
@@ -221,32 +222,42 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
 
       {/* Avatar */}
       <div className="flex flex-col items-center gap-3">
-        <button
-          type="button"
-          onClick={() => fileInput.current?.click()}
-          className="glass relative flex h-28 w-28 items-center justify-center overflow-hidden rounded-full text-fg-muted"
-        >
-          {resolveAvatarUrl(avatarUrl, gender) ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={resolveAvatarUrl(avatarUrl, gender)!}
-              alt="Your avatar"
-              className="h-full w-full object-cover"
-              loading="lazy"
-              decoding="async"
-            />
-          ) : (
-            <span className="text-2xl font-bold text-fg">{initials}</span>
-          )}
-          {uploading && (
-            <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/60">
-              <UploadProgressRing percent={uploadPct} size={64} />
-            </span>
-          )}
-          <span className="absolute bottom-0 right-0 flex h-9 w-9 items-center justify-center rounded-full bg-aura text-white shadow-[0_2px_10px_rgba(124,92,255,0.5)]">
+        <div className="relative h-28 w-28">
+          <button
+            type="button"
+            onClick={() => fileInput.current?.click()}
+            aria-label="Change profile photo"
+            className="glass relative flex h-28 w-28 items-center justify-center overflow-hidden rounded-full text-fg-muted"
+          >
+            {resolveAvatarUrl(avatarUrl, gender) ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={resolveAvatarUrl(avatarUrl, gender)!}
+                alt="Your avatar"
+                className="h-full w-full object-cover"
+                loading="lazy"
+                decoding="async"
+              />
+            ) : (
+              <span className="text-2xl font-bold text-fg">{initials}</span>
+            )}
+            {uploading && (
+              <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/60">
+                <UploadProgressRing percent={uploadPct} size={64} />
+              </span>
+            )}
+          </button>
+          {/* Camera badge — sits OUTSIDE the avatar's own clipping element so it
+              isn't cut off, positioned to straddle the bottom-right edge. */}
+          <button
+            type="button"
+            onClick={() => fileInput.current?.click()}
+            aria-label="Change profile photo"
+            className="absolute -bottom-1 -right-1 flex h-10 w-10 items-center justify-center rounded-full bg-aura text-white shadow-[0_2px_10px_rgba(124,92,255,0.5)] ring-2 ring-bg"
+          >
             <Camera className="h-4 w-4" aria-hidden />
-          </span>
-        </button>
+          </button>
+        </div>
         <span className="text-xs text-fg-muted">
           {uploading ? "Uploading…" : "Tap to change photo"}
         </span>

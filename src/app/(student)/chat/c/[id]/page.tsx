@@ -128,9 +128,12 @@ export default async function CommunityConversationPage({
             )}
           </span>
           <span className="min-w-0 flex-1">
-            {/* Capsule leads the name here exactly as it does in the inbox row,
-                so a room identifies itself the same way on both screens. */}
-            <span className="flex items-center gap-1.5">
+            {/* The capsule sits to the right of the name here exactly as it
+                does in the inbox row, so a room identifies itself the same
+                way on both screens — and a long name truncates instead of
+                pushing the capsule off-screen. */}
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className="min-w-0 flex-1 truncate font-semibold">{community.name}</span>
               {isDiscoverGroup ? (
                 <span className="gradient-brand shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold text-white">
                   {discoverGroupLabel(community.discover_mode)}
@@ -140,7 +143,6 @@ export default async function CommunityConversationPage({
                   Community
                 </span>
               )}
-              <span className="truncate font-semibold">{community.name}</span>
             </span>
             <span className="block truncate text-[11px] text-fg-muted">
               {community.member_count.toLocaleString()} member

@@ -6,7 +6,7 @@ import { getAuthUserId } from "@/lib/auth/user";
 import {
   ALL_DEGREES,
   BIO_MAX,
-  MAX_INTERESTS,
+  GENDERS,
   MIN_INTERESTS,
 } from "@/lib/profile/constants";
 import { isAppStorageUrl } from "@/lib/url-safety";
@@ -38,11 +38,10 @@ export async function updateProfile(input: {
   // Semester is derived from the roll number on read, never written here.
   if (input.degree && !ALL_DEGREES.includes(input.degree as never))
     return { error: "Please choose a valid degree." };
-  if (
-    input.interests.length < MIN_INTERESTS ||
-    input.interests.length > MAX_INTERESTS
-  )
-    return { error: `Pick ${MIN_INTERESTS}–${MAX_INTERESTS} interests.` };
+  if (!input.gender || !GENDERS.some((g) => g.value === input.gender))
+    return { error: "Please select your gender." };
+  if (input.interests.length < MIN_INTERESTS)
+    return { error: `Pick at least ${MIN_INTERESTS} interests.` };
   if (input.bio.length > BIO_MAX)
     return { error: `Bio must be ${BIO_MAX} characters or fewer.` };
   // avatarUrl/coverUrl are client-supplied — only accept media we host (P2-04).

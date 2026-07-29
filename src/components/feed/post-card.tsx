@@ -10,12 +10,18 @@ import {
   VenetianMask,
   Share2,
   Trash2,
+  Pencil,
   MoreHorizontal,
 } from "lucide-react";
 import { GlassSheet, VerifiedBadge } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { renderLinkifiedText } from "@/lib/linkify";
-import { toggleLike, reportPost, deletePost } from "@/app/(student)/home/actions";
+import {
+  toggleLike,
+  reportPost,
+  deletePost,
+  editPost,
+} from "@/app/(student)/home/actions";
 import { ShareSheet } from "@/components/feed/share-sheet";
 import { CommentsSheet } from "@/components/feed/comments-sheet";
 import { PostPoll } from "@/components/feed/post-poll";
@@ -57,6 +63,12 @@ function PostCardImpl({
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleted, setDeleted] = useState(false);
+  const [editingOpen, setEditingOpen] = useState(false);
+  const [editDraft, setEditDraft] = useState(post.body ?? "");
+  const [body, setBody] = useState(post.body);
+  const [editedAt, setEditedAt] = useState(post.edited_at ?? null);
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
   // Heart-burst overlay: bumping the key remounts the <Heart> and replays the
   // animation, so rapid double-taps each get their own burst.
   const [burstKey, setBurstKey] = useState(0);
@@ -125,6 +137,32 @@ function PostCardImpl({
     setDeleted(true);
     if (onDeleted) onDeleted(post.id);
     else router.refresh();
+  }
+
+  async function onSaveEdit() {
+    const next = editDraft.trim();
+    const prevBody = body;
+    const prevEditedAt = editedAt;
+    setSaving(true);
+    setEditError(null);
+    // Optimistic: the card reflects the edit right away, reverted on failure.
+    setBody(next);
+    setEditedAt(new Date().toISOString());
+    const res = await editPost(post.id, next);
+    setSaving(false);
+    if (!res.ok) {
+      setBody(prevBody);
+      setEditedAt(prevEditedAt);
+      setEditError(res.error);
+      return;
+    }
+    setEditingOpen(false);
+  }
+
+  function onCancelEdit() {
+    setEditDraft(body ?? "");
+    setEditError(null);
+    setEditingOpen(false);
   }
 
   // Once deleted, collapse the card in place for immediate feedback.
@@ -196,9 +234,9 @@ function PostCardImpl({
         </button>
       </div>
 
-      {post.body && (
+      {body && (
         <p className="mt-2.5 whitespace-pre-wrap text-[15px] leading-[22px] text-fg">
-          {renderLinkifiedText(post.body)}
+          {renderLinkifiedText(body)}
         </p>
       )}
       {post.image_url && (
@@ -267,6 +305,11 @@ function PostCardImpl({
           <Share2 className="h-5 w-5" aria-hidden />
           Share
         </button>
+        {editedAt && (
+          <span className="ml-auto inline-flex shrink-0 items-center rounded-full bg-fg-muted/10 px-1.5 py-0.5 text-[10px] font-semibold text-fg-muted">
+            edited
+          </span>
+        )}
       </div>
 
       <ShareSheet
@@ -284,6 +327,42 @@ function PostCardImpl({
         // (seconds of work) without even updating this card's frozen count.
         onCommentAdded={() => setComments((c) => c + 1)}
       />
+
+      <GlassSheet
+        open={editingOpen}
+        onClose={onCancelEdit}
+        label="Edit post"
+      >
+        <div className="space-y-3">
+          <h3 className="text-lg font-bold">Edit post</h3>
+          <textarea
+            value={editDraft}
+            onChange={(e) => setEditDraft(e.target.value)}
+            rows={5}
+            maxLength={2000}
+            autoFocus
+            className="glass w-full resize-none rounded-[var(--radius-sm)] px-4 py-3 text-[15px] text-fg outline-none"
+            placeholder="Write something…"
+          />
+          {editError && <p className="text-sm text-error">{editError}</p>}
+          <button
+            type="button"
+            disabled={saving}
+            onClick={onSaveEdit}
+            className="w-full rounded-[var(--radius-sm)] bg-aura px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={onCancelEdit}
+            className="glass w-full rounded-[var(--radius-sm)] px-4 py-3 text-sm text-fg"
+          >
+            Cancel
+          </button>
+        </div>
+      </GlassSheet>
 
       <GlassSheet
         open={optionsOpen}
@@ -321,6 +400,21 @@ function PostCardImpl({
             ) : (
               <>
                 <h3 className="text-lg font-bold">Post options</h3>
+                {!post.poll_id && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditDraft(body ?? "");
+                      setEditError(null);
+                      setOptionsOpen(false);
+                      setEditingOpen(true);
+                    }}
+                    className="glass flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm font-medium text-fg"
+                  >
+                    <Pencil className="h-4 w-4" aria-hidden />
+                    Edit post
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setConfirmDelete(true)}

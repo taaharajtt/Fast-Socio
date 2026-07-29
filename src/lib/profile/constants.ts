@@ -71,7 +71,6 @@ export function semesterLabel(n: number): string {
 export const GENDERS = [
   { value: "male", label: "Male" },
   { value: "female", label: "Female" },
-  { value: "other", label: "Other" },
   { value: "prefer_not_to_say", label: "Prefer not to say" },
 ] as const;
 
@@ -99,10 +98,71 @@ export const INTERESTS = [
   "Cricket",
   "Football",
   "Cooking",
+  // Academic
+  "Mathematics",
+  "Physics",
+  "Chemistry",
+  "Economics",
+  "Entrepreneurship",
+  "Research",
+  "Public Speaking",
+  "Writing",
+  "Poetry",
+  "Chess",
+  // Tech
+  "Web Development",
+  "App Development",
+  "Cybersecurity",
+  "Game Development",
+  "Blockchain",
+  "Cloud Computing",
+  "Data Science",
+  "Open Source",
+  "Competitive Programming",
+  "Electronics",
+  // Sports
+  "Badminton",
+  "Table Tennis",
+  "Basketball",
+  "Volleyball",
+  "Swimming",
+  "Cycling",
+  "Running",
+  "Martial Arts",
+  "Snooker",
+  "Futsal",
+  // Arts
+  "Calligraphy",
+  "Painting",
+  "Dance",
+  "Filmmaking",
+  "Fashion",
+  "Theatre",
+  // Gaming
+  "Esports",
+  "PC Gaming",
+  "Console Gaming",
+  "Board Games",
+  "Card Games",
+  // Social / campus
+  "Event Management",
+  "Networking",
+  "Community Service",
+  "MUN",
+  // Career
+  "Freelancing",
+  "Internships",
+  "Marketing",
+  "Finance",
+  // Hobbies
+  "Gardening",
+  "Journaling",
+  "Podcasts",
+  "Camping",
 ] as const;
 
+/** No maximum — students may pick as many interests as they like (fix-033). */
 export const MIN_INTERESTS = 3;
-export const MAX_INTERESTS = 8;
 export const BIO_MAX = 300;
 
 /**
