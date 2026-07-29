@@ -4,7 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { AppImage } from "@/components/ui/app-image";
 import { GlassInput } from "@/components/ui";
-import { searchTeammates } from "@/app/(student)/discover/discover-actions";
+import {
+  hasAnyMatches,
+  searchTeammates,
+} from "@/app/(student)/discover/discover-actions";
 import type { TeamMember } from "@/lib/smart-match/types";
 
 /**
@@ -23,7 +26,18 @@ export function TeamMemberMentions({
   const [q, setQ] = useState("");
   const [results, setResults] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(false);
+  const [noMatchesAtAll, setNoMatchesAtAll] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    hasAnyMatches().then((has) => {
+      if (!cancelled) setNoMatchesAtAll(!has);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
@@ -87,13 +101,19 @@ export function TeamMemberMentions({
           className="h-11"
           data-no-drag
         />
-        {q.trim().length >= 2 && (loading || results.length > 0) && (
+        {q.trim().length >= 2 && (
           <div
             className="glass-strong absolute inset-x-0 top-full z-20 mt-1 max-h-52 overflow-y-auto rounded-xl border border-glass-border"
             data-no-drag
           >
             {loading ? (
               <p className="px-3 py-2.5 text-sm text-fg-muted">Searching…</p>
+            ) : results.length === 0 ? (
+              <p className="px-3 py-2.5 text-sm text-fg-muted">
+                {noMatchesAtAll
+                  ? "Match with people to add them to your team."
+                  : "No results for this search."}
+              </p>
             ) : (
               results.map((m) => (
                 <button
