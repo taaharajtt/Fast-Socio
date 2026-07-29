@@ -261,7 +261,7 @@ export function IntentCardBody({
 
               {isSports && post.place && (
                 <Link
-                  href={`/map?place=${encodeURIComponent(mapPlace?.id ?? post.place)}`}
+                  href={`/map?place=${encodeURIComponent(post.placeId ?? mapPlace?.id ?? post.place)}`}
                   onPointerDownCapture={(e) => e.stopPropagation()}
                   className="inline-flex w-fit items-center gap-1.5 rounded-full bg-white/[0.06] px-3 py-1.5 text-[13px] font-semibold text-aura"
                 >

@@ -8,7 +8,6 @@ import {
   GlassInput,
   SegmentedPills,
 } from "@/components/ui";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { isValidFastEmail } from "@/lib/auth/email";
 
 /**
@@ -107,10 +106,6 @@ export default function Home() {
         <GlassChip>Neutral</GlassChip>
       </div>
 
-      <GlassCard className="space-y-3 p-5">
-        <label className="text-sm font-medium">Appearance</label>
-        <ThemeToggle />
-      </GlassCard>
     </main>
   );
 }

@@ -8,6 +8,8 @@ export type SocietyEvent = {
   title: string;
   starts_at: string;
   location: string | null;
+  /** Known campus place id (mig 0138) — set when the host pinned a location. */
+  place_id: string | null;
   cover_url: string | null;
   attendee_count: number;
   capacity: number | null;
@@ -84,7 +86,7 @@ export async function getUpcomingSocietyEvents(
   const supabase = await createClient();
   const { data } = await supabase
     .from("events")
-    .select("id, title, starts_at, location, cover_url, attendee_count, capacity, status")
+    .select("id, title, starts_at, location, place_id, cover_url, attendee_count, capacity, status")
     .eq("community_id", id)
     .eq("status", "approved")
     .gt("starts_at", new Date().toISOString())
@@ -101,7 +103,7 @@ export async function getPastSocietyEvents(
   const supabase = await createClient();
   const { data } = await supabase
     .from("events")
-    .select("id, title, starts_at, location, cover_url, attendee_count, capacity, status")
+    .select("id, title, starts_at, location, place_id, cover_url, attendee_count, capacity, status")
     .eq("community_id", id)
     .eq("status", "approved")
     .lte("starts_at", new Date().toISOString())

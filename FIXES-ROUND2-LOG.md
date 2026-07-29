@@ -228,3 +228,356 @@ of scope for a sizing fix (rule 8). **I also included a fourth panel the runbook
 a sibling auth screen visibly inconsistent — which would read as a bug, not as scope discipline.
 Verified: grep confirms zero remaining `width={180}` in `src/`.
 Notes: **NEEDS-CLICK** for the three-panel visual.
+
+---
+
+## fix-043 — restrict project-partner and FYP posts to the right deck
+Status: DONE
+Files: `supabase/migrations/0139_restrict_project_fyp_visibility.sql`
+Migration: **0139 written and applied to production**
+Effort: HIGH
+
+### The actual exposure
+`get_unified_discover_feed` — SECURITY DEFINER, so RLS is bypassed — filtered on status,
+expiry, blocks, mutes and passes, and **nothing else**. Every signed-in user received every
+`project_partner` and `fyp_teammate` post regardless of degree, department or semester.
+Confirmed by reading the shipped function body, not inferred.
+
+### Where enforcement belongs — and why I deliberately added NO RLS policy
+The runbook asked for the deck query **and** the RLS layer, warning that filtering the UI over
+readable rows is not a fix. I agree with the principle, and on inspection the situation is the
+reverse of what it assumes:
+
+- `smart_match_posts`'s only SELECT policy is `author_id = auth.uid()` — non-authors **cannot
+  read the table at all**.
+- **Zero views** reference the table (checked `pg_class` / `pg_get_viewdef`).
+- So the leak was 100% the definer RPC.
+
+Adding a "same cohort may read" SELECT policy would therefore have **widened** direct table
+access and *created* an exposure. RLS is already stricter than the requirement, so it is left
+untouched — and I hardened the two definer paths instead. Recording this as a deliberate,
+reasoned deviation rather than a skipped step.
+
+Second bypass closed: `get_smart_match_posts` (the pre-0110 per-mode deck) is also SECURITY
+DEFINER with no cohort filter, so a client could have called it straight over PostgREST and read
+every FYP post. Nothing in `src/` calls it (grep: two comments only), so EXECUTE is **revoked
+from `authenticated` and `anon`** — closing it without rewriting unexercised logic.
+
+### Decisions (defaults taken)
+- **"School" maps to `profiles.department`.** There is no `school` column in this schema;
+  `department` is the school-equivalent field the rest of the app uses.
+- **Semester comes from `current_semester(username)`, not `profiles.semester`.** That column is
+  stale by design since mig 0099 moved semester to compute-on-read from the roll number.
+- **Fail-closed.** Every leg requires both sides non-null. If either party's department, degree
+  or semester is unknown, the post is **hidden**. Two unknowns must never read as a match in a
+  privacy filter — the alternative (`is not distinct from`) would have shown FYP posts to every
+  user with an incomplete profile.
+- **Author always sees their own post** — via the helper. Note the deck itself excludes your own
+  posts (`author_id <> me.uid`) by design, since you do not swipe your own; your own posts are
+  reached through the manage/own-posts path, which the author-only RLS policy already permits.
+- Predicate **inlined** in the deck (reusing the already-joined author profile `ap`) rather than
+  calling the helper per row, which would have re-queried `profiles` for all 40 rows.
+- Also shipped `can_see_smart_match_post(author_id, mode)` as the single written-down statement
+  of the rule, so a future deck surface reuses it instead of re-deriving it.
+
+### Verified by executing the deck as two different real users
+No `project_partner` / `fyp_teammate` posts exist in production, so verification used a probe
+transaction (terminal `RAISE` guarantees rollback) with three real accounts: an author **A**, a
+cohort-mate **B** (same department + degree + semester), and an outsider **C**.
+
+```
+PROBE -> cohort_sees_fyp=1  cohort_sees_sports=1
+         OUTSIDER_sees_fyp=0  outsider_sees_sports=1
+         outsider_helper=f  author_own_helper=t
+```
+
+This is the runbook's "verify with two accounts from different degrees that the post is genuinely
+absent, not just hidden" — and it is stronger than a UI check, because it proves absence at the
+source the UI reads from. Sports (an unaffected mode) stays visible to the outsider, so the
+filter is targeted rather than blanket.
+Notes: real production data has **zero** posts of either restricted mode, so no live user is
+currently affected either way; this closes the hole before it is exercised.
+
+---
+
+## Batch E — chrome and copy (delegated to Sonnet, reviewed by me)
+
+All nine were dispatched as five parallel Sonnet tasks on disjoint files. **Three defects were
+caught in diff review and repaired by me** rather than re-delegated — details under each fix.
+
+### fix-038 — home post-card placeholder
+Status: DONE · Files: `src/app/(student)/home/page.tsx`, `src/components/feed/home-feed.tsx`
+Placeholder is now `Yo, {name}! What is on your mind?` (exact copy per the runbook), degrading to
+first name when the full name exceeds 18 chars and to the nameless default when absent.
+**Defect I repaired:** the agent made `HomePage` **async** and awaited a profile read at the top —
+directly contradicting that file's own docstring ("leaves this function synchronous, so nothing
+above the feed can be held back by it") and collapsing the PPR shell for the whole route. I
+restored it to synchronous and passed the placeholder as an unawaited **promise**, mirroring how
+`loadFeed()` is already handed to the client, then unwrapped it with `use()` inside a new
+`PersonalisedComposer` behind its own Suspense boundary — so only the composer can ever wait, and
+the fallback is the same composer with its default placeholder, keeping geometry identical.
+Verified: `npm run build` route table shows `/home` as `◐ (Partial Prerender)`, not `ƒ (Dynamic)` —
+proof the shell survived.
+
+### fix-039 — Campus Help subtext
+Status: DONE · Files: `src/app/(student)/help/page.tsx`
+Now `Drop the Gatekeeping, help your Campus.` with `help your Campus.` in `text-aura` (the
+codebase's brand purple) and the rest default. The original string was
+"SOCIO helps me solve campus problems." — different casing from the runbook's quote.
+
+### fix-040 — illuminate the selected report option
+Status: DONE · Files: `src/components/discover/report-sheet.tsx`
+250ms brand-purple flash on press, then settles into the selected state; timer cleared on unmount
+and on re-press so it cannot fire late.
+**Defect I repaired:** the agent used `motion-reduce:bg-transparent`, which under
+`prefers-reduced-motion` stripped the option's `glass` / `glass-strong` background for 250ms — so
+instead of "going straight to the selected state" it briefly lost its background. Replaced with
+`motion-safe:bg-aura/30`, which expresses the intent directly: under reduced motion the flash is
+simply never applied. (The agent also justified its approach with incorrect reasoning — it claimed
+class-string order decides Tailwind precedence; it does not, generated stylesheet order does.)
+
+### fix-046 — logo elements beside section titles
+Status: DONE · Files: `src/components/ui/section-logo.tsx` (new),
+`src/app/(student)/communities/page.tsx`, `src/app/(student)/leaderboard/page.tsx`,
+`src/app/(student)/discover/page.tsx`
+New shared `SectionLogo` copies the Campus Help precedent exactly (`gradient-brand`, `h-10 w-10`,
+`rounded-[14px]`, `gap-2.5`) and is used on Community, Ranks and Discover.
+Decision forced by reality: the runbook said "use the exact logo used in the navbar", but the
+**navbar contains no logo** — the bottom dock is lucide icons only. The agent used the app's brand
+image asset (`/brand/logo.png`, the Home masthead logo) inside Campus Help's wrapper geometry.
+That is the closest faithful reading; flagging it because the instruction's premise was wrong.
+
+### fix-047 — Community subtext
+Status: DONE · Files: `src/app/(student)/communities/page.tsx`
+Now `What do you want, {name}?` with the same 18-char / first-name / absent rules as fix-038, in a
+Suspense-wrapped async slot so the static shell still prerenders.
+**Defect I repaired — this one would have silently done nothing:** the agent queried
+`profiles.display_name`. That column exists, so it type-checked and looked correct, but it is
+**NULL for all 144 production profiles** (`full_name` is populated for 103). The subtext would have
+rendered the nameless fallback forever — precisely round 1's failure mode of a fix that appears
+applied and changes nothing. Switched to `full_name`, the column the rest of the app displays.
+
+### fix-048 — purple round button around the Community plus
+Status: DONE · Files: `src/components/communities/create-space-button.tsx`
+`bg-aura` fill, `h-11 w-11` (44px, above the 40px floor), circular, white icon centred,
+`hover:bg-aura/90 active:bg-aura/80`. onClick and accessible label unchanged.
+
+### fix-053 — blue tick for verified societies
+Status: DONE · Files: `src/components/communities/community-main-view.tsx`,
+`src/components/chat/inbox-list.tsx`, `src/app/(student)/communities/page.tsx`,
+`src/app/(student)/chat/inbox-data.ts`, `src/lib/chat/inbox-types.ts`
+Reused the existing `VerifiedBadge` from `src/components/ui/badges.tsx` — which is **already blue**
+(`--verified: #3b82f6`), so no new variant and no second component were needed, and existing
+verified-user badges are untouched. Drives off the existing `communities.is_official` flag (set by
+admin `verify_society()`); no new flag, no migration. It was already present on the society header
+and the Verified Communities rail; added to the two surfaces missing it — the "Your Spaces" tile and
+community/society chat-inbox rows — extending those two queries to select `is_official`. Names keep
+`truncate`; badges are `shrink-0`.
+
+### fix-054 — remove the display name over the cover photo
+Status: DONE · Files: `src/app/(student)/profile/page.tsx`, `src/app/(student)/profile/[id]/page.tsx`
+The overlaid `CoverName` component is gone from both own and public profiles; the name remains in
+`Identity()`'s `<h1>` below the cover.
+Scrim decision (agent's, and I agree): the gradient was **kept**. It is
+`bg-gradient-to-t from-bg via-bg/20 to-transparent` — `from-bg`, not black — so it blends the cover
+into the page background at the avatar overlap, and removing it would leave a hard edge under the
+avatar. It was not there solely for the removed text.
+
+### fix-055 — remove the doubled hairline above the first post
+Status: DONE · Files: `src/components/profile/profile-tabs.tsx`
+Root cause: the posts-list wrapper carried `border-y`, whose **top** border sat directly beneath the
+tabs' own `border-b`. Changed to `border-b`.
+Justified deviation from the runbook's `first:border-t-0` instruction: there is no repeated per-item
+top border to apply a `first:` variant to — Tailwind's `divide-y` already omits the leading divider.
+The duplicate came from one wrapper's own border. Still a static CSS class change with no JS index
+conditional, which was the actual intent of that instruction.
+
+Notes for all of Batch E: **NEEDS-CLICK.** These are visual changes verified by source review plus
+`npm run lint` and `npm run build`; I have no browser. The three repaired defects above are the ones
+review could catch — a fourth class (pure visual misjudgement) can only be caught by looking.
+
+---
+
+## fix-037 — match percentage formula
+Status: DONE
+Files: `supabase/migrations/0140_match_percentage_formula.sql`,
+`src/lib/discover/match-score.ts` (new), `src/lib/discover/match-score.test.ts` (new)
+Migration: **0140 written and applied to production**
+Effort: HIGH
+
+### What was there
+The percentage was computed in SQL inside `get_discover_candidates`'s `weighted` CTE:
+
+| signal | old weight |
+|---|---|
+| **same** department | +25 — backwards; the spec favours cross-school |
+| semester proximity | up to +15 (a distance ramp, not "same semester") |
+| shared interests | `least(n,4) * 8` → max 32, **capped at four** |
+| mutual communities | up to +18 |
+| aura | up to +10 via `ln()` |
+| `they_liked_me` | +9, an invisible incoming-like boost |
+
+clamped to 1..100. So interests were not dominant, same-school was *rewarded* rather than
+penalised, and roughly a third of the number came from signals a user cannot see or reason about.
+
+### Authoritative side
+**The SQL is authoritative** — it both orders the deck and produces the number the swipe card
+renders (`profile.compatibility`, `swipe-deck.tsx:486`). `src/lib/discover/match-score.ts` is a
+pure-function mirror serving as the executable specification, with 19 unit tests.
+
+### Final weights (total 100 before clamping)
+| signal | weight | notes |
+|---|---|---|
+| shared interests | **50** | dominant; asymptotic, never actually reaches 50 |
+| opposite gender | 15 | |
+| same semester | 13 | exact match, derived from the roll number |
+| **different** school | 12 | cross-school pairings favoured; same school scores 0 |
+| same batch | 10 | intake year from the roll number |
+
+**Interests term:** `7 × min(s,6)` then a bonus of `8 × e/(e+6)` where `e = max(s-6,0)`.
+The bonus is a hyperbola, so: s=6 → 42, s=12 → 46, s=24 → 48, s=40 → 48.6, approaching 50
+without arriving. A student who ticks all 40 interests therefore **cannot** max the term out.
+I chose a hyperbola over a hard cap deliberately: a cap would make "picked everything" score
+identically to "genuinely aligned", which is the failure mode the runbook was guarding against.
+
+### Worked example (also pinned as a test)
+Two students: 8 shared interests, opposite gender, both semester 4, different schools, both
+batch 22.
+- interests: `7×6 = 42`, plus `8×2/(2+6) = 2` → **44**
+- opposite gender → +15 = 59
+- same semester → +13 = 72
+- different school → +12 = 84
+- same batch → +10 = **94**
+
+A pair sharing nothing, same gender, different semester, same school, different batch scores a raw
+0 → clamped to **5**.
+
+### Decisions (defaults taken)
+- **Clamped to 5..99**, never 0% or 100%, per the runbook.
+- **Unknowns score 0, never partial credit.** Every categorical signal requires the value present
+  on *both* sides, so an incomplete profile can never inflate a score. Confirmed live: a candidate
+  with no recorded gender scored 0 for that signal.
+- **Semester and batch come from the roll number** (`current_semester`, and a new
+  `roll_batch_year`), not the stale `profiles.semester` column.
+- **"School" = `profiles.department`** — no `school` column exists in this schema.
+- **Symmetric and deterministic.** Every signal is symmetric, so score(a,b) = score(b,a); both
+  properties are asserted as tests.
+- **Aura, mutual communities and the incoming-like boost are not deleted — they moved.** The
+  runbook lists five signals and requires the number be explainable from them, but
+  `they_liked_me` and mutual communities are real product behaviour, and silently dropping them
+  would degrade the deck. They are now **ORDER BY tie-breakers beneath `compatibility`** instead
+  of being baked into the number. The score stays honest; the ordering keeps its intelligence.
+  Aura is dropped from both — it is a reward metric, not a compatibility signal.
+
+### Verified by executing both implementations
+`vitest`: **19/19 pass**, covering the worked example, the cross-school inversion, the
+never-maxes-out property, monotonicity, symmetry, determinism, the 5..99 bounds over a 100-case
+sweep, and unknown/invalid gender handling.
+
+One test initially failed and the **test was wrong, not the formula**: I had asserted
+`interestsTerm(1000) >= 50`, which the asymptote makes impossible by design (it returns 49.952).
+Rewritten to assert the real property.
+
+Live SQL check — impersonated a real viewer, ran the RPC, and compared each row against the
+weights recomputed independently:
+```
+viewer dept=Fast School of Management sem=4 g=male batch=24 nInterests=6
+roll(i222015)=22  roll(abc)=NULL
+sh=2 oppG=t sameSem=t diffSchool=f sameBatch=t  got=52 expect=52
+sh=2 oppG=f sameSem=t diffSchool=t sameBatch=t  got=49 expect=49
+sh=1 oppG=  sameSem=f diffSchool=t sameBatch=f  got=19 expect=19
+sh=2 oppG=f sameSem=t diffSchool=t sameBatch=t  got=49 expect=49
+```
+Every row matches, and the TypeScript mirror produces the same values (e.g. row 1:
+`interestsTerm(2)=14`, +15+13+0+10 = 52), so SQL and TS are in agreement.
+Notes: the deck's displayed number changes for every user — expect scores to shift noticeably
+(cross-school pairs up, same-school pairs down). That is the intended correction, but it is the
+most user-visible change in this whole run.
+
+---
+
+## fix-025 — location pinning was not applied
+Status: DONE
+Files: `supabase/migrations/0138_pinned_locations.sql`,
+`supabase/migrations/0141_discover_feed_place_columns.sql`,
+`src/components/map/location-picker.tsx` (new),
+`src/components/events/new-event-form.tsx`, `src/app/(student)/events/actions.ts`,
+`src/components/discover/post-intent-fields.tsx`,
+`src/components/discover/discover-post-form.tsx`,
+`src/app/(student)/discover/discover-actions.ts`,
+`src/components/discover/intent-card.tsx`, `src/lib/smart-match/types.ts`,
+`src/lib/societies/queries.ts`, `src/components/societies/event-mini.tsx`,
+`src/app/(student)/events/[id]/page.tsx`,
+`src/components/events/tabs/event-overview-tab.tsx`
+Migrations: **0138 and 0141 written and applied to production**
+Effort: HIGH (design + migrations, mine) / delegated UI build
+
+### Root cause
+Nothing to diagnose: it was **never implemented**. Location was free text in two places —
+`events.location` and `smart_match_posts.place` — and **no table in the schema had any
+coordinate column at all**. A viewer's only route back to the map was `resolvePlace()` doing
+best-effort string matching, client-side, on the Discover sports card only.
+
+### Every form with a location field (the runbook asked for this list)
+1. **`src/components/events/new-event-form.tsx`** — the one events form, used for standalone,
+   community *and* society events (a `communityId` prop switches context). Plain text input.
+2. **Discover sports intent** — `CampusPlaceField` in
+   `src/components/discover/post-intent-fields.tsx`, driven by the `place` field spec in
+   `src/lib/smart-match/modes.ts`. Quick-select chips that just typed a name into a text box.
+
+**There is no event-type intent in Discover.** The runbook says "the event and sports forms in
+Discover's post flow", but Discover's modes are `project_partner`, `fyp_teammate`,
+`hackathon_team`, `sports`, `recruitment`, and only `sports` has a location field. Events are a
+separate `/events/new` form. Both real surfaces are covered; the third does not exist.
+Confirmed to have **no** location field: help requests, society announcements, the feed composer.
+
+### Design decisions (mine, all defaulted per the runbook)
+- **Coordinates are percentages of `public/map.png` (0-100), not lat/lng** — matching
+  `src/lib/map/places.ts`. Stored explicitly (`place_x`, `place_y`) rather than derived from
+  `place_id` at read time, so a post keeps the pin it was created with even if the places dataset
+  is later renumbered.
+- **The existing text label columns are kept and still written.** `events.location` and
+  `smart_match_posts.place` are unchanged, with the pin travelling alongside. This is why no
+  existing read path, admin view or payload mapping needed touching.
+- **Selection is restricted to the ~21 known campus places.** `CampusMapViewer` has no
+  arbitrary-point mode, the dataset is a fixed known-place list with search and type filters, and
+  a free-dropped pin would produce locations the app cannot name or search. So "snap to a known
+  place when close" degenerates to "pick a place" on this map. Logged as a deliberate reading of
+  the requirement rather than a silent narrowing.
+- **I did not rewrite `create_smart_match_post` / `update_smart_match_post`.** Both are long
+  SECURITY DEFINER functions that map a jsonb payload key-by-key; reproducing them verbatim to add
+  three keys is a large blast radius for a small change. Instead 0138 adds a narrow,
+  author-checked `set_smart_match_post_place(id, place_id, x, y)` which the action calls
+  immediately after create/update. It accepts all-nulls so clearing a pin works, and a failure
+  there never fails the post (the label is already saved).
+- A `CHECK` constraint on both tables rejects coordinates outside 0-100, so a malicious client
+  cannot write a pin off the map.
+
+### The half that was missing before, and nearly was again
+The runbook is explicit that viewers seeing the pin is not optional. The delegated agent built
+the picker and the viewer links, then **reported honestly that it could not finish this half**:
+`get_unified_discover_feed`'s `RETURNS TABLE` predates 0138, so `place_id/x/y` never reached the
+client, and the pin-first link only worked for an author reading their own posts (`select *`).
+Migrations are mine, so I closed it with **0141**, which drops and recreates the function (a
+return type cannot be altered by `CREATE OR REPLACE`) with the three columns added and the
+fix-043 cohort predicate carried forward unchanged. The client already read `r.place_id`,
+`r.place_x`, `r.place_y`, so it lit up with no further code change.
+
+### Verified by executing, as a viewer rather than the author
+Probe transaction (terminal `RAISE` forces rollback) inserted a sports post pinned to Futsal
+Ground and read it back through the deck **as a different user**:
+
+```
+POST-0141 -> cohort_sees_fyp=1  OUTSIDER_sees_fyp=0  outsider_sees_sports=1
+             pin_reaches_viewer=[futsal-ground @ 11.00,89.00]
+```
+
+So a viewer genuinely receives the pinned place id and its coordinates — the end-to-end
+requirement — and the same probe re-confirms fix-043's filter survived 0141's DROP/CREATE.
+`npm run build` succeeds.
+Notes: **NEEDS-CLICK** for the picker's feel (opening the sheet, tapping a marker, confirming) and
+for the tap-through actually focusing the pin on `/map`. The data path is proven in both
+directions; the interaction is not. `/map` already accepted `?place=` (via `resolvePlace`, which
+takes an id, name or alias), so no map-page change was needed.
+Also note `src/components/societies/event-mini.tsx` had to be restructured — an `<a>` cannot nest
+inside the card's own `<a>` — so the location is now a sibling link rather than nested.

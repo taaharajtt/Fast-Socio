@@ -38,6 +38,10 @@ export type SmartMatchPost = {
   interests: string[];
   rolesNeeded: string[];
   place: string | null;
+  /** Known campus place id + coordinates (mig 0138), when a pin was set. */
+  placeId: string | null;
+  placeX: number | null;
+  placeY: number | null;
   scheduledAt: string | null;
   hackathonName: string | null;
   hackathonUrl: string | null;

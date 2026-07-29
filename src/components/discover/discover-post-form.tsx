@@ -84,6 +84,11 @@ function DiscoverPostFormBody({
     }
     if (kind === "sports") {
       init.semester = String(editing?.semester ?? viewer.semester ?? "");
+      if (editing?.placeId) {
+        init.place_id = editing.placeId;
+        init.place_x = editing.placeX != null ? String(editing.placeX) : "";
+        init.place_y = editing.placeY != null ? String(editing.placeY) : "";
+      }
     }
     return init;
   });
@@ -175,6 +180,17 @@ function DiscoverPostFormBody({
               onChange={(v) => set(f.key, v)}
               team={team}
               onTeam={setTeam}
+              onPlace={
+                f.type === "place"
+                  ? (p) =>
+                      setValues((prev) => ({
+                        ...prev,
+                        place_id: p?.placeId ?? "",
+                        place_x: p ? String(p.x) : "",
+                        place_y: p ? String(p.y) : "",
+                      }))
+                  : undefined
+              }
             />
           ))}
 

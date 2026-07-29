@@ -2,7 +2,6 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { GlassCard } from "@/components/ui";
 import { glassButton } from "@/components/ui/glass-button";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { SignOutButton } from "@/components/sign-out-button";
 import { DeleteAccountButton } from "@/components/delete-account-button";
 import { NotificationPrefs } from "@/components/settings/notification-prefs";
@@ -62,7 +61,6 @@ export default async function SettingsPage() {
       <section className="mt-5 space-y-2">
         <h2 className="text-sm font-medium text-fg-muted">Appearance</h2>
         <GlassCard className="space-y-5 p-5">
-          <ThemeToggle />
           <AppearanceSettings />
         </GlassCard>
       </section>

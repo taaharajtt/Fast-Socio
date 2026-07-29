@@ -24,6 +24,7 @@ export function EventOverviewTab({
   description,
   formattedDate,
   location,
+  placeId,
   attendeeCount,
   capacity,
   host,
@@ -46,6 +47,8 @@ export function EventOverviewTab({
   description: string | null;
   formattedDate: string;
   location: string | null;
+  /** Known campus place id (mig 0138) — set when the host pinned a location. */
+  placeId?: string | null;
   attendeeCount: number;
   capacity: number | null;
   host: { id: string; full_name: string | null; avatar_url: string | null; gender: string | null } | null;
@@ -72,10 +75,20 @@ export function EventOverviewTab({
             {formattedDate}
           </p>
           {location && (
-            <p className="flex items-center gap-2">
-              <MapPin className="h-4 w-4" aria-hidden />
-              {location}
-            </p>
+            placeId ? (
+              <Link
+                href={`/map?place=${encodeURIComponent(placeId)}`}
+                className="flex items-center gap-2 text-aura hover:underline"
+              >
+                <MapPin className="h-4 w-4" aria-hidden />
+                {location}
+              </Link>
+            ) : (
+              <p className="flex items-center gap-2">
+                <MapPin className="h-4 w-4" aria-hidden />
+                {location}
+              </p>
+            )
           )}
           <Link
             href={`/events/${eventId}/attendees`}

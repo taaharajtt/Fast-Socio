@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { createEvent } from "@/app/(student)/events/actions";
 import { CoverUpload } from "@/components/communities/cover-upload";
 import { EVENT_CATEGORIES } from "@/lib/events/constants";
+import { LocationPicker, type PickedPlace } from "@/components/map/location-picker";
 
 /**
  * `communityId` arrives pre-verified from the server page (null unless the
@@ -25,7 +26,7 @@ export function NewEventForm({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState<string>("Social");
-  const [location, setLocation] = useState("");
+  const [place, setPlace] = useState<PickedPlace | null>(null);
   const [startsAt, setStartsAt] = useState("");
   const [capacity, setCapacity] = useState("");
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
@@ -40,7 +41,10 @@ export function NewEventForm({
         title,
         description,
         category,
-        location,
+        location: place?.label ?? "",
+        placeId: place?.placeId ?? null,
+        placeX: place?.x ?? null,
+        placeY: place?.y ?? null,
         startsAt,
         coverUrl,
         communityId,
@@ -128,11 +132,10 @@ export function NewEventForm({
             <label htmlFor="loc" className="text-sm font-medium">
               Location
             </label>
-            <GlassInput
-              id="loc"
+            <LocationPicker
+              value={place}
+              onChange={setPlace}
               placeholder="e.g. C-Block Auditorium"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
             />
           </div>
 

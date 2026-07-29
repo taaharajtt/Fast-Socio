@@ -4,8 +4,9 @@ import { useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { GlassInput } from "@/components/ui";
 import { TeamMemberMentions } from "@/components/discover/team-member-mentions";
+import { LocationPicker, type PickedPlace } from "@/components/map/location-picker";
 import { ALL_DEGREES, getDegreesForSchool } from "@/lib/profile/constants";
-import { CAMPUS_MAP_PLACES } from "@/lib/map/places";
+import { resolvePlace } from "@/lib/map/places";
 import type { FieldSpec } from "@/lib/smart-match/modes";
 import type { TeamMember } from "@/lib/smart-match/types";
 
@@ -39,12 +40,15 @@ export function FormField({
   onChange,
   team,
   onTeam,
+  onPlace,
 }: {
   field: FieldSpec;
   value: string | string[] | undefined;
   onChange: (v: string | string[]) => void;
   team: TeamMember[];
   onTeam: (m: TeamMember[]) => void;
+  /** Only used by "place" fields: also reports the picked place's id/x/y. */
+  onPlace?: (p: PickedPlace | null) => void;
 }) {
   if (field.type === "mentions") {
     return (
@@ -59,6 +63,7 @@ export function FormField({
         <CampusPlaceField
           value={typeof value === "string" ? value : ""}
           onChange={onChange}
+          onPlace={onPlace}
           placeholder={field.placeholder}
         />
       </Field>
@@ -257,46 +262,36 @@ export function DegreeCapsulePicker({
 }
 
 /**
- * Sports "Where" field: tap a known campus sports spot (from `CAMPUS_MAP_PLACES`)
- * to fill the text box, or just type a custom spot name — the value is always
- * a plain string (the place's name when tapped), so `resolvePlace` can turn it
- * back into a map pin later without a separate place-id column.
+ * Sports "Where" field: pick a known campus spot from the map. The form value
+ * stays a plain string (the place's name) — `create_smart_match_post` /
+ * `update_smart_match_post` map `place` straight onto a text column and are
+ * not touched by this feature — while `onPlace` separately reports the
+ * picked place's id/x/y so the caller can persist the real pin via
+ * `set_smart_match_post_place` after the post is saved.
  */
 export function CampusPlaceField({
   value,
   onChange,
+  onPlace,
   placeholder,
 }: {
   value: string;
   onChange: (v: string) => void;
+  onPlace?: (p: PickedPlace | null) => void;
   placeholder?: string;
 }) {
-  const sportsPlaces = CAMPUS_MAP_PLACES.filter((p) => p.type === "sports");
+  const resolved = value ? resolvePlace(value) : null;
+  const picked = value
+    ? { placeId: resolved?.id ?? "", label: value, x: resolved?.x ?? 0, y: resolved?.y ?? 0 }
+    : null;
   return (
-    <div>
-      <div className="mb-2 flex flex-wrap gap-2">
-        {sportsPlaces.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            onClick={() => onChange(p.name)}
-            aria-pressed={value === p.name}
-            className={
-              value === p.name
-                ? "gradient-brand rounded-full px-3 py-1.5 text-xs font-bold text-white"
-                : "glass rounded-full px-3 py-1.5 text-xs font-medium text-fg-muted hover:text-fg"
-            }
-          >
-            {p.shortLabel}
-          </button>
-        ))}
-      </div>
-      <GlassInput
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        data-no-drag
-      />
-    </div>
+    <LocationPicker
+      value={picked}
+      onChange={(next) => {
+        onChange(next?.label ?? "");
+        onPlace?.(next);
+      }}
+      placeholder={placeholder}
+    />
   );
 }

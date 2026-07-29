@@ -20,14 +20,7 @@ export function SectionLogo() {
         alt=""
         width={512}
         height={256}
-        className="hidden h-6 w-auto dark:block"
-      />
-      <Image
-        src="/brand/logo1.png"
-        alt=""
-        width={512}
-        height={256}
-        className="block h-6 w-auto dark:hidden"
+        className="h-6 w-auto"
       />
     </span>
   );

@@ -94,6 +94,9 @@ type PostRow = {
   interests: string[] | null;
   roles_needed: string[] | null;
   place: string | null;
+  place_id?: string | null;
+  place_x?: number | null;
+  place_y?: number | null;
   scheduled_at: string | null;
   hackathon_name: string | null;
   hackathon_url: string | null;
@@ -150,6 +153,13 @@ function mapPost(r: PostRow): SmartMatchPost {
     interests: r.interests ?? [],
     rolesNeeded: r.roles_needed ?? [],
     place: r.place,
+    // Only present on rows selected with "*" (own posts) — the shared feed
+    // RPC's return table predates mig 0138 and isn't in scope here (no
+    // migrations may be written for this task), so cards fed from it fall
+    // back to string-matching `place` via resolvePlace().
+    placeId: r.place_id ?? null,
+    placeX: r.place_x ?? null,
+    placeY: r.place_y ?? null,
     scheduledAt: r.scheduled_at,
     hackathonName: r.hackathon_name,
     hackathonUrl: r.hackathon_url,
@@ -529,15 +539,51 @@ export async function createDiscoverPost(
   if (!allowed) return { ok: false, error: "Too many posts for now." };
 
   const supabase = await createClient();
-  const { error } = await supabase.rpc("create_smart_match_post", {
+  const { data, error } = await supabase.rpc("create_smart_match_post", {
     p_mode: kind,
     p_payload: buildPostPayload(kind, values),
     p_team_member_ids: teamMemberIds.slice(0, 20),
   });
   if (error) return { ok: false, error: friendly(error.message) };
+
+  await savePostPlace(kind, data as string | null, values);
+
   revalidatePath("/discover");
   revalidatePath("/discover/post");
   return { ok: true };
+}
+
+/**
+ * Persist the picked place's id/x/y (from LocationPicker via `onPlace`, see
+ * post-intent-fields.tsx) onto a just-created/updated post. Only Sports posts
+ * carry a "place" field today. This never fails the outer create/update — the
+ * post (and its text `place` label) is already saved by that point, so a pin
+ * write failure is logged and swallowed rather than surfaced as a post error.
+ */
+async function savePostPlace(
+  kind: PostMode,
+  postId: string | null,
+  values: PostFormValues
+): Promise<void> {
+  // Only Sports posts have a "place" field, and only when the author actually
+  // touched LocationPicker (onPlace) does `place_id` show up on `values` at
+  // all — untouched forms never call this RPC, on create or edit.
+  if (kind !== "sports" || !postId || !("place_id" in values)) return;
+  const placeId = typeof values.place_id === "string" ? values.place_id.trim() : "";
+  // Empty string means the author cleared the pin — pass nulls through so
+  // set_smart_match_post_place removes it rather than leaving a stale pin.
+  const x = placeId ? Number(values.place_x) : null;
+  const y = placeId ? Number(values.place_y) : null;
+  if (placeId && (!Number.isFinite(x) || !Number.isFinite(y))) return;
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_smart_match_post_place", {
+    p_id: postId,
+    p_place_id: placeId || null,
+    p_x: x,
+    p_y: y,
+  });
+  if (error) console.error("set_smart_match_post_place failed:", error.message);
 }
 
 /** Update one of the caller's own posts. */
@@ -558,6 +604,9 @@ export async function updateDiscoverPost(
     p_team_member_ids: teamMemberIds ? teamMemberIds.slice(0, 20) : null,
   });
   if (error) return { ok: false, error: friendly(error.message) };
+
+  await savePostPlace(kind, postId, values);
+
   revalidatePath("/discover");
   revalidatePath("/discover/post");
   return { ok: true };
