@@ -60,7 +60,7 @@ export default function CommunitiesPage() {
     <main className="mx-auto w-full max-w-md px-4 py-6">
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2.5">
-          <SectionLogo />
+          <SectionLogo name="community" />
           <div>
             <h1 className="text-[22px] font-bold tracking-tight">Community</h1>
             <Suspense fallback={<p className="mt-1 text-sm text-fg-muted">What do you want?</p>}>

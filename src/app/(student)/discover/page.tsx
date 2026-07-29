@@ -32,7 +32,7 @@ export default function DiscoverPage() {
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col px-4 py-3">
       <header className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <SectionLogo />
+          <SectionLogo name="discover" />
           <h1 className="text-lg font-bold tracking-tight">Discover</h1>
         </div>
         <Suspense fallback={<PostIntentButton />}>

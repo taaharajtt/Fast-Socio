@@ -1,4 +1,4 @@
-import { HandHeart } from "lucide-react";
+import { SectionLogo } from "@/components/ui/section-logo";
 import { CampusHelpShell } from "@/components/help/campus-help-shell";
 import type { SocioFilters } from "@/components/help/help-filters";
 import { isHelpCategory } from "@/lib/help/logic";
@@ -30,9 +30,7 @@ export default async function HelpPage({
   return (
     <main className="mx-auto w-full max-w-md px-4 py-6">
       <div className="mb-4 flex items-center gap-2.5">
-        <span className="gradient-brand flex h-10 w-10 items-center justify-center rounded-[14px] shadow-[0_8px_24px_rgba(124,92,255,0.35)]">
-          <HandHeart className="h-5 w-5 text-white" aria-hidden />
-        </span>
+        <SectionLogo name="help" />
         <div>
           <h1 className="text-[22px] font-bold leading-tight tracking-tight">
             Campus Help
