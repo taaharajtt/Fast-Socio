@@ -373,6 +373,40 @@ function revalidateCommunity(communityId: string) {
   revalidatePath(`/chat/c/${communityId}`);
 }
 
+/**
+ * Delete a chat room — OWNER only, consistent with fix-031 (a moderator does
+ * not get this). Everything hanging off the room already cascades from
+ * `communities`: messages, reads, followers, members, join requests, polls,
+ * posts and — since mig 0132 — the notifications pointing at it. Events and
+ * Discover posts deliberately survive with a null reference. `delete_chat_room`
+ * (mig 0135) re-checks ownership and refuses societies and Discover team rooms,
+ * which have their own lifecycles.
+ */
+export async function deleteChatRoom(
+  communityId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const uid = await getAuthUserId();
+  if (!uid) return { ok: false, error: "Not signed in." };
+
+  const { error } = await supabase.rpc("delete_chat_room", {
+    p_id: communityId,
+  });
+  if (error)
+    return {
+      ok: false,
+      error: error.message.includes("not authorized")
+        ? "Only the owner can delete this chat room."
+        : error.message,
+    };
+
+  // Every member's inbox and the discovery list both drop it.
+  revalidatePath("/communities");
+  revalidatePath("/chat");
+  revalidatePath(`/chat/c/${communityId}`);
+  return { ok: true };
+}
+
 /** Report a community (target_type = 'community'), feeds /admin/reports?type=community. */
 export async function reportCommunity(
   communityId: string,

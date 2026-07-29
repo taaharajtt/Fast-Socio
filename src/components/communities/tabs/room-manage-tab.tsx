@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { DoorOpen, Pencil, Users } from "lucide-react";
+import { AlertTriangle, DoorOpen, Pencil, Users } from "lucide-react";
+import { DeleteChatRoom } from "@/components/communities/delete-chat-room";
 import { JoinRequestQueue } from "@/components/communities/join-request-queue";
 import { MemberAccessList } from "@/components/communities/member-access-list";
 import type { CommunityMemberVM } from "@/components/communities/member-row";
@@ -37,11 +38,14 @@ function Section({
  */
 export function RoomManageTab({
   communityId,
+  name,
   isOwner,
   joinRequests,
   members,
 }: {
   communityId: string;
+  /** Typed back by the owner to confirm deletion. */
+  name: string;
   isOwner: boolean;
   joinRequests: JoinRequestVM[];
   members: CommunityMemberVM[];
@@ -77,6 +81,26 @@ export function RoomManageTab({
             Edit chat room
           </Link>
         </Section>
+      )}
+
+      {/* Danger Zone last, and owner-only — a moderator never sees it
+          (fix-030, consistent with fix-031's owner-only rule). */}
+      {isOwner && (
+        <section className="rounded-[16px] border border-error/30 bg-error/5 p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="text-error">
+              <AlertTriangle className="h-4 w-4" aria-hidden />
+            </span>
+            <div>
+              <h2 className="text-sm font-bold text-error">Danger zone</h2>
+              <p className="text-xs text-fg-muted">
+                Deleting the room removes its messages and members for everyone.
+                This can&apos;t be undone.
+              </p>
+            </div>
+          </div>
+          <DeleteChatRoom communityId={communityId} name={name} />
+        </section>
       )}
     </div>
   );

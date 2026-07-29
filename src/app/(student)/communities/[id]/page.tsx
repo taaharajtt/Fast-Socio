@@ -121,6 +121,7 @@ export default async function CommunityPage({
       content: (
         <RoomManageTab
           communityId={id}
+          name={community.name}
           isOwner={rel.isOwner}
           joinRequests={joinRequests}
           members={members}

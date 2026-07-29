@@ -358,20 +358,19 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
 
       {/* Gender */}
       <div className="space-y-2">
-        <label className="text-sm font-medium">
-          Gender <span className="text-fg-muted">(optional)</span>
-        </label>
+        <label className="text-sm font-medium">Gender</label>
         <div className="flex flex-wrap gap-2">
           {GENDERS.map((g) => (
             <Pill
               key={g.value}
               active={gender === g.value}
-              onClick={() => setGender(gender === g.value ? null : g.value)}
+              onClick={() => setGender(g.value)}
             >
               {g.label}
             </Pill>
           ))}
         </div>
+        {genderError && <p className="text-xs text-error">{genderError}</p>}
       </div>
 
       {/* Interests */}
@@ -379,10 +378,10 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
         <label className="text-sm font-medium">
           Interests{" "}
           <span className="text-fg-muted">
-            (pick {MIN_INTERESTS}–{MAX_INTERESTS} · {interests.length} selected)
+            (pick at least {MIN_INTERESTS} · {interests.length} selected)
           </span>
         </label>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex max-h-72 flex-wrap gap-2 overflow-y-auto pr-1">
           {INTERESTS.map((tag) => (
             <Pill
               key={tag}
@@ -393,6 +392,9 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
             </Pill>
           ))}
         </div>
+        {interestsError && (
+          <p className="text-xs text-error">{interestsError}</p>
+        )}
       </div>
 
       {error && <p className="text-sm text-error">{error}</p>}
