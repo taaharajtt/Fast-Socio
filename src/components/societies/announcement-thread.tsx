@@ -36,9 +36,15 @@ export function AnnouncementThread({
     () => [...announcements].reverse()
   );
 
-  useEffect(() => {
+  // Local state, because realtime appends to it — but it must still follow the
+  // server's list when a revalidation hands down fresh props. React's documented
+  // "adjust state during render" pattern, rather than an effect that setStates
+  // synchronously and costs an extra render pass every time.
+  const [seen, setSeen] = useState(announcements);
+  if (seen !== announcements) {
+    setSeen(announcements);
     setMessages([...announcements].reverse());
-  }, [announcements]);
+  }
 
   const listRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<ReturnType<

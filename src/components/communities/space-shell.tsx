@@ -46,6 +46,12 @@ export function SpaceShell({
   const keys = tabs.map((t) => t.key).join(",");
   useEffect(() => {
     const want = new URLSearchParams(window.location.search).get("tab");
+    // A one-shot sync from the URL on mount. It cannot be a state initialiser
+    // or a during-render adjustment because `window` does not exist while this
+    // is prerendered, and it deliberately is not `useSearchParams`, which would
+    // need a Suspense boundary under Cache Components. One extra render on
+    // mount is the intended cost.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (want && keys.split(",").includes(want)) setActive(want);
   }, [keys]);
   const scrolls = tabs.length > EQUAL_WIDTH_MAX;
