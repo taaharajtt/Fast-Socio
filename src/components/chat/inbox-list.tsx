@@ -6,7 +6,6 @@ import { RequestRow } from "@/components/chat/request-row";
 import { OpenChatButton } from "@/components/chat/open-chat-button";
 import { AppImage } from "@/components/ui/app-image";
 import { resolveAvatarUrl } from "@/lib/avatar";
-import { GlassChip } from "@/components/ui";
 import { OnlineDot } from "@/components/ui/badges";
 import { communityIcon } from "@/lib/communities/icon";
 import { discoverGroupLabel } from "@/lib/discover/group-label";
@@ -197,9 +196,9 @@ export function InboxList({
                           {discoverGroupLabel(t.space.discover_mode)}
                         </span>
                       ) : (
-                        <GlassChip className="shrink-0 px-2 py-0.5 text-[10px]">
+                        <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold text-white">
                           Community
-                        </GlassChip>
+                        </span>
                       )}
                       <span className="truncate text-[15px] font-semibold text-fg">
                         {t.space.name}

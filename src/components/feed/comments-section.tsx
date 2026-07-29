@@ -9,6 +9,7 @@ import {
 } from "@/components/feed/comment-thread";
 import { AddComment } from "@/components/feed/add-comment";
 import type { FeedComment } from "@/app/(student)/home/actions";
+import { useHashTarget } from "@/lib/use-hash-target";
 
 /**
  * Owns the reply target shared between the thread and the composer, so tapping
@@ -41,6 +42,10 @@ export function CommentsSection({
   const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null);
   const threadRef = useRef<CommentThreadHandle>(null);
   const isSheet = variant === "sheet";
+
+  // Jump-and-highlight a comment/reply linked to by notification deep links
+  // ("/post/<id>#comment-<commentId>").
+  useHashTarget();
 
   return (
     <div className={isSheet ? "flex min-h-0 flex-1 flex-col" : "flex flex-1 flex-col"}>

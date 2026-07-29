@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 export type SpaceShellTab = {
@@ -38,6 +38,16 @@ export function SpaceShell({
 }) {
   const [active, setActive] = useState(tabs[0]?.key);
   const activeTab = tabs.find((t) => t.key === active) ?? tabs[0];
+
+  // Deep links open a specific tab: a "asked to join your community"
+  // notification must land on Manage, not Overview (fix-005). Read after mount
+  // from `window.location` rather than `useSearchParams`, so this stays out of
+  // the prerender path and needs no extra Suspense boundary under PPR.
+  const keys = tabs.map((t) => t.key).join(",");
+  useEffect(() => {
+    const want = new URLSearchParams(window.location.search).get("tab");
+    if (want && keys.split(",").includes(want)) setActive(want);
+  }, [keys]);
   const scrolls = tabs.length > EQUAL_WIDTH_MAX;
 
   return (

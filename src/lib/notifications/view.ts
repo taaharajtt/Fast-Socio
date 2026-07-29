@@ -1,3 +1,10 @@
+﻿import {
+  actorSummary,
+  isNotificationType,
+  notificationCopy,
+  notificationHref,
+} from "@/lib/notifications/copy";
+
 /**
  * Notification types that are NOT tied to a specific "actor doing something to
  * you" and must never be bundled (CR-013): system events shown individually.
@@ -198,17 +205,14 @@ export function notificationCategory(type: string): ActivityCategory {
   }
 }
 
-/** "Alice", "Alice and 1 other", "Alice and 4 others" for a grouped count. */
-function actorSummary(actorName: string | null, count: number): string {
-  const who = actorName ?? "Someone";
-  if (count <= 1) return who;
-  const others = count - 1;
-  return `${who} and ${others} other${others === 1 ? "" : "s"}`;
-}
-
 /**
- * Maps a notification (type + actor + data) to display text and a link. `count`
- * is the collapsed group_count (Phase 7) — 1 for ungrouped notifications.
+ * Display text + destination for a notification. Both come from
+ * `@/lib/notifications/copy`, which switches exhaustively over the known type
+ * union — this wrapper exists only to absorb the fact that `notifications.type`
+ * is untyped `text` in the database, so a row written by a future migration
+ * cannot crash a render before its copy lands here.
+ *
+ * `count` is the collapsed group_count (1 for ungrouped notifications).
  */
 export function notificationView(
   type: string,
@@ -216,217 +220,14 @@ export function notificationView(
   data: Record<string, unknown>,
   count = 1
 ): { text: string; href: string } {
-  const who = actorSummary(actorName, count);
-  switch (type) {
-    case "match":
-      return { text: `You matched with ${who}!`, href: "/chat" };
-    case "message_request":
-      return { text: `${who} sent you a message request`, href: "/chat" };
-    case "matching_request":
-      return {
-        text: `${who} wants to connect`,
-        href: "/discover",
-      };
-    case "matching_accepted":
-      return {
-        text: `${who} accepted your request 🎉`,
-        href: "/discover",
-      };
-    case "message":
-      return {
-        text: `${who} sent you a message`,
-        href: data.conversation_id ? `/chat/${data.conversation_id}` : "/chat",
-      };
-    case "post_like":
-      return {
-        text: `${who} reacted to your ${data.community_id ? "community post" : "post"}`,
-        href: data.post_id ? `/post/${data.post_id}` : "/home",
-      };
-    case "comment":
-      return {
-        text: `${who} replied to your ${data.community_id ? "community post" : "post"}`,
-        href: data.post_id ? `/post/${data.post_id}` : "/home",
-      };
-    case "comment_reply":
-      return {
-        text: `${who} replied to your comment`,
-        href: data.post_id ? `/post/${data.post_id}` : "/home",
-      };
-    case "mention":
-      return {
-        text: `${who} mentioned you in a comment`,
-        href: data.post_id ? `/post/${data.post_id}` : "/home",
-      };
-    case "match_post":
-      return {
-        text: `${who} shared a new post`,
-        href: data.post_id ? `/post/${data.post_id}` : "/home",
-      };
-    case "community_approved":
-      return {
-        text: "Your community was approved 🎉",
-        href: data.community_id
-          ? `/communities/${data.community_id}`
-          : "/communities",
-      };
-    case "event_approved":
-      return {
-        text: "Your event was approved 🎉",
-        href: data.event_id ? `/events/${data.event_id}` : "/communities",
-      };
-    case "community_post_approved":
-      return {
-        text: `${who} approved your community post ✅`,
-        href: data.community_id
-          ? `/communities/${data.community_id}`
-          : "/communities",
-      };
-    case "community_post_rejected":
-      return {
-        text: `${who} rejected your community post`,
-        href: data.community_id
-          ? `/communities/${data.community_id}`
-          : "/communities",
-      };
-    case "level_up":
-      return {
-        text: `You reached level ${data.level ?? ""}! 🎉`.replace("  ", " "),
-        href: "/profile/aura",
-      };
-    case "achievement":
-      return {
-        text: `Badge earned: ${data.title ?? "a new badge"} 🏅`,
-        href: "/profile/badges",
-      };
-    case "waitlist_promoted":
-      return {
-        text: "A seat opened up — you're in! 🎟️",
-        href: data.event_id ? `/events/${data.event_id}` : "/communities",
-      };
-    case "event_reminder":
-      return {
-        text:
-          data.kind === "1h"
-            ? "An event you're attending starts within the hour ⏰"
-            : "An event you're attending is coming up tomorrow ⏰",
-        href: data.event_id ? `/events/${data.event_id}` : "/communities",
-      };
-    case "moderation_warning":
-      return {
-        text: `You received a moderation warning${
-          data.level ? ` (strike ${data.level})` : ""
-        }. Tap to appeal.`,
-        href: "/appeals",
-      };
-    case "appeal_result":
-      return {
-        text: data.approved
-          ? "Your appeal was approved ✅"
-          : "Your appeal was reviewed and declined.",
-        href: "/appeals",
-      };
-    case "help_response": {
-      const helpWho =
-        actorName === null || data.is_anonymous ? "An Anonymous Student" : who;
-      return {
-        text: `${helpWho} responded to your help request`,
-        href: data.request_id ? `/help/${data.request_id}` : "/help",
-      };
-    }
-    case "community_message": {
-      const communityWho =
-        actorName === null || data.is_anonymous ? "Someone" : who;
-      const communityName = data.community_name ? ` in ${data.community_name}` : "";
-      return {
-        text: `${communityWho} sent a message${communityName}`,
-        href: data.community_id ? `/communities/${data.community_id}` : "/chat",
-      };
-    }
-    case "community_post": {
-      const communityName = data.community_name ? ` in ${data.community_name}` : "";
-      return {
-        text: `${who} posted${communityName}`,
-        href: data.community_id ? `/communities/${data.community_id}` : "/communities",
-      };
-    }
-    case "community_post_review": {
-      const reviewWho =
-        actorName === null || data.is_anonymous ? "Someone" : who;
-      const communityName = data.community_name ?? "your community";
-      return {
-        text: `${reviewWho} submitted a post for review in ${communityName}`,
-        href: data.community_id
-          ? `/communities/${data.community_id}?tab=review`
-          : "/communities",
-      };
-    }
-    case "community_join_request":
-      return {
-        text: `${who} asked to join your community`,
-        href: data.community_id
-          ? `/communities/${data.community_id}`
-          : "/communities",
-      };
-    case "community_join_approved":
-      return {
-        text: "You're in — your join request was approved 🎉",
-        href: data.community_id
-          ? `/communities/${data.community_id}`
-          : "/communities",
-      };
-    case "event_post_request":
-      return {
-        text: `${who} wants to post in your event`,
-        href: data.event_id ? `/events/${data.event_id}` : "/communities",
-      };
-    case "help_follow":
-      return {
-        text: `${who} is following your help request`,
-        href: data.request_id ? `/help/${data.request_id}` : "/help",
-      };
-    case "help_thanked":
-      return {
-        text: "You were thanked for helping 🙏 (+15 Aura)",
-        href: data.request_id ? `/help/${data.request_id}` : "/help",
-      };
-    case "help_offer_accepted":
-      return {
-        text: `${who} approved your offer to help — say hi 👋`,
-        href: data.request_id ? `/help/${data.request_id}` : "/help",
-      };
-    case "help_resolved":
-      return {
-        text: "A request you follow was resolved ✅",
-        href: data.request_id ? `/help/${data.request_id}` : "/help",
-      };
-    case "society_announcement":
-      return {
-        text: `${who} posted a society announcement 📣`,
-        href: data.society_id
-          ? `/societies/${data.society_id}`
-          : "/communities",
-      };
-    case "society_role":
-      return {
-        text: "You were appointed a society officer 🎖️",
-        href: data.society_id ? `/societies/${data.society_id}` : "/communities",
-      };
-    case "smart_match_application":
-      return {
-        text: `${who} wants to join your post`,
-        href: "/discover",
-      };
-    case "smart_match_accepted":
-      return {
-        text: `${who} accepted your request 🎉`,
-        href: "/discover",
-      };
-    case "smart_match_mention":
-      return {
-        text: `${who} tagged you as a teammate`,
-        href: "/discover",
-      };
-    default:
-      return { text: "New notification", href: "/home" };
+  if (!isNotificationType(type)) {
+    // Deliberately generic, and deliberately unreachable for every type the
+    // system emits today — see NOTIFICATION_TYPES.
+    return { text: `${actorSummary(actorName, count)} sent you an update`, href: "/home" };
   }
+  return {
+    text: notificationCopy(type, actorName, data, count),
+    href: notificationHref(type, data),
+  };
 }
+

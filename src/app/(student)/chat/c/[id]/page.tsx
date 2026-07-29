@@ -5,7 +5,6 @@ import { CommunityThread } from "@/components/chat/community-thread";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { AppImage } from "@/components/ui/app-image";
-import { GlassChip } from "@/components/ui";
 import { communityIcon } from "@/lib/communities/icon";
 import { discoverGroupLabel } from "@/lib/discover/group-label";
 import { DiscoverGroupAvatar } from "@/components/discover/discover-group-avatar";
@@ -137,7 +136,9 @@ export default async function CommunityConversationPage({
                   {discoverGroupLabel(community.discover_mode)}
                 </span>
               ) : (
-                <GlassChip className="shrink-0">Community</GlassChip>
+                <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold text-white">
+                  Community
+                </span>
               )}
               <span className="truncate font-semibold">{community.name}</span>
             </span>

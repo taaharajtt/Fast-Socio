@@ -1,39 +1,23 @@
-import { AppImage } from "@/components/ui/app-image";
+import { Zap } from "lucide-react";
 
 /**
- * The face of a Discover team room: the FAST SOCIO mark rather than a
- * user-supplied image, because these rooms are minted by the app and never get
- * an avatar of their own.
+ * The face of a Discover team room: an app-icon mark rather than a
+ * user-supplied image, because these rooms are minted by the app and never
+ * get an avatar of their own.
  *
- * Theme-aware the same way the home header is (UAT-006) — logo.png on dark,
- * logo1.png on light, swapped with CSS alone so there is no hydration flash.
- * The mark is wide, so it's contained-and-padded inside the circle instead of
- * cover-cropped to a sliver.
+ * Renders the lightning-bolt glyph on a brand-purple circle — not the
+ * "FAST SOCIO" wordmark (`/brand/logo.png`), which is illegible once
+ * squashed into a 32-48px circle.
  */
 export function DiscoverGroupAvatar({ sizes, priority }: {
   sizes: string;
   priority?: boolean;
 }) {
+  void sizes;
+  void priority;
   return (
-    <>
-      <span className="absolute inset-0 hidden dark:block">
-        <AppImage
-          src="/brand/logo.png"
-          alt=""
-          sizes={sizes}
-          priority={priority}
-          className="object-contain p-1"
-        />
-      </span>
-      <span className="absolute inset-0 block dark:hidden">
-        <AppImage
-          src="/brand/logo1.png"
-          alt=""
-          sizes={sizes}
-          priority={priority}
-          className="object-contain p-1"
-        />
-      </span>
-    </>
+    <span className="gradient-brand absolute inset-0 flex items-center justify-center">
+      <Zap className="h-1/2 w-1/2 fill-white text-white" aria-hidden="true" />
+    </span>
   );
 }

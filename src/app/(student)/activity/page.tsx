@@ -90,7 +90,9 @@ export default async function ActivityPage() {
   // mobile push. Admin broadcasts (type 'announcement') are delivered as a
   // cold-open modal instead (UAT-012), so they're excluded here too.
   const { data: rows } = await supabase
-    .from("notifications")
+    // notifications_live (mig 0132) hides any row whose subject has been
+    // deleted, so a notification never outlives the thing it points at.
+    .from("notifications_live")
     .select("id, actor_id, type, data, group_count, read_at, created_at")
     .eq("user_id", me)
     .not("type", "in", "(message,message_request,announcement)")

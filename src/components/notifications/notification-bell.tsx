@@ -34,13 +34,13 @@ export async function NotificationBell() {
   // badge) and only surface as mobile push.
   const [{ count }, { data: rows }] = await Promise.all([
     supabase
-      .from("notifications")
+      .from("notifications_live")
       .select("id", { count: "exact", head: true })
       .eq("user_id", user!.id)
       .is("read_at", null)
       .not("type", "in", "(message,message_request)"),
     supabase
-      .from("notifications")
+      .from("notifications_live")
       .select("id, actor_id, type, data, group_count, read_at, created_at")
       .eq("user_id", user!.id)
       .not("type", "in", "(message,message_request)")

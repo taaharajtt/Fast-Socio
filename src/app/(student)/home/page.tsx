@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Activity, MapPinned } from "lucide-react";
+import { Bell, MapPin } from "lucide-react";
 import { HomeFeed } from "@/components/feed/home-feed";
 import { FirstRunTour } from "@/components/tour/first-run-tour";
 import { NewFeaturesTour } from "@/components/tour/new-features-tour";
@@ -72,7 +72,7 @@ export default function HomePage() {
             aria-label="Campus Map"
             className="glass flex h-9 w-9 items-center justify-center rounded-full text-fg-muted hover:text-fg"
           >
-            <MapPinned className="h-5 w-5" aria-hidden />
+            <MapPin className="h-5 w-5" aria-hidden />
           </Link>
           {/* The button itself is static; only its unread count is per-user, so
               the badge alone streams on top of an already-tappable control. */}
@@ -137,7 +137,7 @@ function ActivityLink({ unread = 0 }: { unread?: number }) {
       aria-label={unread ? `Activity, ${unread} unread` : "Activity"}
       className="glass relative flex h-9 w-9 items-center justify-center rounded-full text-fg-muted hover:text-fg"
     >
-      <Activity className="h-5 w-5" aria-hidden />
+      <Bell className="h-5 w-5" aria-hidden />
       {unread > 0 && (
         <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold leading-none text-white ring-2 ring-bg">
           {unread > 99 ? "99+" : unread}
@@ -153,7 +153,8 @@ async function ActivityLinkWithBadge() {
   const supabase = await createClient();
   const userId = (await getAuthUserId())!;
   const { count } = await supabase
-    .from("notifications")
+    // The badge must not count notifications whose subject is gone (mig 0132).
+    .from("notifications_live")
     .select("id", { count: "exact", head: true })
     .eq("user_id", userId)
     .is("read_at", null)

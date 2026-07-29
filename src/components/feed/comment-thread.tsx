@@ -358,7 +358,7 @@ function CommentRow({
   const avatarSize = isReply ? "h-7 w-7" : "h-9 w-9";
 
   return (
-    <div className="flex gap-3">
+    <div id={`comment-${comment.id}`} className="flex gap-3">
       {/* Avatar opens the commenter's profile (comments are always attributed). */}
       <Link
         href={`/profile/${comment.author_id}`}

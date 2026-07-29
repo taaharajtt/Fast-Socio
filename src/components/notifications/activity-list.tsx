@@ -2,7 +2,6 @@ import Link from "next/link";
 import {
   Heart,
   MessageSquare,
-  Star,
   Zap,
   Megaphone,
   UserPlus,
@@ -42,7 +41,8 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   message_reaction: Heart,
   comment: MessageSquare,
   mention: AtSign,
-  match: Star,
+  // The bolt, not a star — it's the mark match/discover uses everywhere else.
+  match: Zap,
   match_post: ImageIcon,
   message: MessageSquare,
   message_request: UserPlus,

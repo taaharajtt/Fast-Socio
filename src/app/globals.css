@@ -217,6 +217,35 @@ body {
   background-image: linear-gradient(135deg, var(--aura) 0%, var(--cyan) 100%);
 }
 
+/*
+  Brief highlight for a comment/reply landed on via a notification deep link
+  (see useHashTarget). Soft brand-purple ring + wash that fades out; the class
+  is removed after ~2s by the hook itself.
+*/
+.hash-target {
+  border-radius: var(--radius-lg, 1rem);
+  animation: hash-target-fade 2s ease-out forwards;
+}
+
+@keyframes hash-target-fade {
+  0% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 55%, transparent);
+    background-color: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 3px transparent;
+    background-color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hash-target {
+    animation: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent);
+    background-color: color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+}
+
 /* Full-bleed auth background (auth screens only — UI Spec §2.2). */
 @utility auth-gradient {
   background-image: var(--auth-gradient);

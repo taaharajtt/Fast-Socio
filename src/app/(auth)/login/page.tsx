@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { GlassButton } from "@/components/ui/glass-button";
@@ -61,12 +62,13 @@ export default function LoginPage() {
     <main className="w-full max-w-sm">
       {/* Header — app icon + name + tagline (UISpec V3 Screen 1) */}
       <div className="flex flex-col items-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-[18px] gradient-brand text-[28px] shadow-[0_12px_32px_rgba(124,58,237,0.5)]">
-          ⚡
-        </div>
-        <h1 className="mt-3 text-lg font-bold tracking-tight text-white">
-          FAST SOCIO
-        </h1>
+        <Image
+          src="/brand/logo.png"
+          alt="Fast Socio"
+          width={180}
+          height={90}
+          priority
+        />
         <p className="mt-1 text-[13px] text-fg-muted">Your campus, alive.</p>
       </div>
 

@@ -471,12 +471,9 @@ function ProfileCardBody({
       )}
 
       {/* Type capsule so a person card is as self-identifying as an intent one. */}
-      <div className="absolute left-4 top-4 flex items-center gap-1.5 rounded-full bg-black/50 px-3 py-1.5">
-        <Zap className="h-3 w-3 text-gold-text" aria-hidden />
-        <span className="text-[13px] font-semibold text-white">{firstName}</span>
-        <span className="text-[10px] font-bold uppercase tracking-wide text-white/60">
-          {KIND_CAPSULE.socio}
-        </span>
+      <div className="absolute left-4 top-4 flex min-w-0 max-w-[70%] items-center gap-1.5 rounded-full bg-black/50 px-3 py-1.5">
+        <Zap className="h-3 w-3 shrink-0 text-gold-text" aria-hidden />
+        <span className="truncate text-[13px] font-semibold text-white">{firstName}</span>
       </div>
       <div className="absolute right-4 top-4 flex items-center gap-1.5">
         {typeof profile.compatibility === "number" && (
