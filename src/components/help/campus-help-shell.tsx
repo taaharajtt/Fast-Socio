@@ -1,7 +1,7 @@
 import { HandHeart } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { HelpTabs } from "@/components/help/help-tabs";
-import { HelpFilters, type SocioFilters } from "@/components/help/help-filters";
+import type { SocioFilters } from "@/components/help/help-filters";
 import { HelpCard } from "@/components/help/help-card";
 import { MyHelpPanel } from "@/components/help/my-help-panel";
 import { compareSocio, type HelpUrgency } from "@/lib/help/logic";
@@ -15,41 +15,36 @@ function safeLike(input: string): string {
 
 /**
  * The complete Campus Help experience — the internal SOCIO | ME tabs, the SOCIO
- * public feed (urgent-boosted) with its top-right Filters, and the ME personal
- * area (ask / manage / approve / history). It is its own product surface at
- * `/help`, discovered from the Home preview strip; it is intentionally
- * chrome-free (the page supplies its own header) and host-agnostic.
+ * public feed (urgent-boosted, unfiltered), and the ME personal area (ask /
+ * manage / approve / history). It is its own product surface at `/help`,
+ * discovered from the Home preview strip; it is intentionally chrome-free (the
+ * page supplies its own header) and host-agnostic.
  *
- * All navigation (SOCIO⇄ME, filters) is URL-driven; the hosting page supplies
- * the hrefs + filter target (today `/help?tab=me`), so the shell carries no
- * assumption about its route and could be hosted elsewhere without divergence.
+ * `filters` is accepted (and defaulted) so callers built before the SOCIO
+ * Filters control was removed keep compiling unchanged; SOCIO no longer reads
+ * or exposes any filter UI.
+ *
+ * All navigation (SOCIO⇄ME) is URL-driven; the hosting page supplies the hrefs
+ * (today `/help?tab=me`), so the shell carries no assumption about its route
+ * and could be hosted elsewhere without divergence.
  */
 export async function CampusHelpShell({
   helpTab,
   socioHref,
   meHref,
-  filters,
-  filterBasePath,
-  filterKeep,
+  filters = { category: "", department: "", semester: "", course: "", q: "" },
 }: {
   helpTab: HelpTab;
   socioHref: string;
   meHref: string;
-  filters: SocioFilters;
-  filterBasePath: string;
-  filterKeep: Record<string, string>;
+  filters?: SocioFilters;
 }) {
   const supabase = await createClient();
   const content =
     helpTab === "me" ? (
       <MeSection supabase={supabase} />
     ) : (
-      <SocioSection
-        supabase={supabase}
-        filters={filters}
-        filterBasePath={filterBasePath}
-        filterKeep={filterKeep}
-      />
+      <SocioSection supabase={supabase} filters={filters} />
     );
 
   return (
@@ -59,17 +54,18 @@ export async function CampusHelpShell({
   );
 }
 
-/** SOCIO — the public help feed: other people's open asks, urgent boosted. */
+/**
+ * SOCIO — the public help feed: other people's open asks, urgent boosted,
+ * unfiltered. `filters` stays as a plumbing parameter (server-side query args
+ * only) so `getSocioRequests`-shaped callers aren't forced to change; nothing
+ * in this file renders a filter control anymore.
+ */
 async function SocioSection({
   supabase,
-  filters,
-  filterBasePath,
-  filterKeep,
+  filters = { category: "", department: "", semester: "", course: "", q: "" },
 }: {
   supabase: Awaited<ReturnType<typeof createClient>>;
-  filters: SocioFilters;
-  filterBasePath: string;
-  filterKeep: Record<string, string>;
+  filters?: SocioFilters;
 }) {
   const { category, department, semester, course, q } = filters;
 
@@ -102,10 +98,6 @@ async function SocioSection({
 
   return (
     <>
-      <div className="-mt-1 mb-4">
-        <HelpFilters filters={filters} basePath={filterBasePath} keep={filterKeep} />
-      </div>
-
       {rows.length === 0 ? (
         <div className="glass rounded-[14px] px-5 py-10 text-center">
           <HandHeart className="mx-auto h-8 w-8 text-fg-muted" aria-hidden />

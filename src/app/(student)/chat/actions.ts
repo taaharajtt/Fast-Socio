@@ -203,7 +203,9 @@ export async function sharePostToFriend(
   const { error } = await supabase.from("messages").insert({
     conversation_id: conversationId,
     sender_id: userId,
-    body: "📎 Shared a post",
+    // No paperclip: the preview card is the attachment, and prefixing it with
+    // an attachment glyph just draws a second, redundant one (fix-008).
+    body: "Shared a post",
     shared_post_id: postId,
   });
   if (error) return { ok: false, error: error.message };
@@ -351,37 +353,6 @@ export async function togglePinMessage(
   });
   if (error) return { ok: false, error: "Could not pin this message." };
   return { ok: true, pinned: Boolean(data) };
-}
-
-export type MessageSearchHit = {
-  id: string;
-  body: string | null;
-  sender_id: string;
-  created_at: string;
-};
-
-/**
- * Search visible text messages in a conversation (Refactor Phase 10). RLS scopes
- * rows to participants; we match on body and return newest-first. Deleted and
- * moderated messages are excluded.
- */
-export async function searchMessages(
-  conversationId: string,
-  query: string
-): Promise<MessageSearchHit[]> {
-  const q = query.trim();
-  if (q.length < 2) return [];
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("messages")
-    .select("id, body, sender_id, created_at")
-    .eq("conversation_id", conversationId)
-    .eq("hidden", false)
-    .is("deleted_at", null)
-    .ilike("body", `%${q}%`)
-    .order("created_at", { ascending: false })
-    .limit(30);
-  return (data as MessageSearchHit[]) ?? [];
 }
 
 /**

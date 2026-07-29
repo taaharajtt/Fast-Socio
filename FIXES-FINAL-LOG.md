@@ -399,3 +399,187 @@ Migration: none
 `TYPE_ICON.match` changed from `Star` to `Zap`, same size and colour treatment as every
 other entry in the map; the now-unused `Star` import was dropped. Did this myself rather
 than delegating — a two-line change costs less to make than to specify.
+
+---
+
+# Batch D — Chat surface
+
+## fix-037 — No decorative frames around chat attachments and posts
+Status: DONE  ·  Files: `src/components/chat/chat-thread.tsx`  ·  Migration: none
+The message bubble no longer wraps media in its own padded, backgrounded, rounded frame.
+For an image or a shared post the bubble drops `p-1`/`px-4 py-2`, the `gradient-brand`/
+`glass` background and its own `overflow-hidden rounded-2xl` — the image's `rounded-xl`
+(or `SharedPostCard`'s own border+radius) is now the only edge. Text and voice bubbles
+keep their chrome untouched.
+Verified: message `max-w-[78%]`, `justify-end`/`justify-start` own-vs-other alignment and
+the `<time>` block below the bubble all confirmed unchanged; build green.
+Notes: `shared-post-preview.tsx` needed no edit — the redundant frame was the caller's, not
+its own. `community-thread.tsx` needed none either: it only gates join/follow state and
+delegates to `community-chat.tsx`, which has no media bubble at all.
+
+## fix-038 — Remove search in chat
+Status: DONE  ·  Files: `src/components/chat/chat-thread.tsx`,
+`src/app/(student)/chat/actions.ts`  ·  Migration: none
+**The runbook's premise was slightly off** and worth knowing: there was no search in the
+inbox (`inbox-list.tsx`) at all. The chat search that existed was IN-THREAD. Removed it
+whole: the `Search` icon, the `searchOpen`/`searchQuery`/`searchHits`/`searching` state,
+the debounce ref and `runSearch()`, the input and the results dropdown, plus the
+`searchMessages()` server action and its `MessageSearchHit` type.
+Decisions: nothing was shared — grep for `searchMessages`/`MessageSearchHit` across `src/`
+returned zero other references, and no Postgres RPC was involved (it was a plain client
+query), so nothing had to be kept for discover/communities/help/map and no DB object was
+dropped. No chat route read a `?q=` param.
+Re-balance: the emptied toggle row was removed and its wrapper collapsed, so the pinned-
+message bar now renders directly with the file's existing `mb-1` spacing — when nothing is
+pinned the space collapses to zero rather than leaving a gap or a lone floating icon.
+
+## fix-008 — Drop the paperclip on shared posts in chat
+Status: DONE  ·  Files: `src/app/(student)/chat/actions.ts`  ·  Migration: none (data fix)
+**The subagent reported "nothing to do" here and was wrong — I found it and fixed it
+myself.** It searched for a lucide `Paperclip` rendered beside the preview; there isn't
+one. The paperclip is a literal emoji baked into the message BODY: `sharePostToChat`
+inserted `body: "📎 Shared a post"`, so every shared post carried a paperclip in the
+thread and in the inbox preview line. Changed the write to `"Shared a post"`, and ran a
+qualified UPDATE over the 18 existing rows (`where shared_post_id is not null and
+body = '📎 Shared a post'`) — re-checked after: 0 rows still contain the glyph.
+Decisions: fixed at the source rather than stripping the emoji at render time, so the
+inbox preview, the pinned-message bar and the thread all come right at once.
+Notes: the composer's real "Attach image" `Paperclip` button (chat-thread.tsx ~1118) was
+deliberately left alone — that is a genuine file attachment, explicitly out of scope.
+
+## fix-028 — Broadcast announcements as a chat window
+Status: DONE  ·  Files: `src/components/societies/announcement-thread.tsx` (new),
+`src/components/societies/tabs/broadcast-tab.tsx`,
+`src/components/societies/announcement-card.tsx`  ·  Migration: none
+Announcements are now a scrolling thread: oldest→newest (the incoming array is
+newest-first and is reversed for display), scrolled to the bottom on mount, composer
+pinned below, author + timestamp per message, and consecutive messages from the same
+author collapse to just a time. Realtime INSERT subscription copied from
+`community-chat.tsx` (session token → `realtime.setAuth` → channel + `postgres_changes` →
+`removeChannel` on unmount), re-reading each new row from the `society_announcement_feed`
+view by id so the joined author fields and `is_mine` masking are correct — the same
+round-trip `community-chat.tsx` does through `community_chat_view`.
+`broadcast-tab.tsx` stays a non-async server component (PPR) and just passes props down.
+Decisions: **who-can-post is untouched** — `canPost` flows through unchanged; no
+permission logic was edited. Pinned announcements keep the `ring-1 ring-accent/40`
+treatment. The "Open chat" hand-off and the empty state survive, restyled for a thread.
+Notes: the brief told the subagent to copy `community-thread.tsx`'s consecutive-author
+grouping; that grouping **does not actually exist** in this codebase (every non-mine
+message always renders its avatar and name). It implemented the grouping fresh and said
+so, which was the right call.
+
+## fix-018 — Replace anonymous posting with media in discover groups
+Status: BLOCKED
+Files: none  ·  Migration: none
+Not attempted. Ran out of session budget before reaching it; see the Summary for what this
+needs. The two halves are independent and neither is started: (a) remove the anonymous
+toggle from the discover-group composer and stop persisting/reading the flag for
+`is_discover_group` communities, keeping "Anonymous" on legacy rows (retroactively
+unmasking someone promised anonymity is not acceptable — that default stands); (b) add an
+image-upload control following the existing chat media-upload pattern in
+`chat-thread.tsx` (same bucket, same compression/size limits, preview + remove).
+Campus Help's anonymity is deliberately untouched either way.
+
+## fix-019 — Members can leave a discover group chat
+Status: DONE  ·  Files: `src/app/(student)/discover/discover-actions.ts`,
+`src/components/discover/discover-group-menu.tsx`,
+`src/app/(student)/chat/c/[id]/page.tsx`  ·  Migration: **none needed**
+`DiscoverGroupMenu` now takes `isOwner` and `groupName` and renders exactly one control:
+Delete (`Trash2`) for the owner, Leave (`LogOut`) for any other member. Never both. Both go
+through the shared confirm dialog; Leave's copy is "Leave <group name>?" / "You'll stop
+receiving its messages…", destructive styling, loading state. On success the thread
+redirects to `/chat` and `router.refresh()` drops it from the inbox. The header condition
+changed from `rel.isOwner` to `rel.isMember`.
+New `leaveDiscoverGroupChat` deletes only the caller's own `community_members` row.
+Decisions: **no migration was required** — I checked the live policy rather than assuming.
+The existing "members leave communities" DELETE policy (mig 0119) is already
+`user_id = auth.uid() AND NOT (you are the owner)`, with no `is_discover_group` carve-out,
+which is exactly the rule this fix wants. The action re-checks ownership anyway so the
+owner gets a clear "delete it instead of leaving" message rather than a silent no-op —
+the runbook's stated default (no ownership transfer this pass).
+
+---
+
+# Batch E/F/G — partial (see Summary for what remains)
+
+## fix-027 — Better UI for deleting an announcement
+Status: DONE  ·  Files: `src/components/ui/confirm-dialog.tsx` (new),
+`src/components/societies/announcement-card.tsx`,
+`src/components/discover/discover-group-menu.tsx`  ·  Migration: none
+The old UI was a native `window.confirm("Delete this announcement?")` next to a bare
+exposed trash button — that was the ugliness. Now: a ⋯ (`MoreHorizontal`) overflow menu on
+each announcement holding Pin/Unpin (managers) and "Delete announcement" in destructive
+red, closing on outside pointerdown and on Escape; then the app's standard confirm dialog
+with a loading state, keeping the existing optimistic removal and its revert-on-failure.
+Decisions: the runbook says "find and reuse the existing delete-confirm component" — **there
+wasn't one.** The nearest thing was the glass dialog inlined in `discover-group-menu.tsx`,
+so I had it extracted into a real shared `src/components/ui/confirm-dialog.tsx` and
+refactored the discover menu onto it too. There is now exactly one confirm dialog in the
+codebase, which is what the fix was really asking for.
+
+## fix-013 — "Back to Discover" as a purple capsule button
+Status: DONE  ·  Files: `src/components/discover/discover-post-manager.tsx`  ·  Migration: none
+Now a full-pill `bg-accent text-white` capsule, `h-10` (≥40px tap target), hover/active
+states, chevron kept and resized to match.
+Decisions: did NOT reuse `GlassButton` — its only solid variant is `gradient-brand`, a
+gradient, not the flat purple pill specified. Hand-rolled with the established
+`bg-accent text-white rounded-full` pairing already used elsewhere in this same file. No
+hardcoded hex.
+
+## fix-016 — Give "Create group" its own button in Smart Discover
+Status: DONE  ·  Files: `src/components/discover/discover-post-manager.tsx`  ·  Migration: none
+Create-group was smuggled into the Close control via `canGroup(p) ? setGroupPost(p) : …`.
+That branch is gone: **Close now only calls `closeDiscoverPost(p.id)`** and nothing else.
+"Create group" is its own purple capsule on the Your-post card (shown when `canGroup(p)`
+and the post is open), opening the unchanged `CloseWithGroupDialog` and calling
+`createGroupFromDiscoverPost` with the same arguments. The card grew into two rows
+(title/delete above, actions wrapping below) so both actions sit comfortably rather than
+being crammed. Styling matches fix-013.
+
+## fix-003 — Remove Filters from Campus Help → SOCIO
+Status: DONE  ·  Files: `src/components/help/campus-help-shell.tsx`,
+`src/components/help/help-filters.tsx`, `src/components/help/help-tab-skeleton.tsx`,
+`src/app/(student)/help/page.tsx`  ·  Migration: none
+Deleted the `HelpFilters` component entirely (button, popover, category chips,
+department/course/semester/search inputs and their push/apply/clear logic), the wrapper row
+that hosted it in `SocioSection`, and the skeleton placeholder that mimicked it. SOCIO now
+renders the full unfiltered feed.
+Decisions: kept the `SocioFilters` type and the server-side query-building, with the
+`filters` argument made optional/defaulted. Deleting them would have meant changing the
+`help_request_feed` RPC contract, and the runbook explicitly says to make args optional
+rather than remove them. The ME tab (`MeSection`, `MyHelpPanel`, `HelpCard`, `HelpTabs`)
+never had filters and was not touched at all.
+Notes: no header re-balance was needed — the Filters control lived in its own row inside
+`SocioSection`, not in the page header, so removing the row left nothing dangling.
+
+## fix-036 — Post count stat is always zero
+Status: DONE  ·  Files: `supabase/migrations/0133_profile_post_count.sql`,
+`src/app/(student)/profile/page.tsx`  ·  Migration: **0133 applied**
+
+### Root cause
+`public.posts` has **RLS enabled and no SELECT policy whatsoever** — `pg_policies` returns
+exactly three rows for the table, for INSERT, UPDATE and DELETE. Under RLS an absent SELECT
+policy means every read returns zero rows, so the profile's
+`.from("posts").select("id", { count: "exact", head: true }).eq("author_id", me)` counted
+nothing, for every user, always. The feed never exposed this because it reads the
+`feed_posts` VIEW, which has RLS off.
+
+### Wrong vs corrected, from direct SQL
+| user | old stat | raw total | attributed | corrected (public view) |
+|---|---|---|---|---|
+| 7a3224dc… | **0** | 33 | 16 | **16** |
+| 45f6867e… | **0** | 19 | 13 | **10** (3 not approved) |
+
+Decisions: I did **not** fix this by adding a SELECT policy to `posts`. Rows carry
+`author_id` even when `is_anonymous` is true, so a broad SELECT policy would expose the
+author of every anonymous post — a far worse bug than a wrong number. Instead 0133 adds a
+SECURITY DEFINER `get_profile_post_count(p_user)` returning only an aggregate, with the
+runbook's stated default semantics: **own profile counts all your non-deleted posts**
+(anonymous included — it is your own total and reveals nothing about which post was which);
+**someone else's counts only what that viewer can see** (attributed and moderation-approved).
+`posts` has no soft-delete column, so "non-deleted" is every row.
+Verified: executed the function against live data (not merely created it — `check_function_bodies`
+masks column errors). Public branch returns 16 for user A, matching the attributed count
+exactly, and 10 for user B, correctly excluding 3 unapproved posts.
+Notes: the public profile route renders no post-count stat today, so only the own-profile
+path currently consumes this; the public semantics are in place for when it does.

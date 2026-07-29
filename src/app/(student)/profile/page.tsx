@@ -302,12 +302,10 @@ async function Tabs({ searchParams }: { searchParams: Promise<SP> }) {
       .from("community_members")
       .select("community:communities(id, name, member_count, status)")
       .eq("user_id", me),
-    // Stats tab counts (Refactor Phase 10).
-    supabase
-      .from("posts")
-      .select("id", { count: "exact", head: true })
-      .eq("author_id", me)
-      .eq("is_anonymous", false),
+    // Stats tab counts (Refactor Phase 10). This MUST go through the definer
+    // RPC: `posts` has RLS on with no SELECT policy, so counting the table
+    // directly returned 0 for everyone, forever (fix-036, mig 0133).
+    supabase.rpc("get_profile_post_count", { p_user: me }),
     supabase
       .from("event_attendees")
       .select("event_id", { count: "exact", head: true })

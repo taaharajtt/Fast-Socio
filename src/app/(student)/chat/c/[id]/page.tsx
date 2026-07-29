@@ -152,8 +152,15 @@ export default async function CommunityConversationPage({
             </span>
           </span>
         </HeaderShell>
-        {/* Only the author who minted the room can dissolve it. */}
-        {isDiscoverGroup && rel.isOwner && <DiscoverGroupMenu communityId={id} />}
+        {/* The author who minted the room can dissolve it; everyone else on the
+            team can walk out of it. One control, never both (fix-019). */}
+        {isDiscoverGroup && rel.isMember && (
+          <DiscoverGroupMenu
+            communityId={id}
+            isOwner={rel.isOwner}
+            groupName={community.discover_title ?? community.name}
+          />
+        )}
       </header>
 
       <CommunityThread

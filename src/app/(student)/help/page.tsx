@@ -43,14 +43,14 @@ export default async function HelpPage({
         </div>
       </div>
 
-      {/* Standalone route: internal SOCIO|ME uses `?tab=`, filters push to /help. */}
+      {/* Standalone route: internal SOCIO|ME uses `?tab=`. SOCIO has no Filters
+          control anymore, so `filters` only matters if a `?category=`-style
+          param is hit directly; it's never set from the UI. */}
       <CampusHelpShell
         helpTab={helpTab}
         socioHref="/help"
         meHref="/help?tab=me"
         filters={filters}
-        filterBasePath="/help"
-        filterKeep={{}}
       />
     </main>
   );

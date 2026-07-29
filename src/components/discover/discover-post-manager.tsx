@@ -54,7 +54,7 @@ export function DiscoverPostManager({ data }: { data: MyDiscoverData }) {
       <header>
         <Link
           href="/discover"
-          className="text-sm font-medium text-fg-muted hover:text-fg"
+          className="inline-flex h-10 items-center gap-1.5 rounded-full bg-accent px-4 text-sm font-semibold text-white transition-colors active:scale-[0.97] hover:bg-accent/90"
         >
           ← Back to Discover
         </Link>
@@ -337,7 +337,7 @@ function MyPosts({
         const busyNow = pending && busy === p.id;
         const confirming = confirmDeleteId === p.id;
         return (
-          <div key={p.id} className="rounded-[14px] bg-card px-3.5 py-2.5">
+          <div key={p.id} className="rounded-[16px] bg-card px-3.5 py-3">
             <div className="flex items-center gap-2">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{p.title}</p>
@@ -351,43 +351,52 @@ function MyPosts({
                 </p>
               </div>
               {!confirming && (
-                <>
-                  <button
-                    type="button"
-                    disabled={busyNow}
-                    onClick={() => onEdit(p)}
-                    className="glass rounded-full px-3 py-1.5 text-xs font-semibold"
-                  >
-                    Edit
-                  </button>
-                  {p.status === "open" && (
-                    <button
-                      type="button"
-                      disabled={busyNow}
-                      onClick={() =>
-                        // Only a post that formed an actual team gets the group
-                        // offer; everything else closes in one tap as before.
-                        canGroup(p)
-                          ? setGroupPost(p)
-                          : run(p.id, () => closeDiscoverPost(p.id))
-                      }
-                      className="rounded-full px-2.5 py-1.5 text-xs font-medium text-fg-muted hover:text-fg"
-                    >
-                      Close
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    disabled={busyNow}
-                    aria-label="Delete"
-                    onClick={() => setConfirmDeleteId(p.id)}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-error/80 hover:bg-error/10 hover:text-error"
-                  >
-                    <Trash2 className="h-4 w-4" aria-hidden />
-                  </button>
-                </>
+                <button
+                  type="button"
+                  disabled={busyNow}
+                  aria-label="Delete"
+                  onClick={() => setConfirmDeleteId(p.id)}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-error/80 hover:bg-error/10 hover:text-error"
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden />
+                </button>
               )}
             </div>
+
+            {/* Actions live on their own row, each a distinct tappable
+                target — "Create group" is never bundled into Close. */}
+            {!confirming && (
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={busyNow}
+                  onClick={() => onEdit(p)}
+                  className="glass h-10 rounded-full px-4 text-xs font-semibold"
+                >
+                  Edit
+                </button>
+                {p.status === "open" && canGroup(p) && (
+                  <button
+                    type="button"
+                    disabled={busyNow}
+                    onClick={() => setGroupPost(p)}
+                    className="h-10 rounded-full bg-accent px-4 text-xs font-semibold text-white transition-colors hover:bg-accent/90 active:scale-[0.97]"
+                  >
+                    Create group
+                  </button>
+                )}
+                {p.status === "open" && (
+                  <button
+                    type="button"
+                    disabled={busyNow}
+                    onClick={() => run(p.id, () => closeDiscoverPost(p.id))}
+                    className="h-10 rounded-full px-4 text-xs font-medium text-fg-muted hover:text-fg"
+                  >
+                    {busyNow ? "Closing…" : "Close"}
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Destructive action gets a distinct, hard-to-misfire confirm step. */}
             {confirming && (

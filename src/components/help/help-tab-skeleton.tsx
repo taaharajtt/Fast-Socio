@@ -16,15 +16,10 @@ export function HelpTabSkeleton({ tab }: { tab: HelpTab }) {
     );
   }
   return (
-    <div>
-      <div className="-mt-1 mb-4 flex justify-end">
-        <Skeleton className="h-9 w-24 rounded-full" />
-      </div>
-      <div className="space-y-3">
-        <SkeletonCard />
-        <SkeletonCard />
-        <SkeletonCard />
-      </div>
+    <div className="space-y-3">
+      <SkeletonCard />
+      <SkeletonCard />
+      <SkeletonCard />
     </div>
   );
 }

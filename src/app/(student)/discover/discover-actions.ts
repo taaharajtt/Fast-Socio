@@ -623,6 +623,44 @@ export async function deleteDiscoverGroupChat(
   return { ok: true };
 }
 
+/**
+ * Leave a Discover team room — the non-owner's counterpart to deleting it
+ * (fix-019). The membership row is the only thing removed; the room and its
+ * history survive for everyone else. No migration was needed: the existing
+ * "members leave communities" DELETE policy (mig 0119) already scopes this to
+ * `user_id = auth.uid()` and explicitly refuses the owner, which is exactly the
+ * rule this fix wants — the owner must delete the group instead.
+ */
+export async function leaveDiscoverGroupChat(
+  communityId: string
+): Promise<Result> {
+  const uid = await getAuthUserId();
+  if (!uid) return { ok: false, error: "Not signed in." };
+  const supabase = await createClient();
+
+  const { data: community } = await supabase
+    .from("communities")
+    .select("owner_id")
+    .eq("id", communityId)
+    .single();
+  if (community?.owner_id === uid)
+    return {
+      ok: false,
+      error: "You created this group — delete it instead of leaving.",
+    };
+
+  const { error } = await supabase
+    .from("community_members")
+    .delete()
+    .eq("community_id", communityId)
+    .eq("user_id", uid);
+  if (error) return { ok: false, error: friendly(error.message) };
+
+  revalidatePath("/chat");
+  revalidatePath(`/chat/c/${communityId}`);
+  return { ok: true };
+}
+
 /** Delete one of the caller's own posts. RLS restricts this to author_id = me. */
 export async function deleteDiscoverPost(postId: string): Promise<Result> {
   const uid = await getAuthUserId();
