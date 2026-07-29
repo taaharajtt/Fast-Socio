@@ -47,7 +47,7 @@ export async function getSocietyContext(id: string): Promise<SocietyContext> {
   if (!c || !c.is_society) notFound();
 
   const [rel, { data: roleRow }, { data: prof }] = await Promise.all([
-    getCommunityRelationship(id, me, c.owner_id),
+    getCommunityRelationship(id, me, c.owner_id, true),
     supabase
       .from("society_roles")
       .select("role")

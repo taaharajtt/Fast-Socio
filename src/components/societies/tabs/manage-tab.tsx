@@ -4,7 +4,12 @@ import { JoinRequestQueue } from "@/components/communities/join-request-queue";
 import { MemberAccessList } from "@/components/communities/member-access-list";
 import { MemberRoleList } from "@/components/societies/member-role-list";
 import { SocietyProfileEditor } from "@/components/societies/society-profile-editor";
-import { assignableRoles, canEditProfile, type Viewer } from "@/lib/societies/logic";
+import {
+  assignableRoles,
+  canEditProfile,
+  isOfficerRole,
+  type Viewer,
+} from "@/lib/societies/logic";
 import type { CommunityMemberVM } from "@/components/communities/member-row";
 import type { JoinRequestVM } from "@/lib/communities/relationship";
 import type { OfficerVM, SocietyRow } from "@/lib/societies/types";
@@ -62,6 +67,9 @@ export function ManageTab({
 }) {
   const canAppoint = assignableRoles(viewer).length > 0;
   const canEditIdentity = canEditProfile(viewer);
+  // Officers cannot appoint (fix-024) but still need the roster visible so they
+  // can step down from their own role.
+  const showOfficers = canAppoint || isOfficerRole(viewer.role);
 
   return (
     <div className="space-y-3">
@@ -97,11 +105,15 @@ export function ManageTab({
         <MemberAccessList communityId={society.id} members={members} />
       </Section>
 
-      {canAppoint && (
+      {showOfficers && (
         <Section
           icon={<UserCog className="h-4 w-4" aria-hidden />}
-          title="Officer appointments"
-          desc="Appoint officers; you can’t grant a role at or above your own."
+          title="Officers"
+          desc={
+            canAppoint
+              ? "Only you, as owner, can appoint or remove officers."
+              : "You can step down from your own role at any time."
+          }
         >
           <MemberRoleList societyId={society.id} officers={officers} viewer={viewer} />
         </Section>

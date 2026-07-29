@@ -52,7 +52,9 @@ export default async function CommunityPage({
   if (community.is_discover_group) notFound();
 
   const pending = community.status !== "approved";
-  const rel = await getCommunityRelationship(id, me, community.owner_id);
+  // is_society is false here by construction (societies redirect above), so
+  // canManage collapses to owner-or-admin — fix-031's owner-only Manage tab.
+  const rel = await getCommunityRelationship(id, me, community.owner_id, false);
   // A chat room has exactly one owner and no moderator tier, so "manage" here
   // means "is the owner" (platform admins aside — canManage covers both).
   const canManage = rel.canManage;

@@ -61,7 +61,12 @@ export default async function CommunityConversationPage({
     .single();
   if (!community || community.status !== "approved") notFound();
 
-  const rel = await getCommunityRelationship(id, me, community.owner_id);
+  const rel = await getCommunityRelationship(
+    id,
+    me,
+    community.owner_id,
+    community.is_society
+  );
 
   // A Discover team room is private and un-joinable (mig 0129 narrows the
   // self-join policy), so a non-member has no gate to pass — the room simply

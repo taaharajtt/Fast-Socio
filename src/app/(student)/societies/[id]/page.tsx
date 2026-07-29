@@ -147,7 +147,7 @@ export default async function SocietyPage({
           joinRequests={joinRequests}
           officers={officers}
           members={removableMembers}
-          viewer={{ role: viewer.role, isAdmin: viewer.isAdmin }}
+          viewer={{ role: viewer.role, isAdmin: viewer.isAdmin, me: viewer.me }}
         />
       ),
     });

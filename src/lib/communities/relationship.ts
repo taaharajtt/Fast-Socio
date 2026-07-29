@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { isOfficerRole } from "@/lib/societies/logic";
 import type { JoinState } from "@/app/(student)/communities/actions";
 
 /** A student waiting for an owner/moderator to let them participate. */
@@ -21,13 +22,21 @@ export async function getJoinRequests(
   communityId: string
 ): Promise<JoinRequestVM[]> {
   const supabase = await createClient();
-  const { data } = await supabase
+  // The embed MUST name the constraint: community_join_requests has two FKs to
+  // profiles (user_id and decided_by), so a bare `profiles(...)` is ambiguous
+  // and PostgREST fails the whole query with PGRST201 — which is why owners saw
+  // a permanently empty queue (fix-026).
+  const { data, error } = await supabase
     .from("community_join_requests")
-    .select("user_id, created_at, profile:profiles(full_name, username, avatar_url, gender)")
+    .select(
+      "user_id, created_at, profile:profiles!community_join_requests_user_id_fkey(full_name, username, avatar_url, gender)"
+    )
     .eq("community_id", communityId)
     .eq("status", "pending")
     .order("created_at", { ascending: true })
     .limit(100);
+  // Never fail silently again — an empty queue must mean "no requests".
+  if (error) console.error("getJoinRequests failed", error);
 
   type Row = {
     user_id: string;
@@ -75,7 +84,8 @@ export type CommunityRelationship = {
 export async function getCommunityRelationship(
   communityId: string,
   me: string,
-  ownerId: string
+  ownerId: string,
+  isSociety: boolean
 ): Promise<CommunityRelationship> {
   const supabase = await createClient();
 
@@ -120,11 +130,16 @@ export async function getCommunityRelationship(
     joinStatus: isMember
       ? "joined"
       : ((request?.status as JoinState | undefined) ?? "none"),
+    // Mirrors can_manage_community() in mig 0131 exactly — the DB is the real
+    // authority; this only decides what the UI offers. Delegated management is
+    // a SOCIETY concept: a casual chat room is owner-only (fix-031), and an
+    // officer must hold a genuine officer role, not merely a society_roles row.
     canManage:
       isAdmin ||
       isOwner ||
-      member?.role === "owner" ||
-      member?.role === "moderator" ||
-      Boolean(officer),
+      (isSociety &&
+        (member?.role === "owner" ||
+          member?.role === "moderator" ||
+          isOfficerRole(officer?.role))),
   };
 }

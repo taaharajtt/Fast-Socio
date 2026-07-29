@@ -9,6 +9,7 @@ import { roleLabel } from "@/lib/societies/constants";
 import {
   assignableRoles,
   canRemoveRole,
+  canResignRole,
   type SocietyOfficerRole,
   type Viewer,
 } from "@/lib/societies/logic";
@@ -186,7 +187,11 @@ export function MemberRoleList({
 
       <div className="space-y-2">
         {officers.map((o) => {
-          const removable = o.role !== "owner" && canRemoveRole(viewer, o.role);
+          // fix-024: only the owner (or an admin) demotes. An officer keeps one
+          // affordance — stepping down from their own role.
+          const isSelf = canResignRole(viewer, o.user_id);
+          const removable =
+            o.role !== "owner" && (canRemoveRole(viewer) || isSelf);
           return (
             <div
               key={o.user_id}
@@ -210,7 +215,7 @@ export function MemberRoleList({
               {removable && (
                 <button
                   type="button"
-                  aria-label="Remove officer"
+                  aria-label={isSelf ? "Resign your officer role" : "Remove officer"}
                   disabled={pending}
                   onClick={() => remove(o)}
                   className="flex h-8 w-8 items-center justify-center rounded-full text-fg-muted hover:text-error"

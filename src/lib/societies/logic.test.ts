@@ -6,6 +6,7 @@ import {
   canManageSociety,
   canAssignRole,
   canRemoveRole,
+  canResignRole,
   assignableRoles,
   canPostAnnouncement,
   canEditProfile,
@@ -41,7 +42,7 @@ describe("category / role validation", () => {
 });
 
 describe("role hierarchy", () => {
-  it("orders ranks owner > president > … > member", () => {
+  it("orders ranks owner > president > ... > member", () => {
     expect(roleRank("owner")).toBeGreaterThan(roleRank("president"));
     expect(roleRank("president")).toBeGreaterThan(roleRank("vice_president"));
     expect(roleRank("vice_president")).toBeGreaterThan(roleRank("officer"));
@@ -66,7 +67,7 @@ describe("canManageSociety", () => {
     expect(canManageSociety(owner)).toBe(true);
     expect(canManageSociety(president)).toBe(true);
     expect(canManageSociety(officer)).toBe(true);
-    expect(canManageSociety({ role: "moderator", isAdmin: false })).toBe(true);
+    expect(canManageSociety(moderator)).toBe(true);
   });
 
   it("keeps plain members and outsiders out; admins always in", () => {
@@ -110,58 +111,58 @@ describe("canModerateContent — queues stay open to moderators", () => {
   });
 });
 
-describe("canAssignRole — never grant at or above your own rank", () => {
-  it("admins can assign any officer role", () => {
-    expect(canAssignRole(admin, "president")).toBe(true);
-    expect(canAssignRole(admin, "moderator")).toBe(true);
+// fix-024 (mig 0131): appointment is the OWNER's alone. A president — who used
+// to be able to appoint below their own rank — no longer can.
+describe("canAssignRole — owner only", () => {
+  it("admits the owner and platform admins", () => {
+    expect(canAssignRole(owner)).toBe(true);
+    expect(canAssignRole(admin)).toBe(true);
   });
 
-  it("owner (via president gate) can assign every officer role below owner", () => {
-    // owner rank 100 > president 90, so owner may appoint a president.
-    expect(canAssignRole(owner, "president")).toBe(true);
-    expect(canAssignRole(owner, "officer")).toBe(true);
-  });
-
-  it("a president can assign below president but not a peer president", () => {
-    expect(canAssignRole(president, "vice_president")).toBe(true);
-    expect(canAssignRole(president, "officer")).toBe(true);
-    expect(canAssignRole(president, "president")).toBe(false);
-  });
-
-  it("officers and members cannot assign roles at all", () => {
-    expect(canAssignRole(officer, "moderator")).toBe(false);
-    expect(canAssignRole(member, "moderator")).toBe(false);
-    expect(canAssignRole(outsider, "officer")).toBe(false);
+  it("shuts out presidents, officers, members and outsiders", () => {
+    expect(canAssignRole(president)).toBe(false);
+    expect(canAssignRole(officer)).toBe(false);
+    expect(canAssignRole(member)).toBe(false);
+    expect(canAssignRole(outsider)).toBe(false);
   });
 });
 
-describe("canRemoveRole", () => {
-  it("president can remove someone strictly below them", () => {
-    expect(canRemoveRole(president, "officer")).toBe(true);
-    expect(canRemoveRole(president, "vice_president")).toBe(true);
+describe("canRemoveRole — owner only", () => {
+  it("admits the owner and platform admins", () => {
+    expect(canRemoveRole(owner)).toBe(true);
+    expect(canRemoveRole(admin)).toBe(true);
   });
 
-  it("president cannot remove a peer or the owner", () => {
-    expect(canRemoveRole(president, "president")).toBe(false);
-    expect(canRemoveRole(president, "owner")).toBe(false);
+  it("a president can no longer demote anyone", () => {
+    expect(canRemoveRole(president)).toBe(false);
+    expect(canRemoveRole(officer)).toBe(false);
+  });
+});
+
+describe("canResignRole", () => {
+  it("an officer may step down from their own role", () => {
+    expect(canResignRole({ ...officer, me: "u1" }, "u1")).toBe(true);
   });
 
-  it("admin can remove anyone; officers cannot remove", () => {
-    expect(canRemoveRole(admin, "president")).toBe(true);
-    expect(canRemoveRole(officer, "moderator")).toBe(false);
+  it("an officer may not remove somebody else", () => {
+    expect(canResignRole({ ...officer, me: "u1" }, "u2")).toBe(false);
+  });
+
+  it("a plain member has no officer role to resign", () => {
+    expect(canResignRole({ ...member, me: "u1" }, "u1")).toBe(false);
   });
 });
 
 describe("assignableRoles", () => {
-  it("gives a president every role strictly below president", () => {
-    const roles = assignableRoles(president);
+  it("gives the owner every officer role", () => {
+    const roles = assignableRoles(owner);
+    expect(roles).toContain("president");
     expect(roles).toContain("vice_president");
-    expect(roles).toContain("officer");
     expect(roles).toContain("moderator");
-    expect(roles).not.toContain("president");
   });
 
-  it("gives officers/members nothing, admins everything", () => {
+  it("gives presidents/officers/members nothing, admins everything", () => {
+    expect(assignableRoles(president)).toHaveLength(0);
     expect(assignableRoles(officer)).toHaveLength(0);
     expect(assignableRoles(member)).toHaveLength(0);
     expect(assignableRoles(admin).length).toBeGreaterThan(0);

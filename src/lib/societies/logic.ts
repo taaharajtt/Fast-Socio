@@ -67,7 +67,12 @@ export const MANAGE_MIN_RANK = ROLE_RANK.moderator; // 30 — any officer or the
 /** Rank required to assign/remove officer roles (president & up, or admin). */
 export const ROLE_ADMIN_MIN_RANK = ROLE_RANK.president; // 90
 
-export type Viewer = { role: SocietyRole | null; isAdmin: boolean };
+export type Viewer = {
+  role: SocietyRole | null;
+  isAdmin: boolean;
+  /** Present where a self-vs-other check is needed (canResignRole). */
+  me?: string;
+};
 
 /** Can this viewer reach /societies/[id]/manage? */
 export function canManageSociety(viewer: Viewer): boolean {
@@ -75,32 +80,31 @@ export function canManageSociety(viewer: Viewer): boolean {
 }
 
 /**
- * Can this viewer grant `targetRole`? You must be president+ (or admin) and you
- * can never grant a role at or above your own. Mirrors assign_society_role().
+ * Can this viewer grant `targetRole`? fix-024: appointment is the OWNER's alone
+ * — a president or any other officer may no longer appoint. Mirrors
+ * assign_society_role() as rewritten in mig 0131.
  */
-export function canAssignRole(
-  viewer: Viewer,
-  targetRole: SocietyOfficerRole
-): boolean {
-  if (viewer.isAdmin) return true;
-  const mine = roleRank(viewer.role);
-  return mine >= ROLE_ADMIN_MIN_RANK && roleRank(targetRole) < mine;
+export function canAssignRole(viewer: Viewer): boolean {
+  return viewer.isAdmin || viewer.role === "owner";
 }
 
 /**
- * Can this viewer remove someone currently holding `targetRole`? Same rule as
- * assigning: president+/admin, and never someone at or above your own rank.
- * Mirrors remove_society_role().
+ * Can this viewer demote someone holding `targetRole`? The owner (or an admin)
+ * only. An officer resigning their OWN role is a separate affordance — see
+ * canResignRole — and is allowed by remove_society_role() in mig 0131.
  */
-export function canRemoveRole(viewer: Viewer, targetRole: SocietyRole): boolean {
-  if (viewer.isAdmin) return true;
-  const mine = roleRank(viewer.role);
-  return mine >= ROLE_ADMIN_MIN_RANK && roleRank(targetRole) < mine;
+export function canRemoveRole(viewer: Viewer): boolean {
+  return viewer.isAdmin || viewer.role === "owner";
+}
+
+/** An officer may always step down from their own role (fix-024 default). */
+export function canResignRole(viewer: Viewer, targetUserId: string): boolean {
+  return viewer.me === targetUserId && isOfficerRole(viewer.role);
 }
 
 /** Officer roles this viewer is allowed to hand out (for the role picker UI). */
 export function assignableRoles(viewer: Viewer): SocietyOfficerRole[] {
-  return SOCIETY_OFFICER_ROLES.filter((r) => canAssignRole(viewer, r));
+  return canAssignRole(viewer) ? [...SOCIETY_OFFICER_ROLES] : [];
 }
 
 /** Can this viewer post announcements? Any officer or the owner (or admin). */
