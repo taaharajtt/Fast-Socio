@@ -55,7 +55,7 @@ export function SetPasswordForm({
   return (
     <main className="w-full max-w-sm">
       <div className="flex flex-col items-center">
-        <Image src="/brand/logo.png" alt="Fast Socio" width={180} height={90} />
+        <Image src="/brand/logo.png" alt="Fast Socio" width={270} height={135} />
       </div>
 
       <div className="mt-8 text-center">

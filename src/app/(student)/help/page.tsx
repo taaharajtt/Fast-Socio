@@ -38,7 +38,7 @@ export default async function HelpPage({
             Campus Help
           </h1>
           <p className="text-xs text-fg-muted">
-            SOCIO helps me solve campus problems.
+            Drop the Gatekeeping, <span className="text-aura">help your Campus.</span>
           </p>
         </div>
       </div>

@@ -12,6 +12,7 @@ import { eventBadge } from "@/lib/events/format";
 import type { ChatRoomCardVM } from "@/components/communities/chat-room-card";
 import type { JoinState } from "@/app/(student)/communities/actions";
 import { onlineSinceIso } from "@/lib/time";
+import { SectionLogo } from "@/components/ui/section-logo";
 
 type CommunityLite = {
   id: string;
@@ -19,6 +20,7 @@ type CommunityLite = {
   avatar_url: string | null;
   cover_url: string | null;
   is_society: boolean;
+  is_official: boolean;
 };
 
 type ChatRoomRow = {
@@ -31,7 +33,7 @@ type ChatRoomRow = {
   owner_id: string;
 };
 
-const COMMUNITY_LITE = "id, name, avatar_url, cover_url, is_society";
+const COMMUNITY_LITE = "id, name, avatar_url, cover_url, is_society, is_official";
 
 /**
  * The Community hub (dock tab "Community"): Your Spaces → Verified Communities
@@ -57,9 +59,14 @@ export default function CommunitiesPage() {
   return (
     <main className="mx-auto w-full max-w-md px-4 py-6">
       <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-[22px] font-bold tracking-tight">Community</h1>
-          <p className="mt-1 text-sm text-fg-muted">Campus Spaces &amp; Societies</p>
+        <div className="flex items-center gap-2.5">
+          <SectionLogo />
+          <div>
+            <h1 className="text-[22px] font-bold tracking-tight">Community</h1>
+            <Suspense fallback={<p className="mt-1 text-sm text-fg-muted">What do you want?</p>}>
+              <CommunitySubtext />
+            </Suspense>
+          </div>
         </div>
         <CreateSpaceButton />
       </div>
@@ -68,6 +75,25 @@ export default function CommunitiesPage() {
       </Suspense>
     </main>
   );
+}
+
+async function CommunitySubtext() {
+  const supabase = await createClient();
+  const me = (await getAuthUserId())!;
+  const { data: profile } = await supabase
+    .from("profiles")
+    // `full_name`, NOT `display_name`: the column exists but is null for all 144
+    // production profiles, so reading it would have silently rendered the nameless
+    // fallback forever. `full_name` is the name the rest of the app displays.
+    .select("full_name")
+    .eq("id", me)
+    .maybeSingle();
+
+  const trimmed = (profile?.full_name ?? "").trim();
+  const full = trimmed.length > 18 ? trimmed.split(" ")[0] : trimmed;
+  const text = full ? `What do you want, ${full}?` : "What do you want?";
+
+  return <p className="mt-1 truncate text-sm text-fg-muted">{text}</p>;
 }
 
 async function CommunitySections() {
@@ -216,6 +242,7 @@ async function CommunitySections() {
     avatar_url: c.avatar_url,
     cover_url: c.cover_url,
     isSociety: c.is_society,
+    isOfficial: c.is_official,
     activeNow: activeBySpace.get(c.id) ?? 0,
   }));
 

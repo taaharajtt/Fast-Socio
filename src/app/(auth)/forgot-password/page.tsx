@@ -50,7 +50,7 @@ export default function ForgotPasswordPage() {
     <main className="w-full max-w-sm">
       {/* Header — app icon + name + tagline (UISpec V3 Screen 1) */}
       <div className="flex flex-col items-center">
-        <Image src="/brand/logo.png" alt="Fast Socio" width={180} height={90} />
+        <Image src="/brand/logo.png" alt="Fast Socio" width={270} height={135} />
       </div>
 
       {step === "email" ? (

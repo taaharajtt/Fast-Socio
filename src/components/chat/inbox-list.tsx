@@ -6,7 +6,7 @@ import { RequestRow } from "@/components/chat/request-row";
 import { OpenChatButton } from "@/components/chat/open-chat-button";
 import { AppImage } from "@/components/ui/app-image";
 import { resolveAvatarUrl } from "@/lib/avatar";
-import { OnlineDot } from "@/components/ui/badges";
+import { OnlineDot, VerifiedBadge } from "@/components/ui/badges";
 import { communityIcon } from "@/lib/communities/icon";
 import { discoverGroupLabel } from "@/lib/discover/group-label";
 import { DiscoverGroupAvatar } from "@/components/discover/discover-group-avatar";
@@ -196,6 +196,9 @@ export function InboxList({
                       <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-fg">
                         {t.space.name}
                       </span>
+                      {t.space.is_society && t.space.is_official && (
+                        <VerifiedBadge size={14} className="shrink-0" />
+                      )}
                       {t.space.is_discover_group ? (
                         <span className="gradient-brand shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold text-white">
                           {discoverGroupLabel(t.space.discover_mode)}

@@ -59,9 +59,6 @@ export default function ProfilePage({
         >
           <Settings className="h-4 w-4" aria-hidden />
         </Link>
-        <Suspense fallback={null}>
-          <CoverName />
-        </Suspense>
         <div className="absolute -bottom-10 left-4">
           <div className="relative h-20 w-20 overflow-hidden rounded-full border-[3px] border-bg bg-card">
             <Suspense fallback={<span className="block h-full w-full" />}>
@@ -127,16 +124,6 @@ async function CoverArt() {
     />
   ) : (
     <div className="h-full w-full gradient-brand opacity-80" />
-  );
-}
-
-async function CoverName() {
-  const { profile } = await loadProfile();
-  if (!profile?.full_name) return null;
-  return (
-    <span className="absolute bottom-3 left-[108px] text-[13px] font-semibold text-white/70">
-      {profile.full_name}
-    </span>
   );
 }
 
@@ -284,7 +271,10 @@ async function Tabs({ searchParams }: { searchParams: Promise<SP> }) {
     { data: postRows },
     { data: matchCount },
     { data: commRows },
-    { count: postCount },
+    // `rpc()` returns its scalar in `data` — NOT in `count`, which PostgREST only
+    // populates for `.select()` with a count option. Destructuring `count` here
+    // silently yielded undefined -> `?? 0` -> a permanent zero (fix-036/fix-042 round 2).
+    { data: postCount },
     { count: eventCount },
   ] = await Promise.all([
     // Your Posts tab shows attributed posts only — anonymous posts are kept off

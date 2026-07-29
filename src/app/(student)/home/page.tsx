@@ -33,6 +33,11 @@ import { FEED_COLUMNS, FEED_PAGE_SIZE, type FeedPost } from "@/lib/feed/types";
  */
 export default function HomePage() {
   const feed = loadFeed();
+  // Deliberately NOT awaited — see the note above. Awaiting here would make this
+  // function async and hold the entire prerendered shell behind a profile read.
+  // It travels as a promise, exactly like `feed`, and is unwrapped behind its own
+  // Suspense boundary in HomeFeed.
+  const composerPlaceholder = loadComposerPlaceholder();
 
   return (
     <main className="mx-auto w-full max-w-md pb-4">
@@ -43,24 +48,14 @@ export default function HomePage() {
         {/* Brand logo (UAT-001). PNG lives at public/brand/logo.png; the h1 text
             stays as the accessible name and renders if the asset is missing. */}
         <h1 className="text-xl font-black tracking-tight">
-          {/* UAT-006: theme-aware logo. Dark keeps logo.png; light shows the new
-              logo1.png. Class-strategy dark mode (html.dark / html.light) lets us
-              swap with CSS alone — no JS, no hydration flash. */}
+          {/* App is dark-only; always render the dark-mode logo asset. */}
           <Image
             src="/brand/logo.png"
             alt="FAST SOCIO"
             width={512}
             height={256}
             priority
-            className="hidden h-[70px] w-auto dark:block"
-          />
-          <Image
-            src="/brand/logo1.png"
-            alt="FAST SOCIO"
-            width={512}
-            height={256}
-            priority
-            className="block h-[70px] w-auto dark:hidden"
+            className="h-[70px] w-auto"
           />
           <span className="sr-only">FAST SOCIO</span>
         </h1>
@@ -88,6 +83,7 @@ export default function HomePage() {
           a gap, then Campus Help (its own <section className="mt-4">). */}
       <HomeFeed
         feed={feed}
+        composerPlaceholder={composerPlaceholder}
         belowComposer={
           <Suspense fallback={null}>
             <HomeHelpStrip />
@@ -125,6 +121,26 @@ async function loadFeed(): Promise<{
       .limit(FEED_PAGE_SIZE)
   );
   return { posts: (data as unknown as FeedPost[]) ?? [], currentUserId };
+}
+
+/** Builds the composer's placeholder from the viewer's own name (fix-038):
+ *  "Yo, {name}! What's on your mind?", falling back to the nameless default
+ *  when the profile has no name, and to the first name only when the full
+ *  name would be too long for the composer card. */
+async function loadComposerPlaceholder(): Promise<string> {
+  const fallback = "What's on your mind?";
+  const supabase = await createClient();
+  const userId = await getAuthUserId();
+  if (!userId) return fallback;
+  const { data: viewer } = await supabase
+    .from("profiles")
+    .select("full_name")
+    .eq("id", userId)
+    .single();
+  const full = viewer?.full_name?.trim();
+  if (!full) return fallback;
+  const name = full.length > 18 ? full.split(" ")[0] : full;
+  return `Yo, ${name}! What's on your mind?`;
 }
 
 /** The Activity button with no count — what the shell renders until the real

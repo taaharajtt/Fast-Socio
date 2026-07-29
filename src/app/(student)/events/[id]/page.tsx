@@ -45,7 +45,7 @@ export default async function EventPage({
   const { data: event } = await supabase
     .from("events")
     .select(
-      "id, title, description, category, location, starts_at, ends_at, cover_url, attendee_count, capacity, status, host_id, community_id"
+      "id, title, description, category, location, place_id, starts_at, ends_at, cover_url, attendee_count, capacity, status, host_id, community_id"
     )
     .eq("id", id)
     .single();
@@ -175,6 +175,7 @@ export default async function EventPage({
           description={event.description}
           formattedDate={formatEventDate(event.starts_at)}
           location={event.location}
+          placeId={event.place_id}
           attendeeCount={event.attendee_count}
           capacity={event.capacity}
           host={host ?? null}

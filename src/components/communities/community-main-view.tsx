@@ -12,6 +12,8 @@ export type YourSpaceVM = {
   avatar_url: string | null;
   cover_url: string | null;
   isSociety: boolean;
+  /** Official/verified society — shows the blue check next to the name. */
+  isOfficial?: boolean;
   /** Members seen in the last two minutes. The dot lights up above 1. */
   activeNow: number;
 };
@@ -110,8 +112,11 @@ function SpaceTile({ s }: { s: YourSpaceVM }) {
             your own heartbeat would light up on every tile, always. */}
         {s.activeNow > 1 && <ActiveDot count={s.activeNow} />}
       </span>
-      <span className="w-full truncate text-[11px] font-medium text-fg-muted">
-        {s.name}
+      <span className="flex w-full min-w-0 items-center justify-center gap-0.5">
+        <span className="min-w-0 truncate text-[11px] font-medium text-fg-muted">
+          {s.name}
+        </span>
+        {s.isSociety && s.isOfficial && <VerifiedBadge size={11} className="shrink-0" />}
       </span>
     </Link>
   );

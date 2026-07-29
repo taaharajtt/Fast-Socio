@@ -114,7 +114,7 @@ export function ProfileTabs({
         ) : (
           // Negative margin lets the full-bleed cards match the home feed while
           // the rest of the profile stays padded.
-          <div className="-mx-5 divide-y divide-glass-border border-y border-glass-border">
+          <div className="-mx-5 divide-y divide-glass-border border-b border-glass-border">
             {list.map((p) => (
               <PostCard
                 key={p.id}

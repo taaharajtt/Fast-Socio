@@ -76,13 +76,13 @@ export async function loadInbox(): Promise<InboxData> {
     supabase
       .from("community_members")
       .select(
-        "community:communities(id, name, avatar_url, cover_url, is_society, status, is_discover_group, discover_mode, discover_title)"
+        "community:communities(id, name, avatar_url, cover_url, is_society, is_official, status, is_discover_group, discover_mode, discover_title)"
       )
       .eq("user_id", me),
     supabase
       .from("communities")
       .select(
-        "id, name, avatar_url, cover_url, is_society, status, is_discover_group, discover_mode, discover_title"
+        "id, name, avatar_url, cover_url, is_society, is_official, status, is_discover_group, discover_mode, discover_title"
       )
       .eq("owner_id", me),
   ]);

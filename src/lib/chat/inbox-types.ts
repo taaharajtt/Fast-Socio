@@ -24,6 +24,7 @@ export type InboxSpace = {
   avatar_url: string | null;
   cover_url: string | null;
   is_society: boolean;
+  is_official: boolean;
   status: string;
   /**
    * Discover team rooms (mig 0129) are communities carrying a flag, so they

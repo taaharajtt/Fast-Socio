@@ -12,7 +12,7 @@ export function CreateSpaceButton() {
     <Link
       href="/communities/new"
       aria-label="Create a space"
-      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-card text-fg-muted hover:text-fg"
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-aura text-white hover:bg-aura/90 active:bg-aura/80"
     >
       <Plus className="h-5 w-5" aria-hidden />
     </Link>

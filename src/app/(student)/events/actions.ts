@@ -13,6 +13,11 @@ export async function createEvent(input: {
   description: string;
   category: string;
   location: string;
+  /** Known campus place id from LocationPicker; null when no pin is set. */
+  placeId?: string | null;
+  /** Percentage coordinates (0-100) of public/map.png; must accompany placeId. */
+  placeX?: number | null;
+  placeY?: number | null;
   startsAt: string; // ISO datetime-local value
   coverUrl?: string | null;
   communityId?: string | null;
@@ -40,6 +45,31 @@ export async function createEvent(input: {
       return { error: "Capacity must be a positive number." };
   }
 
+  // A pinned place is optional (an event may have a free label with no pin),
+  // but when present its coordinates must be valid percentages of the map —
+  // and a pin id can't exist without them, or vice versa.
+  const placeId = input.placeId?.trim() || null;
+  let placeX: number | null = null;
+  let placeY: number | null = null;
+  if (placeId) {
+    if (
+      typeof input.placeX !== "number" ||
+      typeof input.placeY !== "number" ||
+      !Number.isFinite(input.placeX) ||
+      !Number.isFinite(input.placeY) ||
+      input.placeX < 0 ||
+      input.placeX > 100 ||
+      input.placeY < 0 ||
+      input.placeY > 100
+    ) {
+      return { error: "Invalid pinned location." };
+    }
+    placeX = input.placeX;
+    placeY = input.placeY;
+  } else if (input.placeX != null || input.placeY != null) {
+    return { error: "Invalid pinned location." };
+  }
+
   const allowed = await checkRateLimit("create_event", 10, 24 * 60 * 60);
   if (!allowed) return { error: "You've submitted too many events today." };
 
@@ -52,6 +82,9 @@ export async function createEvent(input: {
       description: input.description.trim() || null,
       category: input.category,
       location: input.location.trim() || null,
+      place_id: placeId,
+      place_x: placeX,
+      place_y: placeY,
       cover_url: input.coverUrl ?? null,
       starts_at: startsAt.toISOString(),
       capacity,

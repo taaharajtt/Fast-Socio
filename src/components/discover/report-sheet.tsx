@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { GlassButton, GlassSheet } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { reportProfile } from "@/app/(student)/discover/actions";
@@ -51,6 +51,24 @@ function ReportSheetContent({
   const [pending, setPending] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [flashed, setFlashed] = useState<string | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (flashTimer.current) clearTimeout(flashTimer.current);
+    };
+  }, []);
+
+  function selectReason(r: string) {
+    setReason(r);
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    setFlashed(r);
+    flashTimer.current = setTimeout(() => {
+      setFlashed(null);
+      flashTimer.current = null;
+    }, 250);
+  }
 
   async function submit() {
     if (!reason) return;
@@ -83,10 +101,14 @@ function ReportSheetContent({
           <button
             key={r}
             type="button"
-            onClick={() => setReason(r)}
+            onClick={() => selectReason(r)}
             className={cn(
-              "flex w-full items-center justify-between rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm transition-colors",
-              reason === r ? "glass-strong text-fg" : "glass text-fg-muted"
+              "flex w-full items-center justify-between rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm transition-colors motion-reduce:transition-none",
+              reason === r ? "glass-strong text-fg" : "glass text-fg-muted",
+              // motion-safe: under prefers-reduced-motion the flash is simply never
+              // applied, so the option settles straight into its selected state with
+              // its glass background intact (bg-transparent would have stripped it).
+              flashed === r && "motion-safe:bg-aura/30"
             )}
           >
             {r}

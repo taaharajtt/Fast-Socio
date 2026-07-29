@@ -94,6 +94,9 @@ type PostRow = {
   interests: string[] | null;
   roles_needed: string[] | null;
   place: string | null;
+  place_id?: string | null;
+  place_x?: number | null;
+  place_y?: number | null;
   scheduled_at: string | null;
   hackathon_name: string | null;
   hackathon_url: string | null;
@@ -150,6 +153,13 @@ function mapPost(r: PostRow): SmartMatchPost {
     interests: r.interests ?? [],
     rolesNeeded: r.roles_needed ?? [],
     place: r.place,
+    // Only present on rows selected with "*" (own posts) — the shared feed
+    // RPC's return table predates mig 0138 and isn't in scope here (no
+    // migrations may be written for this task), so cards fed from it fall
+    // back to string-matching `place` via resolvePlace().
+    placeId: r.place_id ?? null,
+    placeX: r.place_x ?? null,
+    placeY: r.place_y ?? null,
     scheduledAt: r.scheduled_at,
     hackathonName: r.hackathon_name,
     hackathonUrl: r.hackathon_url,
@@ -480,19 +490,48 @@ export async function getMyDiscoverData(): Promise<MyDiscoverData | null> {
   };
 }
 
-/** Search onboarded, non-banned students to tag as current team members. */
+/**
+ * The current user's match partner ids (either side of the canonical
+ * user_low/user_high pair in `matches`). Used to scope who can be tagged as a
+ * team member on a Discover post — matches only, resolved server-side.
+ */
+async function getMatchIds(uid: string): Promise<string[]> {
+  const supabase = await createClient();
+  const [{ data: asLow }, { data: asHigh }] = await Promise.all([
+    supabase.from("matches").select("user_high").eq("user_low", uid),
+    supabase.from("matches").select("user_low").eq("user_high", uid),
+  ]);
+  const ids = new Set<string>();
+  for (const r of asLow ?? []) ids.add((r as { user_high: string }).user_high);
+  for (const r of asHigh ?? []) ids.add((r as { user_low: string }).user_low);
+  return [...ids];
+}
+
+/** Whether the current user has any matches at all — drives the tagger's empty state. */
+export async function hasAnyMatches(): Promise<boolean> {
+  const uid = await getAuthUserId();
+  if (!uid) return false;
+  const matchIds = await getMatchIds(uid);
+  return matchIds.length > 0;
+}
+
+/** Search the current user's matches (onboarded, non-banned) to tag as current team members. */
 export async function searchTeammates(query: string): Promise<TeamMember[]> {
   const q = query.trim();
   if (q.length < 2) return [];
   const safe = q.replace(/[,()*%\\]/g, " ").trim();
   if (!safe) return [];
   const uid = await getAuthUserId();
+  if (!uid) return [];
+  const matchIds = await getMatchIds(uid);
+  if (matchIds.length === 0) return [];
   const supabase = await createClient();
   const { data } = await supabase
     .from("profiles")
     .select("id, full_name, username, avatar_url, gender")
     .eq("onboarding_completed", true)
     .eq("is_banned", false)
+    .in("id", matchIds)
     .or(`full_name.ilike.%${safe}%,username.ilike.%${safe}%`)
     .limit(8);
   return ((data ?? []) as Array<{
@@ -528,16 +567,62 @@ export async function createDiscoverPost(
   const allowed = await checkRateLimit("smart_match_post", 20, 60 * 60);
   if (!allowed) return { ok: false, error: "Too many posts for now." };
 
+  const ids = teamMemberIds.slice(0, 20);
+  if (ids.length) {
+    const matchIds = new Set(await getMatchIds(uid));
+    if (ids.some((id) => !matchIds.has(id)))
+      return {
+        ok: false,
+        error: "You can only tag people you've matched with.",
+      };
+  }
+
   const supabase = await createClient();
-  const { error } = await supabase.rpc("create_smart_match_post", {
+  const { data, error } = await supabase.rpc("create_smart_match_post", {
     p_mode: kind,
     p_payload: buildPostPayload(kind, values),
-    p_team_member_ids: teamMemberIds.slice(0, 20),
+    p_team_member_ids: ids,
   });
   if (error) return { ok: false, error: friendly(error.message) };
+
+  await savePostPlace(kind, data as string | null, values);
+
   revalidatePath("/discover");
   revalidatePath("/discover/post");
   return { ok: true };
+}
+
+/**
+ * Persist the picked place's id/x/y (from LocationPicker via `onPlace`, see
+ * post-intent-fields.tsx) onto a just-created/updated post. Only Sports posts
+ * carry a "place" field today. This never fails the outer create/update — the
+ * post (and its text `place` label) is already saved by that point, so a pin
+ * write failure is logged and swallowed rather than surfaced as a post error.
+ */
+async function savePostPlace(
+  kind: PostMode,
+  postId: string | null,
+  values: PostFormValues
+): Promise<void> {
+  // Only Sports posts have a "place" field, and only when the author actually
+  // touched LocationPicker (onPlace) does `place_id` show up on `values` at
+  // all — untouched forms never call this RPC, on create or edit.
+  if (kind !== "sports" || !postId || !("place_id" in values)) return;
+  const placeId = typeof values.place_id === "string" ? values.place_id.trim() : "";
+  // Empty string means the author cleared the pin — pass nulls through so
+  // set_smart_match_post_place removes it rather than leaving a stale pin.
+  const x = placeId ? Number(values.place_x) : null;
+  const y = placeId ? Number(values.place_y) : null;
+  if (placeId && (!Number.isFinite(x) || !Number.isFinite(y))) return;
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_smart_match_post_place", {
+    p_id: postId,
+    p_place_id: placeId || null,
+    p_x: x,
+    p_y: y,
+  });
+  if (error) console.error("set_smart_match_post_place failed:", error.message);
 }
 
 /** Update one of the caller's own posts. */
@@ -551,13 +636,39 @@ export async function updateDiscoverPost(
   const check = validatePostInput(kind, values);
   if (!check.ok)
     return { ok: false, error: `Please fill in: ${check.missing.join(", ")}.` };
+  const uid = await getAuthUserId();
+  if (!uid) return { ok: false, error: "Not signed in." };
   const supabase = await createClient();
+
+  const ids = teamMemberIds ? teamMemberIds.slice(0, 20) : null;
+  if (ids && ids.length) {
+    const { data: existing } = await supabase
+      .from("smart_match_team_members")
+      .select("user_id")
+      .eq("post_id", postId);
+    const existingIds = new Set(
+      (existing ?? []).map((r) => (r as { user_id: string }).user_id)
+    );
+    const newlyAdded = ids.filter((id) => !existingIds.has(id));
+    if (newlyAdded.length) {
+      const matchIds = new Set(await getMatchIds(uid));
+      if (newlyAdded.some((id) => !matchIds.has(id)))
+        return {
+          ok: false,
+          error: "You can only tag people you've matched with.",
+        };
+    }
+  }
+
   const { error } = await supabase.rpc("update_smart_match_post", {
     p_id: postId,
     p_payload: buildPostPayload(kind, values),
-    p_team_member_ids: teamMemberIds ? teamMemberIds.slice(0, 20) : null,
+    p_team_member_ids: ids,
   });
   if (error) return { ok: false, error: friendly(error.message) };
+
+  await savePostPlace(kind, postId, values);
+
   revalidatePath("/discover");
   revalidatePath("/discover/post");
   return { ok: true };
