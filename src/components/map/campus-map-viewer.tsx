@@ -339,10 +339,6 @@ export function CampusMapViewer({
           className="pointer-events-auto absolute left-4 flex flex-col overflow-hidden rounded-full border border-white/10 bg-card/95 shadow-lg transition-all"
           style={{ bottom: 16 + controlsBottomInset }}
         >
-          <ControlButton label="Fit map to screen" onClick={resetToFit}>
-            <Maximize className="h-5 w-5" aria-hidden />
-          </ControlButton>
-          <div className="h-px w-full bg-white/10" aria-hidden />
           <ControlButton
             label="Reset map"
             onClick={resetToFit}
