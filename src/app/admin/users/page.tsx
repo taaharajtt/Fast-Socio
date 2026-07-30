@@ -10,19 +10,41 @@ export default async function AdminUsersPage({
   const { q } = await searchParams;
   const supabase = await createClient();
 
+  // The list is capped, but the HEADER MUST REPORT THE TRUE TOTAL. It used to
+  // show `rows.length`, i.e. how many rows this page happened to fetch, so it
+  // read "50" for any population above 50 — the count looked like a user total
+  // and was really a page size. `count: "exact"` gives the number of rows the
+  // filter matches, independent of the limit.
+  const PAGE_SIZE = 50;
+  const term = q?.trim() ?? "";
+
   let query = supabase
     .from("profiles")
-    .select("id, full_name, department, aura_score, is_banned")
+    .select("id, full_name, username, department, aura_score, is_banned", {
+      count: "exact",
+    })
     .order("aura_score", { ascending: false })
-    .limit(50);
-  if (q && q.trim()) query = query.ilike("full_name", `%${q.trim()}%`);
+    .limit(PAGE_SIZE);
+  // Search covers the roll number too: 41 profiles have no full_name, and a
+  // name-only filter made them unreachable from this page.
+  if (term) query = query.or(`full_name.ilike.%${term}%,username.ilike.%${term}%`);
 
-  const { data: users } = await query;
+  const { data: users, count } = await query;
   const rows = users ?? [];
+  const total = count ?? rows.length;
+  const truncated = total > rows.length;
 
   return (
     <>
-      <PageHeader title="Users" count={rows.length} sub="Search a student to view or adjust their record." />
+      <PageHeader
+        title="Users"
+        count={total}
+        sub={
+          truncated
+            ? `Showing the top ${rows.length} by aura of ${total}${term ? " matching" : ""}. Search to narrow it down.`
+            : "Search a student to view or adjust their record."
+        }
+      />
 
       <form method="GET" className="mb-4 flex gap-2">
         <input
@@ -64,6 +86,13 @@ export default async function AdminUsersPage({
                   >
                     {u.full_name ?? "Unnamed"}
                   </Link>
+                  {/* The roll number identifies the 41 profiles that have no
+                      full_name, which otherwise all read as "Unnamed". */}
+                  {u.username && (
+                    <span className="ml-1.5 font-mono text-[11px] text-fg-muted">
+                      {u.username}
+                    </span>
+                  )}
                 </Td>
                 <Td className="text-fg-muted">{u.department ?? "—"}</Td>
                 <Td>
