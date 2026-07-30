@@ -33,8 +33,12 @@ export type OfficerVM = {
 /** A row from the society_announcement_feed definer view. */
 export type AnnouncementRow = {
   id: string;
+  /**
+   * Null for anything posted from the chat-style composer (fix-049, mig 0147).
+   * Older titled announcements keep theirs and still render it.
+   */
+  title: string | null;
   society_id: string;
-  title: string;
   body: string;
   pinned: boolean;
   visibility: "public" | "members";
@@ -45,4 +49,9 @@ export type AnnouncementRow = {
   author_username: string | null;
   author_avatar: string | null;
   is_mine: boolean;
+  /** Reuses the community poll tables — a society IS a community. */
+  poll_id: string | null;
+  /** Raw `chat-media` storage path, signed at display time. */
+  attachment_url: string | null;
+  attachment_type: string | null;
 };

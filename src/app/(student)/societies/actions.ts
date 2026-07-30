@@ -163,6 +163,93 @@ export async function createSocietyAnnouncement(
   return { ok: true };
 }
 
+/**
+ * Post an announcement from the chat-style composer (fix-049).
+ *
+ * Body-only — no title. `society_announcements.title` became nullable in mig
+ * 0147 precisely so a one-field composer could write a row without inventing a
+ * title nobody typed. Who may post is unchanged: the RPC is officer/admin gated.
+ */
+export async function postSocietyAnnouncement(
+  societyId: string,
+  body: string,
+  opts?: { attachmentPath?: string }
+): Promise<Result> {
+  const supabase = await createClient();
+  const uid = await getAuthUserId();
+  if (!uid) return { ok: false, error: "Not signed in." };
+
+  const b = body.trim();
+  if (!b && !opts?.attachmentPath)
+    return { ok: false, error: "Write something to announce." };
+  if (b.length > 4000) return { ok: false, error: "That's too long." };
+
+  if (opts?.attachmentPath) {
+    // Same rule as community chat: images only, checked against what storage
+    // actually holds rather than trusting the picker.
+    if (!opts.attachmentPath.startsWith(`${societyId}/`) ||
+        opts.attachmentPath.includes("..")) {
+      return { ok: false, error: "Invalid attachment." };
+    }
+    const slash = opts.attachmentPath.lastIndexOf("/");
+    const { data: objects } = await supabase.storage
+      .from("chat-media")
+      .list(opts.attachmentPath.slice(0, slash), {
+        search: opts.attachmentPath.slice(slash + 1),
+        limit: 1,
+      });
+    const mime = (objects?.[0]?.metadata as { mimetype?: string } | undefined)
+      ?.mimetype;
+    if (!mime || !mime.startsWith("image/"))
+      return { ok: false, error: "Only images can be attached." };
+  }
+
+  const allowed = await checkRateLimit("society_announce", 20, 24 * 60 * 60);
+  if (!allowed) return { ok: false, error: "Too many announcements today." };
+
+  const { error } = await supabase.rpc("post_society_announcement", {
+    p_society: societyId,
+    p_body: b,
+    p_visibility: "public",
+    p_attachment_url: opts?.attachmentPath ?? null,
+    p_attachment_type: opts?.attachmentPath ? "image" : null,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/societies/${societyId}`);
+  return { ok: true };
+}
+
+/** Post a poll into the announcement thread (fix-049). */
+export async function postSocietyAnnouncementPoll(
+  societyId: string,
+  question: string,
+  options: string[]
+): Promise<Result> {
+  const supabase = await createClient();
+  const uid = await getAuthUserId();
+  if (!uid) return { ok: false, error: "Not signed in." };
+
+  const q = question.trim();
+  const opts = options.map((o) => o.trim()).filter(Boolean);
+  if (q.length < 1 || q.length > 300)
+    return { ok: false, error: "Ask a question (1–300 characters)." };
+  if (opts.length < 2 || opts.length > 6)
+    return { ok: false, error: "A poll needs 2–6 options." };
+
+  const allowed = await checkRateLimit("society_announce", 20, 24 * 60 * 60);
+  if (!allowed) return { ok: false, error: "Too many announcements today." };
+
+  const { error } = await supabase.rpc("post_society_announcement_poll", {
+    p_society: societyId,
+    p_question: q,
+    p_options: opts,
+    p_visibility: "public",
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/societies/${societyId}`);
+  return { ok: true };
+}
+
 export async function pinSocietyAnnouncement(
   societyId: string,
   announcementId: string,

@@ -8,6 +8,14 @@ import {
   deleteSocietyAnnouncement,
 } from "@/app/(student)/societies/actions";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { PhotoViewer } from "@/components/ui/photo-viewer";
+import { PollCard } from "@/components/communities/poll-card";
+import { signChatMedia } from "@/lib/chat-media-sign";
+import { createClient } from "@/lib/supabase/client";
+import {
+  voteCommunityPoll,
+  type PollOptionResult,
+} from "@/app/(student)/communities/actions";
 import type { AnnouncementRow } from "@/lib/societies/types";
 
 function timeAgo(iso: string): string {
@@ -43,6 +51,63 @@ export function AnnouncementCard({
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [signedImage, setSignedImage] = useState<string | null>(null);
+  const [viewing, setViewing] = useState(false);
+  const [pollOptions, setPollOptions] = useState<PollOptionResult[] | null>(null);
+  const [refreshToken, setRefreshToken] = useState(0);
+
+  // Sign the attachment for display — the chat-media bucket is private.
+  useEffect(() => {
+    if (a.attachment_type !== "image" || !a.attachment_url) return;
+    let cancelled = false;
+    (async () => {
+      const url = await signChatMedia(a.attachment_url as string, "image");
+      if (!cancelled && url) setSignedImage(url);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [a.attachment_url, a.attachment_type]);
+
+  // Poll tallies. Societies ARE communities, so this is the same
+  // community_poll_results view the chat room reads (fix-049, mig 0147).
+  const pollId = a.poll_id;
+  useEffect(() => {
+    if (!pollId) return;
+    let cancelled = false;
+    (async () => {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("community_poll_results")
+        .select("poll_id, option_id, label, position, votes, voted_by_me")
+        .eq("poll_id", pollId)
+        .order("position", { ascending: true });
+      if (cancelled || !data) return;
+      setPollOptions(
+        data.map((r) => ({
+          option_id: r.option_id as string,
+          label: r.label as string,
+          position: r.position as number,
+          votes: Number(r.votes),
+          voted_by_me: Boolean(r.voted_by_me),
+        }))
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pollId, refreshToken]);
+
+  async function onVote(optionId: string) {
+    if (!pollId) return;
+    const res = await voteCommunityPoll(pollId, optionId);
+    if (!res.ok) {
+      setError(res.error);
+      return;
+    }
+    // Re-read the tallies so the bar reflects everyone, not just this vote.
+    setRefreshToken((t) => t + 1);
+  }
   const menuRef = useRef<HTMLDivElement>(null);
   const canDelete = canManage || a.is_mine;
 
@@ -89,10 +154,18 @@ export function AnnouncementCard({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            {pinned && <Pin className="h-3.5 w-3.5 text-accent" aria-hidden />}
-            <h3 className="truncate text-[15px] font-bold text-fg">{a.title}</h3>
-          </div>
+          {/* Title is optional since fix-049 — anything posted from the chat
+              composer is body-only. Older titled announcements keep theirs. */}
+          {(pinned || a.title) && (
+            <div className="flex items-center gap-1.5">
+              {pinned && <Pin className="h-3.5 w-3.5 text-accent" aria-hidden />}
+              {a.title && (
+                <h3 className="truncate text-[15px] font-bold text-fg">
+                  {a.title}
+                </h3>
+              )}
+            </div>
+          )}
           <p className="mt-0.5 flex items-center gap-1.5 text-xs text-fg-muted">
             {showAuthorHeader && (
               <>
@@ -170,7 +243,49 @@ export function AnnouncementCard({
           </div>
         )}
       </div>
-      <p className="mt-2 whitespace-pre-wrap text-sm text-fg/90">{a.body}</p>
+      {/* A poll announcement carries its question in `body`, so PollCard owns
+          the text — rendering both would print the question twice. */}
+      {a.poll_id && pollOptions ? (
+        <div className="mt-2">
+          <PollCard
+            question={a.body}
+            options={pollOptions}
+            mine={a.is_mine}
+            onVote={onVote}
+          />
+        </div>
+      ) : (
+        <>
+          {a.body && (
+            <p className="mt-2 whitespace-pre-wrap text-sm text-fg/90">{a.body}</p>
+          )}
+          {a.attachment_type === "image" && signedImage && (
+            <button
+              type="button"
+              onClick={() => setViewing(true)}
+              aria-label="Open photo"
+              className="mt-2 block"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element -- signed
+                  storage URL, sized by the transform; next/image would re-proxy it. */}
+              <img
+                src={signedImage}
+                alt=""
+                draggable={false}
+                className="block max-h-80 w-full rounded-[10px] object-cover"
+              />
+            </button>
+          )}
+        </>
+      )}
+
+      <PhotoViewer
+        open={viewing}
+        onClose={() => setViewing(false)}
+        src={signedImage}
+        senderName={a.author_name}
+        timestamp={a.created_at}
+      />
 
       <ConfirmDialog
         open={confirming}

@@ -573,7 +573,9 @@ export function CommunityChat({
 }
 
 /** Inline poll builder: a question plus 2–6 options. */
-function PollComposer({
+/** Exported so the announcement thread posts polls with the same builder
+ *  (fix-049 asks for the same component wherever possible). */
+export function PollComposer({
   onCancel,
   onSubmit,
 }: {

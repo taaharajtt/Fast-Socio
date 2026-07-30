@@ -3,13 +3,20 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { MessageCircle, Radio } from "lucide-react";
-import { AnnouncementComposer } from "@/components/societies/announcement-composer";
 import { AnnouncementCard } from "@/components/societies/announcement-card";
+import { ChatComposer } from "@/components/chat/chat-composer";
+import { PollComposer } from "@/components/communities/community-chat";
+import { ImageCropper, type CropResult } from "@/components/ui/image-cropper";
 import { createClient } from "@/lib/supabase/client";
+import { uploadWithProgress } from "@/lib/storage-upload";
+import {
+  postSocietyAnnouncement,
+  postSocietyAnnouncementPoll,
+} from "@/app/(student)/societies/actions";
 import type { AnnouncementRow } from "@/lib/societies/types";
 
 const FEED_COLUMNS =
-  "id, society_id, title, body, pinned, visibility, created_at, updated_at, author_id, author_name, author_username, author_avatar, is_mine";
+  "id, society_id, title, body, pinned, visibility, created_at, updated_at, author_id, author_name, author_username, author_avatar, is_mine, poll_id, attachment_url, attachment_type";
 
 /**
  * Broadcast announcements presented as a chat thread — newest at the bottom,
@@ -46,10 +53,44 @@ export function AnnouncementThread({
     setMessages([...announcements].reverse());
   }
 
+  const [composingPoll, setComposingPoll] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
   const listRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<ReturnType<
     ReturnType<typeof createClient>["channel"]
   > | null>(null);
+
+  async function onSend(text: string) {
+    setBusy(true);
+    setError(null);
+    const res = await postSocietyAnnouncement(societyId, text);
+    setBusy(false);
+    if (!res.ok) setError(res.error);
+  }
+
+  async function onCropped(result: CropResult) {
+    setCropFile(null);
+    setBusy(true);
+    setError(null);
+    const path = `${societyId}/${crypto.randomUUID()}.${result.extension}`;
+    try {
+      await uploadWithProgress("chat-media", path, result.blob, {
+        contentType: result.mimeType,
+      });
+      const res = await postSocietyAnnouncement(societyId, "", {
+        attachmentPath: path,
+      });
+      if (!res.ok) setError(res.error);
+    } catch {
+      setError("Couldn't upload that image.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     const supabase = createClient();
@@ -163,7 +204,66 @@ export function AnnouncementThread({
         </div>
       )}
 
-      {canPost && <AnnouncementComposer societyId={societyId} />}
+      {canPost && (
+        <div>
+          {composingPoll && (
+            <PollComposer
+              onCancel={() => setComposingPoll(false)}
+              onSubmit={async (question, options) => {
+                const res = await postSocietyAnnouncementPoll(
+                  societyId,
+                  question,
+                  options
+                );
+                if (!res.ok) {
+                  setError(res.error);
+                  return false;
+                }
+                setComposingPoll(false);
+                return true;
+              }}
+            />
+          )}
+
+          {error && <p className="pb-1.5 text-sm text-error">{error}</p>}
+
+          {/* fix-049: the same composer the chat surfaces use, configured for
+              this one. No anonymous option — an announcement is signed by the
+              society by definition. */}
+          <ChatComposer
+            placeholder="Post an announcement"
+            capabilities={{ poll: true, media: true }}
+            pollActive={composingPoll}
+            onTogglePoll={() => setComposingPoll((p) => !p)}
+            onPickImage={() => fileRef.current?.click()}
+            onSend={onSend}
+            busy={busy}
+          />
+
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) setCropFile(file);
+            }}
+          />
+
+          {cropFile && (
+            <ImageCropper
+              file={cropFile}
+              aspect={1}
+              aspectOptions
+              title="Attach photo"
+              onCancel={() => setCropFile(null)}
+              onCropped={onCropped}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }
