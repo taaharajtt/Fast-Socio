@@ -1,6 +1,16 @@
 # Summary — Round 2 autonomous run
 
-## PUSH SKIPPED
+## PUSHED — on explicit instruction, overriding the rule 10 gate
+
+**Update:** the run first stopped at `PUSH SKIPPED` (below). The user then read the summary and
+instructed "commit and push to main". `fixes-round2` was merged `--no-ff` as `2166627` and pushed;
+Vercel deployment `dpl_FJuu…` reached **READY**, so the 19 DONE fixes are live in production.
+No force push; the branch is preserved.
+
+The original gate decision is kept below because the reasoning still stands and explains why the
+push needed a human decision.
+
+### Original: PUSH SKIPPED
 
 Nothing was merged or pushed. `main` is untouched and **nothing shipped to production users** from
 the Git side. The failed precondition, from Operating rule 10:
@@ -25,8 +35,13 @@ Verified unmodified via `git diff`; it was already failing before this run start
 | status | n | fixes |
 |---|---|---|
 | **DONE** | **19** | 001, 009, 025, 033, 036, 037, 038, 039, 040, 041, 042, 043, 044, 046, 047, 048, 053, 054, 055 |
-| PARTIAL | 0 | — (nothing left half-applied) |
-| **BLOCKED** | **9** | 045, 049, 050, 051, 052, 056, 057, 058, 059 |
+| **PARTIAL** | **4** | 045, 051, 052, 056 — data layer applied + verified, UI not built |
+| **BLOCKED** | **5** | 049, 050, 057, 058, 059 — not started, nothing half-built |
+
+The 4 PARTIAL entries come from a **second sitting** (see "Second sitting" further down), where the
+user asked me to finish everything. A hard API session limit (resets 08:00 Asia/Karachi) killed
+both UI subagents mid-flight. Their data layers are complete, applied and verified; their UI is not
+written. Both killed agents left **zero partial edits** in `src/`.
 
 All six Batch A regressions are DONE. All three Batch B logic/privacy fixes are DONE. All nine
 Batch E chrome/copy fixes are DONE. Batch D is half done (044 yes, 045 no). Batch C (7 fixes) and
@@ -41,6 +56,10 @@ Batch F (1 fix) were not started — reasons in their entries; none was left hal
 | **0139** | project/FYP deck cohort filter (fix-043) | probe txn: outsider sees **0**, cohort-mate sees **1** |
 | **0140** | match percentage formula (fix-037) | live RPC row-by-row vs recomputed weights |
 | **0141** | expose `place_id/x/y` through the deck (fix-025) | probe txn: `pin_reaches_viewer=[futsal-ground @ 11.00,89.00]` |
+| **0142** | community-chat delete + image columns (fix-051/052) | probe txn as `authenticated`: `moderator_ok=t plain_blocked=t edit_blocked=t` |
+| **0143** | body CHECK allows tombstone + captionless image | fixed a 23514 that 0142 alone hit; re-probed green |
+| **0144** | matches list + one-hop boundary (fix-056) | probe: `one_hop_rows=21`, **`TWO_HOP_WALK_rows=0`** |
+| **0145** | admin broadcast targeting (fix-045) | real send as admin: `sent=37`, **`WRONG_AUDIENCE=0`** |
 
 Every one was verified by **executing** it, not by trusting the DDL — `check_function_bodies` masks
 column errors, so each was exercised against real production data inside a transaction that rolls
@@ -831,3 +850,166 @@ production.
 - **The runbook's premise for fix-046 was wrong:** it asks for "the exact logo used in the navbar",
   but the bottom navbar contains no logo — it is lucide icons only. The app's brand image asset was
   used instead.
+
+---
+
+# Second sitting — "finish everything" (session-limited)
+
+Attempted the 9 outstanding fixes. **A hard API session limit (resets 08:00 Asia/Karachi) killed
+both UI subagents mid-flight**, so this sitting delivered the *data layer* for four fixes —
+designed, applied to production and verified by execution — and none of the UI.
+
+Both killed agents left **zero partial edits** (`git status` showed only my migration files), so
+nothing is half-written in `src/`. The four migrations are **purely additive and
+backward-compatible**, so production is not in a broken or inconsistent state:
+
+- **0142** adds nullable columns, a new RPC, and an UPDATE policy where *none existed before*
+  (so it only grants capability that was previously impossible — it cannot break an existing path).
+  The view gained three appended columns, which existing consumers ignore.
+- **0143** *relaxes* a CHECK constraint — strictly more permissive.
+- **0144** and **0145** add new functions only; the existing `admin_broadcast` is untouched.
+
+## fix-051 — owners and moderators can delete any message
+Status: **PARTIAL** — data layer DONE and verified; client UI not built
+Files: `supabase/migrations/0142_community_chat_delete_and_media.sql`,
+`supabase/migrations/0143_community_chat_body_allows_media_and_tombstone.sql`
+Migrations: **0142, 0143 applied to production**
+Effort: HIGH (authorization is mine to own)
+
+**Key discovery that collapses three fixes into one surface:** a Discover team room is not a
+separate system. `create_discover_group_chat` inserts a `communities` row with
+`is_discover_group = true` and puts the team in `community_members`. Chat rooms are communities
+too. So all of fix-051's *and* fix-058's surfaces are one table, `community_chat_messages`, and
+one component, `CommunityChat`. The DM thread is a different table and already has delete + images.
+(The recon agent asserted Discover chat used `conversations`/`messages` and the DM composer — that
+was **wrong**, and I caught it by reading `create_discover_group_chat` directly. Acting on it would
+have sent the whole batch at the wrong component.)
+
+**Authorization is in RLS, not just the RPC.** The table had SELECT and INSERT policies only — no
+UPDATE, no DELETE — so nothing could be deleted by anyone. Rather than a SECURITY DEFINER function
+that bypasses RLS and re-checks by hand, `delete_community_message` is **SECURITY INVOKER**, so the
+policy *is* the enforcement: an unauthorised caller matches zero rows and the function raises.
+The policy's `WITH CHECK` additionally constrains what the row may *become*, so this path can only
+ever produce a tombstone and can never be repurposed to edit someone else's text.
+Permitted: the author, the community owner, a moderator, a society officer (for societies), an admin.
+
+**A bug my own migration introduced, caught only by executing it.** 0142 applied cleanly and the
+policy was right, but every delete still failed. Instrumenting the error rather than guessing gave
+SQLSTATE 23514: a pre-existing `community_chat_messages_body_check` requires
+`char_length(body) >= 1`, so the tombstone's `body = ''` was rejected at write time. The same
+constraint would also have blocked fix-052's image-with-no-caption. 0143 amends it to allow an
+empty body in exactly two cases: the message carries an image, or it is a tombstone. **This is
+precisely the failure mode the runbook warns about — a green migration that does not work.**
+
+Verified by executing as the `authenticated` role (otherwise RLS is bypassed and the test proves
+nothing), in a rolled-back transaction with a real owner, moderator and plain member:
+```
+FIX051/052 -> plain_blocked=t author_ok=t moderator_ok=t edit_blocked=t
+              tombstoned=t tomb_body=[] view_ok=t image_only_insert=t
+```
+A plain member cannot delete another's message; the author can delete their own; **a moderator can
+delete anyone's**; the update path cannot be turned into an edit; the tombstone is written and
+exposed through `community_chat_view`.
+Remaining: the client half — long-press/⋯ → ConfirmDialog → optimistic removal, realtime UPDATE
+propagation, and the muted "Message deleted" tombstone rendering.
+
+## fix-052 — media attachment (pictures only)
+Status: **PARTIAL** — data layer DONE; upload/render UI not built
+Migrations: **0142, 0143** (as above)
+`community_chat_messages` now has `attachment_url` and `attachment_type`, constrained to
+`'image'` only at the database level (`attachment_type is null or attachment_type = 'image'`) plus
+a pair constraint so url and type must both be present or both absent. Verified an image-only
+message with an empty caption now inserts. Remaining: the picker → `ImageCropper` →
+`uploadWithProgress("chat-media", …)` flow, the server-side MIME check in the Server Action, and
+rendering the image AS the bubble with no wrapper frame.
+
+## fix-056 — a real matches list, and your matches' matches
+Status: **PARTIAL** — data layer DONE and verified; the page and route are not built
+Files: `supabase/migrations/0144_matches_list_one_hop.sql`
+Migration: **0144 applied to production**
+Effort: HIGH (the one-hop boundary is mine to own)
+
+`matches` already has RLS allowing a user to read only rows they are part of, so a second-degree
+list is impossible by direct query and no hand-crafted PostgREST request can walk the graph. The
+definer RPCs are therefore the only path, which makes the guard inside them the real enforcement,
+with RLS as the backstop — the same architecture as fix-043.
+
+- `get_my_matches()` — first degree, with the match percentage.
+- `get_matches_of(p_user)` — second degree, gated on the caller being matched with `p_user`.
+  **Deliberately returns no match percentage**: the score between those two people is not the
+  viewer's to see (the runbook's stated privacy default). The viewer is also excluded from their
+  own second-degree list.
+- `match_percentage(a, b)` — fix-037's formula as a callable function, so the matches page and the
+  deck share one definition. 0140's deck keeps it inlined for per-row performance; the two are
+  identical and the comment in 0144 says to change all three (SQL x2 + TS) together.
+
+**Asking for the matches of a non-match returns an empty set rather than raising** — a raise would
+confirm that the target exists and has matches; an empty list is indistinguishable from "they have
+none", which is the safer answer. Logged as a deliberate default.
+
+Verified against a real two-hop chain in production (A—B, B—D, A not matched to D):
+```
+FIX056 -> my_matches=18  first_degree_has_pct=t  one_hop_rows=21
+          viewer_in_own_hop_list=0  TWO_HOP_WALK_rows=0  pct(A,B)=35
+```
+The one hop works; **the two-hop walk returns 0** — the boundary holds.
+Remaining: the route under `/profile/matches`, the row UI (avatar, name, roll number, percentage,
+tap-through to profile + chat shortcut), the second-degree drill-in, and the two empty states.
+
+## fix-045 — admin broadcast with audience targeting
+Status: **PARTIAL** — data layer DONE and verified; the admin compose UI is not built
+Files: `supabase/migrations/0145_admin_broadcast_targeting.sql`
+Migration: **0145 applied to production**
+Effort: MEDIUM
+
+Added `admin_audience_ids`, `admin_audience_options`, `admin_broadcast_preview` and
+`admin_broadcast_targeted`, supporting the four required audiences — single user, semester, degree,
+school — alongside the existing `admin_broadcast`, which is left untouched so today's admin UI keeps
+working. Audience resolution lives in ONE function used by both the preview and the send, so the
+preview cannot drift from what actually goes out. Fail-closed: an unrecognised audience matches
+nobody. Value shapes are validated up front so a bad value cannot half-send.
+
+**The stale-column trap, quantified.** Semester is resolved with `current_semester(username)`.
+Had I used the `profiles.semester` column, a "semester 4" broadcast would have reached **4 people
+instead of 37** — silently addressing the wrong audience:
+```
+sem4_via_rollnumber=37   sem4_via_stale_column=4   all=92   bogus_audience=0
+```
+Verified by performing a real targeted send as a real super-admin, in a rolled-back transaction
+with the push-dispatch trigger disabled so no live user received anything:
+```
+FIX045 -> preview=37  sent=37  rows_created=37  WRONG_AUDIENCE=0
+          single_user_sent=1  nonadmin_blocked=t
+```
+Preview equals what is actually sent, **only addressed people received it** (the entire point of the
+fix), single-user targeting sends exactly one, and a non-admin is refused at send time.
+Remaining: the admin composer — audience selector, data-populated pickers, recipient-count preview,
+confirm step.
+
+## fix-049, fix-050, fix-057, fix-058, fix-059
+Status: **BLOCKED — not started** (session limit)
+The composer rebuild (050/058/059), the photo viewer (057) and announcements-as-chat (049) were
+specified in full and dispatched, but the agent was killed before writing anything. Nothing is
+half-built. The design is recorded below so the next session starts from a decision, not a blank page.
+
+### The composer design, ready to build
+One `ChatComposer` at `src/components/chat/chat-composer.tsx` with a per-surface capability flag:
+```ts
+type ComposerCapabilities = { poll?: boolean; anonymous?: boolean; media?: boolean };
+```
+- community + chat room → `{ poll: true, anonymous: true, media: true }`
+- Discover team room → `{ poll: true, anonymous: false, media: true }` (fix-018's decision)
+- announcements (049) → `{ poll: true, media: true }`, placeholder "Post an announcement"
+
+Because all three surfaces are the same `CommunityChat` component, this is **one wiring, not three**.
+
+Shape (fix-058): field first, icon cluster *inside* the field's right edge in the order
+poll → anonymous → media, send as its own circle *outside* the field. Row is `items-end` so the
+cluster and send stay aligned to the bottom of a grown field.
+
+Multi-line (fix-050): `textarea rows={1}`, auto-grow to 5 lines then scroll internally, Enter sends,
+Shift+Enter newlines — copy the DM thread's existing effect.
+
+**Placeholder centring (fix-059) — the exact arithmetic, so nobody "fixes" it with a margin:**
+`leading-[20px]` + `py-[10px]` + `min-h-[40px]` → 20 + 10 + 10 = 40, so a single line is
+mathematically centred at rest. Max height 120px = 5 × 20 + 20.
