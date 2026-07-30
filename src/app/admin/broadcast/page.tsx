@@ -1,5 +1,8 @@
 import { PageHeader, SectionLabel } from "@/components/admin/kit";
-import { BroadcastComposer } from "@/components/admin/broadcast-composer";
+import {
+  BroadcastComposer,
+  type AudienceOption,
+} from "@/components/admin/broadcast-composer";
 import { requireSuperAdmin } from "@/lib/admin/access";
 import { createClient } from "@/lib/supabase/server";
 
@@ -14,8 +17,10 @@ export default async function BroadcastPage() {
   await requireSuperAdmin();
   const supabase = await createClient();
 
-  const [{ data: deptRows }, { data: recent }] = await Promise.all([
-    supabase.from("profiles").select("department").not("department", "is", null),
+  const [{ data: audienceOptions }, { data: recent }] = await Promise.all([
+    // Degrees, schools and semesters with their real counts. Semester comes
+    // from the roll number, not the stale profiles.semester column (fix-045).
+    supabase.rpc("admin_audience_options"),
     supabase
       .from("moderation_audit_log")
       .select("id, reason, metadata, created_at")
@@ -24,7 +29,7 @@ export default async function BroadcastPage() {
       .limit(15),
   ]);
 
-  const departments = [...new Set((deptRows ?? []).map((r) => r.department as string))].sort();
+  const options = (audienceOptions as AudienceOption[] | null) ?? [];
   const history = (recent ?? []) as AuditRow[];
 
   return (
@@ -34,7 +39,7 @@ export default async function BroadcastPage() {
         sub="Send an announcement (in-app notification + push) to a user segment. super_admin only."
       />
 
-      <BroadcastComposer departments={departments} />
+      <BroadcastComposer options={options} />
 
       <section className="mt-8">
         <SectionLabel>Recent broadcasts</SectionLabel>

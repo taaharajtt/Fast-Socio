@@ -31,3 +31,74 @@ export async function sendBroadcast(input: {
   revalidatePath("/admin/broadcast");
   return { ok: true, recipients: (data as number) ?? 0 };
 }
+
+/** The audiences the targeted composer can address (fix-045). */
+export type Audience =
+  | "all"
+  | "verified"
+  | "user"
+  | "semester"
+  | "degree"
+  | "school";
+
+/**
+ * Resolved recipient count for the composer's preview (fix-045).
+ *
+ * Deliberately the SAME resolver the send uses (`admin_audience_ids`), so the
+ * number shown can never drift from the number actually addressed.
+ */
+export async function previewAudience(
+  audience: Audience,
+  value: string | null
+): Promise<{ count: number } | { error: string }> {
+  await requireSuperAdmin();
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_broadcast_preview", {
+    p_audience: audience,
+    p_value: value || null,
+  });
+  if (error) return { error: error.message };
+  return { count: (data as number) ?? 0 };
+}
+
+/**
+ * Send to a targeted audience. The RPC re-checks super_admin AND re-resolves
+ * the audience at send time, so a stale preview can never decide delivery.
+ */
+export async function sendTargetedBroadcast(input: {
+  title: string;
+  body: string;
+  url?: string;
+  audience: Audience;
+  value?: string | null;
+}): Promise<BroadcastResult> {
+  await requireSuperAdmin();
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_broadcast_targeted", {
+    p_title: input.title,
+    p_body: input.body,
+    p_url: input.url || null,
+    p_audience: input.audience,
+    p_value: input.value || null,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/admin/broadcast");
+  return { ok: true, recipients: (data as number) ?? 0 };
+}
+
+/** Type-ahead for the single-user audience. */
+export async function searchAudienceUsers(
+  query: string
+): Promise<{ id: string; full_name: string | null; username: string | null }[]> {
+  await requireSuperAdmin();
+  const q = query.replace(/[,()*%\\]/g, " ").trim();
+  if (q.length < 2) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("profiles")
+    .select("id, full_name, username")
+    .or(`full_name.ilike.%${q}%,username.ilike.%${q}%`)
+    .eq("onboarding_completed", true)
+    .limit(10);
+  return (data as { id: string; full_name: string | null; username: string | null }[]) ?? [];
+}
