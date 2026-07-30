@@ -135,9 +135,10 @@ export function ProfileTabs({
  *  shortcut to the badges grid. */
 function StatsPanel({ stats }: { stats: ProfileStats }) {
   const prog = levelProgress(stats.xp);
-  const cells: { label: string; value: number }[] = [
+  const cells: { label: string; value: number; href?: string }[] = [
     { label: "Posts", value: stats.posts },
-    { label: "Matches", value: stats.matches },
+    // fix-056: the Matches card opens the real list.
+    { label: "Matches", value: stats.matches, href: "/profile/matches" },
     { label: "Events", value: stats.events },
     { label: "Communities", value: stats.communities },
     { label: "Aura", value: stats.aura },
@@ -164,14 +165,29 @@ function StatsPanel({ stats }: { stats: ProfileStats }) {
 
       {/* Activity counts. */}
       <div className="grid grid-cols-3 gap-2">
-        {cells.map((c) => (
-          <div key={c.label} className="rounded-xl bg-card p-3 text-center">
-            <p className="text-xl font-bold tabular-nums">
-              {c.value.toLocaleString()}
-            </p>
-            <p className="mt-0.5 text-xs text-fg-muted">{c.label}</p>
-          </div>
-        ))}
+        {cells.map((c) => {
+          const inner = (
+            <>
+              <p className="text-xl font-bold tabular-nums">
+                {c.value.toLocaleString()}
+              </p>
+              <p className="mt-0.5 text-xs text-fg-muted">{c.label}</p>
+            </>
+          );
+          return c.href ? (
+            <Link
+              key={c.label}
+              href={c.href}
+              className="rounded-xl bg-card p-3 text-center transition-colors hover:bg-card/70"
+            >
+              {inner}
+            </Link>
+          ) : (
+            <div key={c.label} className="rounded-xl bg-card p-3 text-center">
+              {inner}
+            </div>
+          );
+        })}
       </div>
 
       <Link
