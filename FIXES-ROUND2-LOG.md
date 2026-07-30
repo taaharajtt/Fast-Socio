@@ -34,14 +34,17 @@ Verified unmodified via `git diff`; it was already failing before this run start
 
 | status | n | fixes |
 |---|---|---|
-| **DONE** | **19** | 001, 009, 025, 033, 036, 037, 038, 039, 040, 041, 042, 043, 044, 046, 047, 048, 053, 054, 055 |
-| **PARTIAL** | **4** | 045, 051, 052, 056 — data layer applied + verified, UI not built |
-| **BLOCKED** | **5** | 049, 050, 057, 058, 059 — not started, nothing half-built |
+| **DONE** | **28 — all of them** | 001, 009, 025, 033, 036, 037, 038, 039, 040, 041, 042, 043, 044, 045, 046, 047, 048, 049, 050, 051, 052, 053, 054, 055, 056, 057, 058, 059 |
+| PARTIAL | 0 | — |
+| BLOCKED | 0 | — |
 
-The 4 PARTIAL entries come from a **second sitting** (see "Second sitting" further down), where the
-user asked me to finish everything. A hard API session limit (resets 08:00 Asia/Karachi) killed
-both UI subagents mid-flight. Their data layers are complete, applied and verified; their UI is not
-written. Both killed agents left **zero partial edits** in `src/`.
+**Completed across three sittings.** The first landed 19. The second was cut short by an API
+session limit and left 4 fixes with a verified data layer but no UI. The third (subagents still
+rate-limited, so hand-written) finished those 4 and the 5 untouched ones — the composer rebuild,
+the photo viewer and announcements-as-chat.
+
+The earlier per-sitting narratives are kept below rather than rewritten, because the reasoning in
+them — especially the root causes and the defaults taken — is the part worth reading.
 
 All six Batch A regressions are DONE. All three Batch B logic/privacy fixes are DONE. All nine
 Batch E chrome/copy fixes are DONE. Batch D is half done (044 yes, 045 no). Batch C (7 fixes) and
@@ -60,6 +63,8 @@ Batch F (1 fix) were not started — reasons in their entries; none was left hal
 | **0143** | body CHECK allows tombstone + captionless image | fixed a 23514 that 0142 alone hit; re-probed green |
 | **0144** | matches list + one-hop boundary (fix-056) | probe: `one_hop_rows=21`, **`TWO_HOP_WALK_rows=0`** |
 | **0145** | admin broadcast targeting (fix-045) | real send as admin: `sent=37`, **`WRONG_AUDIENCE=0`** |
+| **0146** | `verified` audience, so one send path serves all six | `verified_n=2`, `all_n=92` |
+| **0147** | optional title + poll + image on announcements (fix-049) | `body_only_ok=t poll_ok=t outsider_blocked=t` |
 
 Every one was verified by **executing** it, not by trusting the DDL — `check_function_bodies` masks
 column errors, so each was exercised against real production data inside a transaction that rolls
@@ -1013,3 +1018,124 @@ Shift+Enter newlines — copy the DM thread's existing effect.
 **Placeholder centring (fix-059) — the exact arithmetic, so nobody "fixes" it with a margin:**
 `leading-[20px]` + `py-[10px]` + `min-h-[40px]` → 20 + 10 + 10 = 40, so a single line is
 mathematically centred at rest. Max height 120px = 5 × 20 + 20.
+
+---
+
+# Third sitting — the remaining nine
+
+Subagents were still rate-limited, so all of this is hand-written. Migrations **0146** and **0147**
+applied and verified on top of 0142–0145.
+
+## The discovery that shrank Batch C
+
+The runbook treats community chat, campus chat rooms and Discover team rooms as three composers to
+unify. They are **one**. `create_discover_group_chat` inserts a `communities` row with
+`is_discover_group = true` and puts the team in `community_members`; chat rooms are communities
+too. All three are `community_chat_messages` rendered by `CommunityChat`. Only DMs are a different
+table.
+
+The reconnaissance agent asserted the opposite — that Discover chat used `conversations`/`messages`
+and therefore the DM composer. I checked `create_discover_group_chat` directly and found it wrong.
+Acting on that report would have aimed the entire batch at the wrong component.
+
+So the capability flag has exactly one job: **Discover passes `allowAnonymous={false}`** (fix-018's
+decision). Everything else is shared.
+
+## fix-050, fix-058, fix-059 — the composer
+Status: DONE · Files: `src/components/chat/chat-composer.tsx` (new),
+`src/components/communities/community-chat.tsx`, `src/components/chat/community-thread.tsx`,
+`src/app/(student)/chat/c/[id]/page.tsx`
+
+Shape per fix-058: field first, capability icons grouped **inside** the field's right edge in the
+order poll → anonymous → media, send as its own circle **outside**. The row is `items-end` so the
+cluster and send stay pinned to the bottom of a grown field.
+
+fix-050: `textarea rows={1}` auto-growing to five lines then scrolling internally; Enter sends,
+Shift+Enter newlines — the DM thread's existing pattern.
+
+**fix-059 is geometry, not a nudge.** `leading-[20px]` + `py-[10px]` + `min-h-[40px]` = 40px, so one
+line box plus symmetric padding centres the placeholder *by construction* at any font size and in
+either theme. A margin or `translate-y` would only be correct at one size. The arithmetic is
+written into the file so nobody "fixes" it later. Max height 120px = 5 × 20 + 20.
+
+## fix-052 — media, images only
+Status: DONE · Migrations 0142 + 0143
+Picker → `ImageCropper` → `chat-media` upload → `sendCommunityImage`. Images only, enforced in
+**three independent places**: the picker's `accept`, a real server-side MIME check that asks storage
+what the object actually is, and a DB CHECK permitting only `attachment_type = 'image'`. The image
+IS the bubble — no padded wrapper — matching the DM thread.
+
+## fix-051 — owners and moderators delete any message
+Status: DONE · Migrations 0142 + 0143
+Authorization is in RLS, not the RPC: `delete_community_message` is **SECURITY INVOKER**, so the
+policy is the gate and an unauthorised caller matches zero rows. Its `WITH CHECK` constrains what
+the row may *become*, so the path can only ever produce a tombstone and can never be repurposed
+into an edit — verified (`edit_blocked=t`).
+Client: long-press → GlassSheet → `ConfirmDialog` → optimistic tombstone, propagated to everyone by
+a **new realtime UPDATE subscription** (the existing one was INSERT-only, so a delete would never
+have reached other clients).
+`canModerateChat` was added to the relationship helper because the existing `canManage` is
+owner-only for casual rooms and would have hidden a permitted action from a plain community's
+moderator.
+
+## fix-057 — full-screen photo viewer
+Status: DONE · Files: `src/components/ui/photo-viewer.tsx` (new), wired into the DM thread,
+community chat and announcements.
+Full-bleed on black, pinch/scroll zoom, drag to pan, tap / swipe-down / Esc to close, sender name
+and timestamp overlay. **No download, no share** per the stated default.
+The DM thread doesn't carry the peer's display name, so the overlay names only the viewer's own
+photos rather than inventing a label for the other side.
+
+## fix-056 — matches list and one-hop second degree
+Status: DONE · Migration 0144 · Route **`/profile/matches`** (+ `/[id]`)
+Chosen to sit beside `/profile/aura` and `/profile/badges` rather than a top-level `/matches`,
+since it is a view of your own profile data. Linked from the Matches stat card.
+Second-degree lists deliberately carry **no match percentage** and **no chat shortcut**, and do not
+link onward — the UI offers exactly one hop, and the score between two other people is not yours.
+
+## fix-045 — admin broadcast targeting
+Status: DONE · Migrations 0145 + 0146
+Audience selector (All / Verified / single user / semester / degree / school), pickers populated
+from `admin_audience_options()`, a resolved recipient-count preview, and an explicit confirm step
+replacing `window.confirm`.
+**0146 exists because rebuilding on the targeted RPC would have silently dropped the "Verified
+only" audience** the current UI offers — one send path now serves all six.
+The count and the confirm step are **derived from an audience key**, not held as independent flags,
+so it is structurally impossible to confirm a send against a count belonging to a different
+audience.
+
+## fix-049 — announcements are exactly the chat
+Status: DONE · Migration 0147
+The blocker was schema, not markup: `society_announcements.title` was NOT NULL with a 2–120 check,
+so a one-field composer could not write a row. **0147 makes title optional** rather than deriving a
+fake title from the first line. Older titled rows keep and still render theirs.
+Polls reuse the community poll machinery **unchanged** — a society IS a `communities` row, so
+`community_polls`, `community_poll_results`, `PollCard` and `voteCommunityPoll` all work as-is; the
+new RPC just lands the poll in the announcement thread instead of the chat room. Members vote and
+tallies re-read.
+The "Open chat" capsule and the grouped chat-style thread already existed from round 1's fix-028.
+`announcement-composer.tsx` is deleted — nothing called it any more.
+
+## Two silent bugs caught while wiring, both invisible to `tsc`
+
+1. The chat-room page's initial `select` omitted `deleted_at` / `attachment_*`, hidden by an
+   `as CommunityMessage[]` cast. Tombstones and images would not have appeared until a realtime
+   refetch. **A force-cast turns a missing column into `undefined` rather than a type error** — the
+   same shape of failure as round 1's `rpc().count`.
+2. The chat inbox previewed "empty body means a poll". A tombstone and an image are both
+   empty-bodied now, so both would have previewed as a blank line. Mirrored the DM path's handling.
+
+## Migrations from this sitting
+
+| # | what | verified by |
+|---|---|---|
+| 0146 | `verified` audience on the targeted resolver | `verified_n=2`, `all_n=92`, 15 option rows |
+| 0147 | optional title + poll + image on announcements | `body_only_ok=t poll_ok=t poll_options=2 feed_exposes_poll=t outsider_blocked=t` |
+
+## What is still NOT verified
+
+Everything in these three sittings that is visual remains **NEEDS-CLICK**. There was never a browser
+in this session. The composer's exact pixel shape, the placeholder's centring, the photo viewer's
+gestures, and the announcement thread's feel are all verified by construction, `tsc`, lint and
+build — not by looking. The arithmetic behind fix-059 is sound, but sound arithmetic and a correct
+appearance are not the same claim.
