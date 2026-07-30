@@ -78,7 +78,10 @@ export default async function CommunityConversationPage({
     ? await supabase
         .from("community_chat_view")
         .select(
-          "id, sender_id, sender_name, sender_avatar, sender_gender, body, poll_id, is_anonymous, created_at"
+          // deleted_at/attachment_* are required on the FIRST paint too — the
+          // cast below is `as CommunityMessage[]`, so omitting them here is
+          // silently undefined rather than a type error (mig 0142).
+          "id, sender_id, sender_name, sender_avatar, sender_gender, body, poll_id, is_anonymous, created_at, deleted_at, attachment_url, attachment_type"
         )
         .eq("community_id", id)
         .order("created_at", { ascending: true })
@@ -172,6 +175,10 @@ export default async function CommunityConversationPage({
         joinStatus={rel.joinStatus}
         initialMessages={messages}
         initialPolls={polls}
+        // fix-018/058: a Discover team room has no anonymous option — everyone
+        // there already knows who is on the team.
+        allowAnonymous={!isDiscoverGroup}
+        canModerate={rel.canModerateChat}
       />
     </div>
   );

@@ -20,6 +20,8 @@ export function CommunityThread({
   joinStatus,
   initialMessages,
   initialPolls,
+  allowAnonymous = true,
+  canModerate = false,
 }: {
   communityId: string;
   meId: string;
@@ -27,6 +29,10 @@ export function CommunityThread({
   joinStatus: JoinState;
   initialMessages: CommunityMessage[];
   initialPolls: Record<string, PollOptionResult[]>;
+  /** False for Discover team rooms — no anonymous posting there (fix-018). */
+  allowAnonymous?: boolean;
+  /** Viewer may delete anyone's message here (fix-051). */
+  canModerate?: boolean;
 }) {
   if (!isMember) {
     return (
@@ -53,6 +59,8 @@ export function CommunityThread({
       meId={meId}
       initialMessages={initialMessages}
       initialPolls={initialPolls}
+      allowAnonymous={allowAnonymous}
+      canModerate={canModerate}
     />
   );
 }

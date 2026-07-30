@@ -1,19 +1,27 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BarChart3, MessageCircle, Plus, Send, VenetianMask, X } from "lucide-react";
-import { GlassButton } from "@/components/ui";
+import { MessageCircle, Plus, Trash2, VenetianMask, X } from "lucide-react";
+import { GlassButton, GlassSheet } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ImageCropper, type CropResult } from "@/components/ui/image-cropper";
+import { PhotoViewer } from "@/components/ui/photo-viewer";
+import { ChatComposer } from "@/components/chat/chat-composer";
 import { resolveAvatarUrl } from "@/lib/avatar";
 import { cn } from "@/lib/utils";
 import { clockTime, absoluteTime } from "@/lib/time";
 import { useKeyboardInset } from "@/lib/use-keyboard-inset";
 import { renderLinkifiedText } from "@/lib/linkify";
 import { createClient } from "@/lib/supabase/client";
+import { uploadWithProgress } from "@/lib/storage-upload";
+import { signChatMediaMany } from "@/lib/chat-media-sign";
 import { PollCard } from "@/components/communities/poll-card";
 import {
   createCommunityPoll,
+  deleteCommunityMessage,
   markCommunityChatRead,
+  sendCommunityImage,
   sendCommunityMessage,
   voteCommunityPoll,
   type PollOptionResult,
@@ -33,29 +41,55 @@ export type CommunityMessage = {
   poll_id: string | null;
   is_anonymous: boolean;
   created_at: string;
+  /** Set once the message has been tombstoned (fix-051, mig 0142). */
+  deleted_at: string | null;
+  /** Raw `chat-media` storage path — signed at display time (fix-052). */
+  attachment_url: string | null;
+  attachment_type: string | null;
 };
 
 const VIEW_COLUMNS =
-  "id, sender_id, sender_name, sender_avatar, sender_gender, body, poll_id, is_anonymous, created_at";
+  "id, sender_id, sender_name, sender_avatar, sender_gender, body, poll_id, is_anonymous, created_at, deleted_at, attachment_url, attachment_type";
 
 export function CommunityChat({
   communityId,
   meId,
   initialMessages,
   initialPolls,
+  allowAnonymous = true,
+  canModerate = false,
 }: {
   communityId: string;
   meId: string;
   initialMessages: CommunityMessage[];
   initialPolls: Record<string, PollOptionResult[]>;
+  /**
+   * fix-058: Discover team rooms pass false. Anonymous posting is deliberately
+   * absent there — decided in fix-018 — while community chat and campus chat
+   * rooms keep it. This is the only per-surface difference in the composer.
+   */
+  allowAnonymous?: boolean;
+  /** Viewer is the community owner or a moderator, so may delete any message. */
+  canModerate?: boolean;
 }) {
   const [messages, setMessages] = useState<CommunityMessage[]>(initialMessages);
   const [polls, setPolls] = useState(initialPolls);
-  const [draft, setDraft] = useState("");
   const [anon, setAnon] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [composingPoll, setComposingPoll] = useState(false);
+  /** Signed URLs for attachment paths, resolved lazily. */
+  const [signed, setSigned] = useState<Record<string, string>>({});
+  /** The message whose action sheet is open. */
+  const [actionsFor, setActionsFor] = useState<CommunityMessage | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<CommunityMessage | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  /** The image currently open in the full-screen viewer (fix-057). */
+  const [viewing, setViewing] = useState<CommunityMessage | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  /** The picked file, held while the crop dialog is open. */
+  const [cropFile, setCropFile] = useState<File | null>(null);
 
   // iOS keyboard: exposes the keyboard overlap as --kb so the fixed chat shell
   // shrinks and the sticky composer stays visible (Phase 2 keyboard fix).
@@ -128,6 +162,28 @@ export function CommunityChat({
             markCommunityChatRead(communityId);
           }
         )
+        .on(
+          "postgres_changes",
+          {
+            // fix-051: a delete is a soft-delete UPDATE, so the tombstone has to
+            // propagate to everyone in the room, not just the person who did it.
+            event: "UPDATE",
+            schema: "public",
+            table: "community_chat_messages",
+            filter: `community_id=eq.${communityId}`,
+          },
+          async (payload) => {
+            const id = (payload.new as { id: string }).id;
+            const { data } = await supabase
+              .from("community_chat_view")
+              .select(VIEW_COLUMNS)
+              .eq("id", id)
+              .maybeSingle();
+            if (!data) return;
+            const m = data as CommunityMessage;
+            setMessages((prev) => prev.map((x) => (x.id === m.id ? m : x)));
+          }
+        )
         // Ballots are private, so votes can't be broadcast via postgres_changes.
         // The voter announces the poll id and everyone re-reads the tallies.
         .on("broadcast", { event: "poll_vote" }, ({ payload }) => {
@@ -168,19 +224,92 @@ export function CommunityChat({
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages.length]);
 
-  async function onSend(e: React.FormEvent) {
-    e.preventDefault();
-    const text = draft.trim();
+  // Resolve signed URLs for any attachment we haven't signed yet. The bucket is
+  // private, so a raw path is useless without this.
+  useEffect(() => {
+    const pending = messages
+      .filter(
+        (m) =>
+          m.attachment_url &&
+          m.attachment_type === "image" &&
+          !m.deleted_at &&
+          !signed[m.attachment_url]
+      )
+      .map((m) => ({ path: m.attachment_url as string, type: "image" as const }));
+    if (pending.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const urls = await signChatMediaMany(pending);
+      if (cancelled || urls.size === 0) return;
+      setSigned((prev) => {
+        const next = { ...prev };
+        urls.forEach((url, path) => {
+          next[path] = url;
+        });
+        return next;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [messages, signed]);
+
+  async function onSend(text: string) {
     if (!text || busy) return;
     setBusy(true);
     setError(null);
-    setDraft("");
     const res = await sendCommunityMessage(communityId, text, anon);
     setBusy(false);
-    if (!res.ok) {
-      setDraft(text);
-      setError(res.error);
+    if (!res.ok) setError(res.error);
+  }
+
+  /** fix-052: picker → crop → upload → persist. Nothing reaches storage uncropped. */
+  async function onCropped(result: CropResult) {
+    setCropFile(null);
+    setBusy(true);
+    setError(null);
+    const path = `${communityId}/${crypto.randomUUID()}.${result.extension}`;
+    try {
+      await uploadWithProgress("chat-media", path, result.blob, {
+        contentType: result.mimeType,
+      });
+      const res = await sendCommunityImage(communityId, path, anon);
+      if (!res.ok) setError(res.error);
+    } catch {
+      setError("Couldn't upload that image.");
+    } finally {
+      setBusy(false);
     }
+  }
+
+  async function onConfirmDelete() {
+    const target = confirmDelete;
+    if (!target) return;
+    setDeleting(true);
+    setDeleteError(null);
+    const res = await deleteCommunityMessage(target.id);
+    setDeleting(false);
+    if (!res.ok) {
+      setDeleteError(res.error);
+      return;
+    }
+    // Optimistic: tombstone in place immediately. Realtime UPDATE carries it to
+    // everyone else in the room.
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === target.id
+          ? {
+              ...m,
+              body: "",
+              poll_id: null,
+              attachment_url: null,
+              attachment_type: null,
+              deleted_at: new Date().toISOString(),
+            }
+          : m
+      )
+    );
+    setConfirmDelete(null);
   }
 
   async function onVote(pollId: string, optionId: string) {
@@ -222,6 +351,9 @@ export function CommunityChat({
         {messages.map((m) => {
           const mine = m.sender_id === meId;
           const anonymous = m.is_anonymous;
+          const deleted = Boolean(m.deleted_at);
+          const isImage = !deleted && m.attachment_type === "image";
+          const signedUrl = m.attachment_url ? signed[m.attachment_url] : undefined;
           const displayName = anonymous
             ? mine
               ? "You (anonymous)"
@@ -246,14 +378,29 @@ export function CommunityChat({
                 </div>
               )}
               <div
+                onContextMenu={(e) => {
+                  // Long-press on touch surfaces as a context menu; this is the
+                  // one gesture that opens the message actions (fix-051).
+                  if (deleted || !(mine || canModerate)) return;
+                  e.preventDefault();
+                  setActionsFor(m);
+                }}
                 className={cn(
-                  "max-w-[80%] rounded-2xl px-4 py-2 text-[15px]",
-                  mine
-                    ? "gradient-brand rounded-br-md text-white"
-                    : "glass rounded-bl-md text-fg"
+                  "max-w-[80%] text-[15px]",
+                  // fix-052: an image IS the bubble — no padded wrapper around it.
+                  isImage
+                    ? "overflow-hidden rounded-2xl"
+                    : cn(
+                        "rounded-2xl px-4 py-2",
+                        deleted
+                          ? "border border-dashed border-glass-border bg-transparent text-fg-disabled"
+                          : mine
+                            ? "gradient-brand rounded-br-md text-white"
+                            : "glass rounded-bl-md text-fg"
+                      )
                 )}
               >
-                {!mine && (
+                {!mine && !isImage && (
                   <p
                     className={cn(
                       "mb-0.5 flex items-center gap-1 text-xs font-semibold",
@@ -264,7 +411,30 @@ export function CommunityChat({
                     {displayName}
                   </p>
                 )}
-                {m.poll_id && polls[m.poll_id] ? (
+
+                {deleted ? (
+                  <span className="text-[13px] italic">This message was deleted</span>
+                ) : isImage ? (
+                  signedUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => setViewing(m)}
+                      aria-label="Open photo"
+                      className="block"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element -- signed,
+                          transform-sized storage URL; next/image would re-proxy it. */}
+                      <img
+                        src={signedUrl}
+                        alt=""
+                        draggable={false}
+                        className="block max-h-72 w-[220px] rounded-2xl object-cover"
+                      />
+                    </button>
+                  ) : (
+                    <div className="h-40 w-[220px] animate-pulse rounded-2xl bg-fg-muted/10" />
+                  )
+                ) : m.poll_id && polls[m.poll_id] ? (
                   <PollCard
                     question={m.body}
                     options={polls[m.poll_id]}
@@ -274,16 +444,23 @@ export function CommunityChat({
                 ) : (
                   renderLinkifiedText(m.body)
                 )}
-                <time
-                  dateTime={m.created_at}
-                  title={absoluteTime(m.created_at)}
-                  className={cn(
-                    "mt-0.5 block text-right text-[10px]",
-                    mine ? "text-white/70" : "text-fg-muted"
-                  )}
-                >
-                  {clockTime(m.created_at)}
-                </time>
+
+                {!isImage && (
+                  <time
+                    dateTime={m.created_at}
+                    title={absoluteTime(m.created_at)}
+                    className={cn(
+                      "mt-0.5 block text-right text-[10px]",
+                      deleted
+                        ? "text-fg-disabled"
+                        : mine
+                          ? "text-white/70"
+                          : "text-fg-muted"
+                    )}
+                  >
+                    {clockTime(m.created_at)}
+                  </time>
+                )}
               </div>
             </div>
           );
@@ -301,53 +478,96 @@ export function CommunityChat({
 
         {error && <p className="pb-1.5 text-sm text-error">{error}</p>}
 
-        {/* One composer row. Poll and anonymity are chat *actions*, alongside
-            Send — not banners stacked above the input (UAT-005 keeps anonymity
-            in the open chat room, just no longer as its own block). */}
-        <form onSubmit={onSend} className="flex items-center gap-1.5 pt-2">
-          <button
-            type="button"
-            aria-label="Create a poll"
-            aria-pressed={composingPoll}
-            onClick={() => setComposingPoll((p) => !p)}
-            className={cn(
-              "flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors",
-              composingPoll ? "bg-aura text-white" : "glass text-fg-muted"
-            )}
-          >
-            <BarChart3 className="h-[18px] w-[18px]" aria-hidden />
-          </button>
-          <button
-            type="button"
-            aria-label={anon ? "Posting anonymously" : "Post anonymously"}
-            aria-pressed={anon}
-            onClick={() => setAnon((a) => !a)}
-            className={cn(
-              "flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors",
-              anon ? "bg-aura text-white" : "glass text-fg-muted"
-            )}
-          >
-            <VenetianMask className="h-[18px] w-[18px]" aria-hidden />
-          </button>
-          <input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder={anon ? "Message anonymously…" : "Message…"}
-            // min-w-0 lets the input shrink so the Send button stays on-screen
-            // on narrow viewports instead of being pushed off the row.
-            className="glass h-10 min-w-0 flex-1 rounded-[var(--radius-pill)] px-4 text-base text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
-          />
-          <GlassButton
-            type="submit"
-            size="icon"
-            className="h-10 w-10 shrink-0"
-            aria-label="Send"
-            disabled={busy || draft.trim().length === 0}
-          >
-            <Send className="h-[18px] w-[18px]" aria-hidden />
-          </GlassButton>
-        </form>
+        {/* fix-058/050/059: the one shared composer. Poll, anonymity and media
+            are capabilities, not separate components — a Discover team room is
+            the same component with `allowAnonymous={false}`. */}
+        <ChatComposer
+          placeholder={anon ? "Message anonymously..." : "Message..."}
+          capabilities={{ poll: true, anonymous: allowAnonymous, media: true }}
+          anonymous={anon}
+          onToggleAnonymous={() => setAnon((a) => !a)}
+          pollActive={composingPoll}
+          onTogglePoll={() => setComposingPoll((p) => !p)}
+          onPickImage={() => fileRef.current?.click()}
+          onSend={onSend}
+          busy={busy}
+        />
+
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            // Reset so picking the same file twice still fires onChange.
+            e.target.value = "";
+            if (file) setCropFile(file);
+          }}
+        />
       </div>
+
+      {/* Crop before upload — storage only ever receives the final image. */}
+      {cropFile && (
+        <ImageCropper
+          file={cropFile}
+          aspect={1}
+          aspectOptions
+          title="Send photo"
+          onCancel={() => setCropFile(null)}
+          onCropped={onCropped}
+        />
+      )}
+
+      {/* fix-057: one full-screen viewer, shared with the DM thread. */}
+      <PhotoViewer
+        open={Boolean(viewing)}
+        onClose={() => setViewing(null)}
+        src={viewing?.attachment_url ? (signed[viewing.attachment_url] ?? null) : null}
+        senderName={
+          viewing
+            ? viewing.is_anonymous
+              ? "Anonymous"
+              : (viewing.sender_name ?? "Member")
+            : null
+        }
+        timestamp={viewing?.created_at ?? null}
+      />
+
+      {/* fix-051: message actions. Only offered when the viewer may actually
+          delete — but the RLS policy, not this sheet, is what enforces it. */}
+      <GlassSheet
+        open={Boolean(actionsFor)}
+        onClose={() => setActionsFor(null)}
+        label="Message options"
+      >
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={() => {
+              setConfirmDelete(actionsFor);
+              setDeleteError(null);
+              setActionsFor(null);
+            }}
+            className="glass flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm font-medium text-error"
+          >
+            <Trash2 className="h-4 w-4" aria-hidden />
+            Delete message
+          </button>
+        </div>
+      </GlassSheet>
+
+      <ConfirmDialog
+        open={Boolean(confirmDelete)}
+        title="Delete message?"
+        description="This removes the message for everyone in this room. A short 'message deleted' note stays in its place."
+        confirmLabel="Delete"
+        pendingLabel="Deleting…"
+        pending={deleting}
+        error={deleteError}
+        onCancel={() => setConfirmDelete(null)}
+        onConfirm={onConfirmDelete}
+      />
     </div>
   );
 }

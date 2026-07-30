@@ -21,6 +21,7 @@ import { GlassButton, GlassSheet } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
 import { resolveAvatarUrl } from "@/lib/avatar";
 import { ImageCropper, type CropResult } from "@/components/ui/image-cropper";
+import { PhotoViewer } from "@/components/ui/photo-viewer";
 import { cn } from "@/lib/utils";
 import { useKeyboardInset } from "@/lib/use-keyboard-inset";
 import { renderLinkifiedText } from "@/lib/linkify";
@@ -134,6 +135,12 @@ export function ChatThread({
   const [reactions, setReactions] =
     useState<Record<string, Reaction[]>>(initialReactions);
   const [editing, setEditing] = useState<ChatMessage | null>(null);
+  /** fix-057: the image currently open in the full-screen viewer. */
+  const [viewingPhoto, setViewingPhoto] = useState<{
+    src: string;
+    senderName: string | null;
+    timestamp: string;
+  } | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [canLoadOlder, setCanLoadOlder] = useState(hasMore);
@@ -805,9 +812,28 @@ export function ChatThread({
                           <img
                             src={src}
                             alt="Shared image"
+                            // fix-057: tap opens the full-screen viewer. Not while
+                            // the upload is still in flight — the signed URL and
+                            // final dimensions aren't settled yet.
+                            onClick={
+                              uploading || failed
+                                ? undefined
+                                : () =>
+                                    setViewingPhoto({
+                                      src,
+                                      // The DM thread doesn't carry the peer's
+                                      // display name, so the overlay names only
+                                      // the viewer's own photos rather than
+                                      // inventing a label for the other side.
+                                      senderName:
+                                        m.sender_id === meId ? "You" : null,
+                                      timestamp: m.created_at,
+                                    })
+                            }
                             className={cn(
                               "block max-h-72 w-[220px] rounded-xl object-cover transition-opacity",
-                              uploading && "opacity-70"
+                              uploading && "opacity-70",
+                              !uploading && !failed && "cursor-zoom-in"
                             )}
                             loading="lazy"
                             decoding="async"
@@ -1157,6 +1183,16 @@ export function ChatThread({
           onCropped={onCropped}
         />
       )}
+
+      {/* fix-057: the same viewer the community/room/Discover surfaces use. */}
+      <PhotoViewer
+        open={Boolean(viewingPhoto)}
+        onClose={() => setViewingPhoto(null)}
+        src={viewingPhoto?.src ?? null}
+        alt="Shared image"
+        senderName={viewingPhoto?.senderName ?? null}
+        timestamp={viewingPhoto?.timestamp ?? null}
+      />
 
       {/* UAT-005/009: long-press any message to react, forward, edit or unsend. */}
       <GlassSheet

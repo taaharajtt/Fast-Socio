@@ -112,7 +112,7 @@ export async function loadInbox(): Promise<InboxData> {
       ? supabase
           .from("community_chat_view")
           .select(
-            "community_id, sender_id, sender_name, body, is_anonymous, created_at"
+            "community_id, sender_id, sender_name, body, is_anonymous, created_at, deleted_at, attachment_type, poll_id"
           )
           .in("community_id", spaceIds)
           .order("created_at", { ascending: false })
@@ -154,8 +154,16 @@ export async function loadInbox(): Promise<InboxData> {
       : m.sender_id === me
         ? "You"
         : (m.sender_name ?? "Member");
+    // Mirrors the DM preview below. A tombstone and an image both have an empty
+    // body (migs 0142/0143), so "empty means poll" is no longer true — without
+    // this, a deleted message or a photo would preview as a blank line.
+    const what = m.deleted_at
+      ? "Message deleted"
+      : m.attachment_type === "image"
+        ? "Sent a photo"
+        : m.body || (m.poll_id ? "Shared a poll" : "Sent an attachment");
     spacePreview.set(m.community_id, {
-      text: `${who}: ${m.body || "Shared a poll"}`,
+      text: `${who}: ${what}`,
       ts: m.created_at,
     });
   }

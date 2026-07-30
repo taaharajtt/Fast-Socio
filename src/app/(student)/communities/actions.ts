@@ -127,6 +127,96 @@ export async function sendCommunityMessage(
 }
 
 /**
+ * Attach an image to a community / chat-room / Discover-room message (fix-052).
+ *
+ * Images only, enforced in three independent places so no single bypass is
+ * enough: the picker's `accept`, the real MIME check below, and a DB CHECK that
+ * only permits `attachment_type = 'image'` (migration 0142).
+ *
+ * `path` is an already-uploaded object in the private `chat-media` bucket. It
+ * goes in as a raw storage path, never a URL — the reader signs it at display
+ * time, the same way the DM thread does.
+ *
+ * Inserted directly rather than through `send_community_message`, because that
+ * RPC has no attachment parameter. RLS still governs the write: the INSERT
+ * policy requires `sender_id = auth.uid()` AND membership of the community.
+ */
+export async function sendCommunityImage(
+  communityId: string,
+  path: string,
+  anonymous = false
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
+
+  // The path must live under this community's folder — otherwise a caller could
+  // point a message at an object belonging to a room they aren't in.
+  if (!path.startsWith(`${communityId}/`) || path.includes("..")) {
+    return { ok: false, error: "Invalid attachment." };
+  }
+
+  const allowed = await checkRateLimit("community_chat", 60, 60);
+  if (!allowed) return { ok: false, error: "You're sending too fast." };
+
+  // Server-side MIME check. The accept attribute is a convenience; this asks
+  // storage what the object actually is.
+  const slash = path.lastIndexOf("/");
+  const folder = path.slice(0, slash);
+  const name = path.slice(slash + 1);
+  const { data: objects } = await supabase.storage
+    .from("chat-media")
+    .list(folder, { search: name, limit: 1 });
+  const mime = (objects?.[0]?.metadata as { mimetype?: string } | undefined)
+    ?.mimetype;
+  if (!mime || !mime.startsWith("image/")) {
+    return { ok: false, error: "Only images can be attached." };
+  }
+
+  const { error } = await supabase.from("community_chat_messages").insert({
+    community_id: communityId,
+    sender_id: userId,
+    body: "",
+    attachment_url: path,
+    attachment_type: "image",
+    is_anonymous: anonymous,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/**
+ * Delete a message in a community / chat room / Discover room (fix-051).
+ *
+ * Authorization is NOT decided here: `delete_community_message` is SECURITY
+ * INVOKER, so the RLS policy added in migration 0142 is the gate — the author,
+ * the community owner, a moderator, a society officer or an admin. Everyone
+ * else matches zero rows and the RPC raises. The policy's WITH CHECK also means
+ * this path can only ever produce a tombstone, never an edit.
+ */
+export async function deleteCommunityMessage(
+  messageId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
+
+  const { error } = await supabase.rpc("delete_community_message", {
+    p_message_id: messageId,
+  });
+  if (error) {
+    return {
+      ok: false,
+      error:
+        error.message.includes("not authorized")
+          ? "You can't delete this message."
+          : error.message,
+    };
+  }
+  return { ok: true };
+}
+
+/**
  * Stamp the caller's read position in a community's chat room (mirrors
  * markConversationRead for DMs). Called when the room is opened and again as
  * new messages arrive while it's open, so the room never shows stale unread

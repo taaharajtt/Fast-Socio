@@ -74,6 +74,14 @@ export type CommunityRelationship = {
   joinStatus: JoinState;
   /** Owner, community moderator, society officer, or platform admin. */
   canManage: boolean;
+  /**
+   * May delete ANY message in this community's chat (fix-051). Deliberately
+   * WIDER than `canManage`: message moderation applies to a plain community's
+   * moderators too, whereas `canManage` is owner-only for a casual room
+   * (fix-031). Mirrors `can_delete_community_message()` in mig 0142 — the RLS
+   * policy is the real authority, this only decides what the UI offers.
+   */
+  canModerateChat: boolean;
 };
 
 /**
@@ -141,5 +149,11 @@ export async function getCommunityRelationship(
         (member?.role === "owner" ||
           member?.role === "moderator" ||
           isOfficerRole(officer?.role))),
+    canModerateChat:
+      isAdmin ||
+      isOwner ||
+      member?.role === "owner" ||
+      member?.role === "moderator" ||
+      (isSociety && isOfficerRole(officer?.role)),
   };
 }
