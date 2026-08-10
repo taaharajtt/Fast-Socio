@@ -58,7 +58,7 @@ export default async function EventAttendeesPage({
     }));
 
   return (
-    <main className="mx-auto flex h-[100dvh] w-full max-w-md flex-col px-5 py-6">
+    <main className="mx-auto flex h-full w-full max-w-md flex-col px-5 py-6">
       <div className="mb-4 flex items-center gap-3">
         <Link
           href={`/events/${id}`}

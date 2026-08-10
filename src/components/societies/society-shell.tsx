@@ -32,7 +32,7 @@ export function SocietyShell({
 
   const hero = (
     <>
-      <div className="px-4 pt-[max(0.5rem,env(safe-area-inset-top))]">
+      <div className="px-4 pt-2">
         <div className="relative aspect-[16/9] w-full overflow-hidden rounded-[20px]">
           {s.cover_url ? (
             <AppImage

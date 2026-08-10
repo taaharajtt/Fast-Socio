@@ -37,7 +37,7 @@ export default async function MapPage({
   }
 
   return (
-    <main className="mx-auto flex h-[100dvh] w-full max-w-md flex-col px-4 pt-5 pb-[calc(3.5rem+env(safe-area-inset-bottom))]">
+    <main className="mx-auto flex h-full w-full max-w-md flex-col px-4 pt-5">
       <header className="shrink-0">
         <h1 className="text-[22px] font-bold tracking-tight">Campus Map</h1>
         <p className="mt-0.5 text-sm text-fg-muted">

@@ -28,6 +28,17 @@
 .dark {
   color-scheme: dark;
 
+  /*
+    Safe-area tokens — single source of truth for device insets. The student
+    shell is the ONE place that pays these back, so no individual page needs
+    its own env() logic. The `, 0px` fallback is what makes them resolve to
+    zero on Android/desktop, which have no notch/home-indicator insets.
+  */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --dock-h: 3.5rem; /* matches FloatingDock's h-14 row */
+  --dock-total: calc(var(--dock-h) + var(--safe-bottom));
+
   /* Brand — Purple Primary (UISpec V3 §1.1) */
   --accent: #7c3aed; /* Purple Primary — active tabs, CTAs, badges */
   --accent-light: #8b5cf6; /* Purple Light — hover / secondary accents */

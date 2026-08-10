@@ -75,9 +75,9 @@ export function FloatingDock({
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.08] bg-bg pb-[env(safe-area-inset-bottom)]"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.08] bg-bg pb-[var(--safe-bottom)]"
     >
-      <div className="mx-auto flex h-14 max-w-md items-stretch">
+      <div className="mx-auto flex h-[var(--dock-h)] max-w-md items-stretch">
         {items.map(({ href, label, icon: Icon }) => {
           const active = activeHref === href;
           const badge = href === "/chat" ? chatBadge : (badges[href] ?? 0);

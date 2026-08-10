@@ -157,10 +157,13 @@ export default async function PublicProfilePage({
       : "—";
 
   return (
-    <div className="mx-auto w-full max-w-md">
+    <div className="mx-auto w-full max-w-md -mt-[var(--safe-top)]">
       {/* Cover banner (200px) + overlapping 80px avatar (UISpec V3 Screen 14).
           UAT-001: a profile's own cover was rendered but never anyone else's —
-          this page simply didn't read cover_url. RLS always allowed it. */}
+          this page simply didn't read cover_url. RLS always allowed it.
+          This hero is intentionally full-bleed and bleeds under the status
+          bar, so the container above cancels the shell's top safe-area inset;
+          the floating Back control pays that inset back itself. */}
       <div className="relative h-[200px]">
         {profile.cover_url ? (
           <AppImage
@@ -176,7 +179,7 @@ export default async function PublicProfilePage({
         <Link
           href="/home"
           aria-label="Back"
-          className="absolute left-4 top-[max(1rem,env(safe-area-inset-top))] flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white"
+          className="absolute left-4 top-[max(1rem,calc(var(--safe-top)+0.5rem))] flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white"
         >
           <ChevronLeft className="h-5 w-5" aria-hidden />
         </Link>
@@ -203,7 +206,7 @@ export default async function PublicProfilePage({
         </div>
       </div>
 
-      <main className="px-4 pb-28">
+      <main className="px-4 pb-6">
         {/* Earned badges sit in the band right of the avatar (per design) and
             double as the spacer that clears the avatar overhang. */}
         <BadgeStrip badges={badges} />

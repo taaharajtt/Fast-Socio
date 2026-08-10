@@ -113,7 +113,7 @@ export function InstallPrompt() {
     <>
       {/* Sits above the floating dock (fixed, bottom-0, ~5rem tall) and below
           the modal layer (z-50) so sheets cover it. */}
-      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-40 px-4">
+      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--dock-total)+1rem)] z-40 px-4">
         <GlassCard
           strong
           radius="lg"

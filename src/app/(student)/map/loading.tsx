@@ -2,7 +2,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function MapLoading() {
   return (
-    <main className="mx-auto flex h-[100dvh] w-full max-w-md flex-col px-4 pt-5 pb-[calc(3.5rem+env(safe-area-inset-bottom))]">
+    <main className="mx-auto flex h-full w-full max-w-md flex-col px-4 pt-5">
       <div className="shrink-0">
         <Skeleton className="h-7 w-40" />
         <Skeleton className="mt-2 h-4 w-56" />

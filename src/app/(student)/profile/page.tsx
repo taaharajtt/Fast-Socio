@@ -43,10 +43,13 @@ export default function ProfilePage({
   searchParams: Promise<SP>;
 }) {
   return (
-    <div className="mx-auto w-full max-w-md">
+    <div className="mx-auto w-full max-w-md -mt-[var(--safe-top)]">
       {/* Cover banner (200px) — the user's cover photo scaled to fill, or the
           brand gradient when none is set + overlapping 80px avatar and a purple
-          verified badge (UISpec V3 Screen 14). */}
+          verified badge (UISpec V3 Screen 14). This hero is intentionally
+          full-bleed and bleeds under the status bar, so the container cancels
+          the shell's top safe-area inset above; the floating Settings control
+          pays that inset back itself so it isn't hidden behind the notch. */}
       <div className="relative h-[200px]">
         <Suspense fallback={<div className="h-full w-full gradient-brand opacity-80" />}>
           <CoverArt />
@@ -55,7 +58,7 @@ export default function ProfilePage({
         <Link
           href="/settings"
           aria-label="Settings"
-          className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white"
+          className="absolute right-4 top-[max(1rem,calc(var(--safe-top)+0.5rem))] flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white"
         >
           <Settings className="h-4 w-4" aria-hidden />
         </Link>
@@ -68,7 +71,7 @@ export default function ProfilePage({
         </div>
       </div>
 
-      <main className="px-4 pb-28">
+      <main className="px-4 pb-6">
         {/* Earned badges sit in the band right of the avatar (per design) and
             double as the spacer that clears the avatar overhang — so the
             fallback is an EMPTY strip, not nothing, or the name below would
