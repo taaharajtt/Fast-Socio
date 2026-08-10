@@ -219,8 +219,27 @@ export function SwipeDeck({ initial }: { initial: DiscoverSwipeCard[] }) {
 
   return (
     <MotionReduced>
-      <div className="relative flex flex-1 flex-col">
-        <div className="relative mx-auto aspect-[3/4.4] w-full max-w-sm flex-1">
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {/* The aspect ratio is the ONLY thing that sizes the card stack. There
+            used to be a `flex-1` here too, which was inert only because no
+            ancestor had a definite height — the moment the shell became a real
+            flex column it started winning over the ratio, stretching the stack
+            until the action row below was pushed off screen. */}
+        {/* The aspect ratio is the ONLY thing that sizes the card stack. There
+            used to be a `flex-1` here too, which was inert only because no
+            ancestor had a definite height — the moment the shell became a real
+            flex column it started winning over the ratio, stretching the stack
+            until the action row below was pushed off screen.
+            The default `flex: 0 1 auto` already says exactly what we want —
+            size to the ratio, but shrink if the space isn't there. It only
+            works with `min-h-0` on this element AND on every flex ancestor up
+            to the shell, because a flex item's automatic minimum size would
+            otherwise refuse to shrink and push the action row off screen on
+            SE-class phones (~667px tall). Percentage caps like `max-h-full`
+            do NOT work here: the shell sizes itself with min-height, so the
+            ancestors' computed height is `auto` and the percentage never
+            resolves. */}
+        <div className="relative mx-auto aspect-[3/4.4] max-h-[calc(var(--shell-content-h)-var(--deck-chrome))] w-full min-h-0 max-w-sm">
           {deck
             .slice(0, 3)
             .map((c, i) =>

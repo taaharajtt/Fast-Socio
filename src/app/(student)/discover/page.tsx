@@ -29,7 +29,11 @@ import {
  */
 export default function DiscoverPage() {
   return (
-    <main className="mx-auto flex w-full max-w-md flex-1 flex-col px-4 py-3">
+    /* Discover is the one screen that fills the viewport and never scrolls, so
+       it takes a definite height (not flex-1) — that is what lets the card
+       stack below shrink on short phones instead of shoving the action row
+       off. */
+    <main className="mx-auto flex h-[var(--shell-content-h)] w-full min-h-0 max-w-md flex-col px-4 py-3">
       <header className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <SectionLogo name="discover" />
@@ -62,7 +66,7 @@ async function DeckSlot() {
 function DeckSkeleton() {
   return (
     <>
-      <div className="mx-auto aspect-[3/4.4] w-full max-w-sm flex-1">
+      <div className="mx-auto aspect-[3/4.4] max-h-[calc(var(--shell-content-h)-var(--deck-chrome))] w-full min-h-0 max-w-sm">
         <Skeleton className="h-full w-full rounded-3xl" />
       </div>
       <div className="mt-5 flex items-center justify-center gap-6">

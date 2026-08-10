@@ -60,7 +60,7 @@ export default function StudentLayout({
           place dock clearance is reserved, so no page needs its own
           safe-area logic. min-h-[100dvh] makes short pages fill the dynamic
           viewport so there is no dead zone under the content. */}
-      <div className="flex min-h-[100dvh] flex-1 flex-col pt-[var(--safe-top)] pb-[calc(var(--dock-total)+0.5rem)]">
+      <div className="flex min-h-[100dvh] flex-1 flex-col pt-[var(--safe-top)] pb-[var(--shell-pb)]">
         <Suspense fallback={<RouteFallback />}>{children}</Suspense>
       </div>
       {/* Global click-delegation guard: warns before any off-origin link in a

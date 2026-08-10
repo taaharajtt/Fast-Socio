@@ -39,6 +39,27 @@
   --dock-h: 3.5rem; /* matches FloatingDock's h-14 row */
   --dock-total: calc(var(--dock-h) + var(--safe-bottom));
 
+  /*
+    The shell's bottom reserve, and the exact height of its content box.
+    Scrolling screens (Home, Chat) just grow and ignore this. Screens that
+    fill the viewport and must NOT scroll — Discover's swipe deck — set
+    `h-[var(--shell-content-h)]` to get a DEFINITE height, which is what lets
+    a flex chain shrink. min-height alone computes to `auto` and nothing
+    downstream can shrink or resolve a percentage against it.
+  */
+  --shell-pb: calc(var(--dock-total) + 0.5rem);
+  --shell-content-h: calc(100dvh - var(--safe-top) - var(--shell-pb));
+
+  /*
+    Everything on Discover that is NOT the card: main's py-3, the header row
+    and its margin, and the action row plus its margin. The card is capped at
+    the leftover so the Pass/Message/Like controls can never be pushed under
+    the dock on short phones. Flex shrink cannot do this job — an
+    aspect-ratio item's transferred size is not a shrinkable base — so the
+    cap is explicit. Keep in sync if the header or action row changes size.
+  */
+  --deck-chrome: 9.5rem;
+
   /* Brand — Purple Primary (UISpec V3 §1.1) */
   --accent: #7c3aed; /* Purple Primary — active tabs, CTAs, badges */
   --accent-light: #8b5cf6; /* Purple Light — hover / secondary accents */
