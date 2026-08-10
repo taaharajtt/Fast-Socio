@@ -37,6 +37,7 @@ export const NAV_ITEMS: NavItem[] = [
 /** Routes that light a tab they don't live under. */
 const ADOPTED_ROUTES: Array<[prefix: string, tab: string]> = [
   ["/activity", "/home"], // reached from the Home header
+  ["/map", "/home"],
   ["/post", "/home"],
   // The whole campus-life cluster lights the "Community" tab (which lives at
   // /communities): the /community alias, society pages, and event pages.
