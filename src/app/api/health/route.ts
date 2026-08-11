@@ -13,9 +13,12 @@ import { NextResponse } from "next/server";
  * Nothing here is sensitive: no env values, no versions, no build IDs, no
  * request echo. It is reachable unauthenticated (see the /api/health entry in
  * lib/supabase/middleware.ts), so it must stay that way.
+ *
+ * No `export const dynamic` here: cacheComponents rejects route-segment config
+ * outright. The handler reads nothing request-scoped, so it prerenders — which
+ * is exactly right for a liveness probe. Serving it still requires the process
+ * to be up and the HTTP server to be answering, which is all it claims to test.
  */
-export const dynamic = "force-dynamic";
-
 export function GET() {
   return NextResponse.json({ status: "ok" }, { status: 200 });
 }
