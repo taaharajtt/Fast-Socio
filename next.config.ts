@@ -105,6 +105,12 @@ const nextConfig: NextConfig = {
   // instead by the build output — every route reports ◐ (Partial Prerender).
   // Revisit if the instant API gains a way to declare an ambient header read.
   cacheComponents: true,
+  // Self-hosted (Contabo) builds only. `standalone` emits a minimal server plus
+  // a pruned node_modules, which is what makes the container image small and
+  // reproducible. It is gated behind a build arg rather than set outright so
+  // that Vercel production builds stay byte-for-byte what they are today — this
+  // migration must not be able to change the deployment that serves real users.
+  ...(process.env.DOCKER_BUILD === "1" ? { output: "standalone" as const } : {}),
   experimental: {
     // Next DevTools → "Instant Navs": freeze the UI at the static shell to see
     // exactly what a tab switch paints before any data arrives.

@@ -1,0 +1,72 @@
+# Fast Socio — temporary Phase 1 origin.
+#
+# 169-58-149-230.sslip.io is a wildcard-DNS service that resolves the embedded
+# IP; verified resolving to 169.58.149.230 before this file was written. It
+# exists only because no custom domain is owned and Let's Encrypt needs a
+# publicly-resolvable name for HTTP-01. It is a TESTING origin, not the final
+# production entry point — that stays https://fast-socio.vercel.app.
+
+{
+	# Fail loudly at startup rather than silently serving plaintext.
+	email admin@fastsocio.app
+
+	# Access logs go to stdout so `docker compose logs` is the single place to
+	# look, and Docker's json-file rotation (set in compose) bounds them.
+	log {
+		output stdout
+		format console
+	}
+}
+
+169-58-149-230.sslip.io {
+	# Automatic HTTPS: Caddy obtains and renews the Let's Encrypt certificate
+	# over HTTP-01 with no configuration, and redirects :80 -> :443 itself.
+
+	encode zstd gzip
+
+	log {
+		output stdout
+		format console
+		# Do NOT add request/response header logging here. Auth cookies and
+		# magic-link tokens travel in those, and they must never reach disk.
+	}
+
+	reverse_proxy app:3000 {
+		# Streaming is not optional for this app: Cache Components/PPR means
+		# every route ships a static shell and streams the rest behind Suspense.
+		# Any buffering in this hop silently destroys that and the shell stops
+		# painting first. -1 disables response buffering entirely.
+		flush_interval -1
+
+		# Preserve what Next.js needs to reconstruct absolute URLs. Caddy sets
+		# X-Forwarded-For/Proto/Host by default; Host is made explicit because
+		# the auth routes build redirects from the request origin.
+		header_up Host {host}
+		header_up X-Forwarded-Host {host}
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Real-IP {remote_host}
+
+		# Long-lived connections. Supabase Realtime is browser-direct and never
+		# passes through here, but RSC streaming and Server Action responses can
+		# legitimately stay open, so no aggressive read timeout is set.
+		transport http {
+			read_timeout 300s
+			write_timeout 300s
+		}
+	}
+
+	# Phase 1 origin protection. This box is publicly reachable and the app is
+	# not yet meant to receive real traffic, so keep it out of search results
+	# and off the radar of casual scanners. Removed at cutover.
+	header {
+		X-Robots-Tag "noindex, nofollow, noarchive"
+		# The app sets its own CSP/HSTS/etc via next.config.ts; do not duplicate
+		# or override them here or they will conflict at cutover.
+		-Server
+	}
+}
+
+# No catch-all site block is defined on purpose. Caddy only answers for the
+# hostname above; a request arriving by raw IP or an unexpected Host has no
+# matching site and no certificate, so it is refused. Adding an explicit
+# `:443` block here would fight Automatic HTTPS for the TLS handshake.

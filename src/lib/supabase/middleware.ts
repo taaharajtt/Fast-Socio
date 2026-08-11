@@ -69,6 +69,10 @@ export async function updateSession(request: NextRequest) {
     // production (see the route). Public so the capture check works on a
     // preview deploy without needing to authenticate first.
     pathname === "/api/sentry-check" ||
+    // Liveness probe for the self-hosted deployment. Must answer 200 without a
+    // session or the container healthcheck sees the /login redirect and starts
+    // killing healthy containers. Exposes nothing (see the route).
+    pathname === "/api/health" ||
     pathname.startsWith("/styleguide");
 
   // Unauthenticated users may only see public routes.
