@@ -120,14 +120,64 @@ nothing is broken. Debug with `docker compose logs caddy`.
 
 ## T-0 — cutover
 
-### 1. Freeze writes (announce first)
+### 1. Freeze writes — TWO layers, both required
 
-The freeze is what makes the final sync exact. Without it, rows written to Tokyo
-between the sync and the DNS change are lost.
+The freeze is what makes the final sync exact. Any row written to Tokyo after
+the sync starts exists nowhere afterwards.
 
-Set the app on **Vercel** to read-only via the existing feature-flag table, or
-simply accept a ~5 minute window of lost writes if traffic is genuinely zero at
-midnight. Whichever you choose, note the time.
+**Maintenance mode alone is NOT a write freeze.** `app_settings.maintenance`
+only makes the student layout redirect to `/maintenance`
+(`src/app/(student)/layout.tsx`). A tab that is already open can still invoke
+Server Actions, and many writes run through `SECURITY DEFINER` RPCs that ignore
+table grants entirely. It is a courtesy notice, not a guarantee.
+
+**Layer 1 — user-facing notice (Tokyo):**
+
+```bash
+TOKEN=$(grep -m1 '^SUPABASE_ACCESS_TOKEN=' .env.local | cut -d= -f2- | tr -d '"\r')
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  "https://api.supabase.com/v1/projects/skgphoupbwdexfevgcnn/database/query" \
+  -d '{"query":"update app_settings set value = jsonb_build_object('"'"'enabled'"'"', true, '"'"'message'"'"', '"'"'FAST SOCIO is moving to a new home. Back in a few minutes.'"'"') where key = '"'"'maintenance'"'"'"}'
+```
+
+**Layer 2 — the actual freeze (Tokyo).** Make every PostgREST connection
+read-only. `authenticator` is the login role PostgREST uses; a read-only
+transaction blocks writes regardless of role, so this covers `SECURITY DEFINER`
+RPCs too — which table-level `REVOKE` would not.
+
+```bash
+# FREEZE
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  "https://api.supabase.com/v1/projects/skgphoupbwdexfevgcnn/database/query" \
+  -d '{"query":"alter role authenticator set default_transaction_read_only = on"}'
+
+# Existing pooled connections keep the old setting until recycled, so force it.
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  "https://api.supabase.com/v1/projects/skgphoupbwdexfevgcnn/database/query" \
+  -d '{"query":"select pg_terminate_backend(pid) from pg_stat_activity where usename = '"'"'authenticator'"'"' and pid <> pg_backend_pid()"}'
+```
+
+**Verify the freeze actually bit** before continuing — do not assume:
+
+```bash
+# Reads must still work; a write must fail with 'read-only transaction'.
+curl -s "https://skgphoupbwdexfevgcnn.supabase.co/rest/v1/posts?select=id&limit=1" \
+  -H "apikey: $TOKYO_ANON" -H "Authorization: Bearer $TOKYO_ANON" -o /dev/null -w "read  %{http_code}\n"
+```
+
+Then confirm in a browser on `fast-socio.vercel.app` that posting fails.
+
+**UNFREEZE (rollback, or after a decision to abort):**
+
+```bash
+curl -s -X POST … -d '{"query":"alter role authenticator reset default_transaction_read_only"}'
+curl -s -X POST … -d '{"query":"select pg_terminate_backend(pid) from pg_stat_activity where usename = '"'"'authenticator'"'"' and pid <> pg_backend_pid()"}'
+# and set app_settings.maintenance back to {"enabled": false, "message": ""}
+```
+
+Note the exact time the freeze went on. Tokyo is read-only from here until
+either rollback or retirement — it is never written to again on the success
+path, which is precisely what makes it a trustworthy rollback target.
 
 ### 2. Final data sync (Tokyo → Frankfurt)
 
@@ -204,9 +254,46 @@ Do not skip. These are the failures `curl` cannot see:
 - [ ] Post something — a Server Action write, proving `allowedOrigins`
 - [ ] `www.fastsocio.online` redirects to the apex with a valid certificate
 
-### 9. Unfreeze
+### 9. ROLLBACK DECISION POINT — stop and decide before unfreezing
 
-Only after step 8 passes. **This is the last moment rollback is free.**
+**Everything up to here is reversible. Nothing past here is.**
+
+Tokyo is still read-only and byte-identical to what Frankfurt was loaded from.
+No user has written to Frankfurt. Rolling back costs nothing but time.
+
+Go/no-go — every line must be a yes, verified in a browser on
+`https://fastsocio.online`, not inferred:
+
+- [ ] Magic-link login completes and lands signed in
+- [ ] Feed reads render (database reads)
+- [ ] A post/comment succeeds (database write via Server Action → proves
+      `allowedOrigins`)
+- [ ] Profile-photo upload succeeds (presign → PUT → public read)
+- [ ] Pre-existing images load (migrated storage URLs)
+- [ ] Images arrive via `/img/...` (imgproxy)
+- [ ] Chat attachment opens (private presigned GET)
+- [ ] Apex serves valid TLS; `www` redirects to apex with valid TLS
+- [ ] Browser console clean — no CSP or CORS errors
+- [ ] `docker compose logs app` shows no 5xx burst
+
+**If ANY line fails: roll back now** (see Rollback below). Do not unfreeze and
+"fix it live" — once writes land in Frankfurt the cheap exit is gone.
+
+If every line passes, proceed.
+
+### 10. Unfreeze
+
+```bash
+# Tokyo: lift maintenance notice only. Do NOT lift the read-only freeze —
+# Tokyo must stay frozen so it remains a clean rollback snapshot.
+# Frankfurt was never frozen; the VPS is already serving writes to it.
+```
+
+Set `app_settings.maintenance` to `{"enabled": false, "message": ""}` **on
+Frankfurt** (the live database from now on). Leave Tokyo read-only.
+
+**From this moment, Frankfurt is the source of truth and rollback to Tokyo
+means losing every row written since.**
 
 ---
 
@@ -243,21 +330,26 @@ ssh -i ~/.ssh/fastsocio_vps fastsocio@169.58.149.230 \
 Config and code backups on the VPS: `repo.bak-*`, `docker-compose.yml.bak-*`,
 `Caddyfile.bak-*`, `.env.bak-*`.
 
-### After users have written to Frankfurt — NOT free
+### After writes are unfrozen — rolling back to Tokyo is NOT recommended
 
-Rolling back now loses everything written since cutover. Options, in order of
-preference:
+Once Frankfurt has taken real writes, those rows exist nowhere else. Tokyo is a
+frozen snapshot from the cutover moment and has no knowledge of them.
 
-1. **Fix forward.** The VPS stack is verified; most faults are quicker to fix
-   than to reverse.
-2. **Roll back and accept the loss**, having first exported the new rows for
-   manual replay:
-   ```bash
-   # capture what would be lost before touching anything
-   node scripts/sync-frankfurt-data.mjs   # dry run shows the row deltas
-   ```
-3. **Reverse-sync Frankfurt → Tokyo.** No script exists. Do not attempt this
-   during an incident.
+**Do not roll back to Tokyo unless a safe data-sync strategy exists.** There is
+no Frankfurt → Tokyo script, and writing one during an incident is how data gets
+destroyed. In order of preference:
+
+1. **Fix forward.** The stack is verified end to end; nearly every fault is
+   faster to repair than to reverse. The app image rolls back independently
+   (below) without touching data at all.
+2. **Serve a maintenance page** while fixing, so no further divergence
+   accumulates: set `app_settings.maintenance.enabled = true` on Frankfurt.
+3. **Only with an explicit, reviewed sync plan**: quantify the divergence first
+   — `node scripts/sync-frankfurt-data.mjs` (dry run) shows exactly which tables
+   and how many rows differ — then decide deliberately, not under pressure.
+
+The app-level rollback above is always available and is usually the right lever:
+it reverts code, not data.
 
 ---
 
