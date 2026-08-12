@@ -1,14 +1,26 @@
-# Fast Socio — temporary Phase 1 origin.
+# Fast Socio — production origin (fastsocio.online) + temporary test origin.
 #
-# 169-58-149-230.sslip.io is a wildcard-DNS service that resolves the embedded
-# IP; verified resolving to 169.58.149.230 before this file was written. It
-# exists only because no custom domain is owned and Let's Encrypt needs a
-# publicly-resolvable name for HTTP-01. It is a TESTING origin, not the final
-# production entry point — that stays https://fast-socio.vercel.app.
+# Two site blocks are served during the cutover:
+#
+#   fastsocio.online / www.fastsocio.online — the production domain. Caddy
+#     obtains and renews Let's Encrypt certificates for BOTH over HTTP-01, so
+#     nothing has to be provisioned by hand. www redirects to the apex so there
+#     is exactly one canonical origin: two live origins would split auth cookies
+#     and make the Server Actions origin check harder to reason about.
+#
+#   169-58-149-230.sslip.io — the pre-DNS test origin. Kept ONLY so the box
+#     stays reachable if the domain is misconfigured mid-cutover; it is the
+#     rollback path for reaching the app directly. REMOVE IT once the domain is
+#     verified (see the cleanup step in the cutover runbook).
+#
+# Certificates are only issued once the domain actually resolves here, so this
+# file can be deployed BEFORE the DNS change: the fastsocio.online block simply
+# fails to obtain a certificate and the sslip.io origin keeps serving.
 
 {
 	# Fail loudly at startup rather than silently serving plaintext.
-	email admin@fastsocio.app
+	# Let's Encrypt expiry notices. Must be a real mailbox.
+	email admin@fastsocio.online
 
 	# Access logs go to stdout so `docker compose logs` is the single place to
 	# look, and Docker's json-file rotation (set in compose) bounds them.
@@ -16,6 +28,56 @@
 		output stdout
 		format console
 	}
+}
+
+# Canonical production origin.
+fastsocio.online {
+	encode zstd gzip
+
+	log {
+		output stdout
+		format console
+		# Do NOT add request/response header logging here. Auth cookies and
+		# magic-link tokens travel in those, and they must never reach disk.
+	}
+
+	# Image transforms — see the note in the sslip.io block below.
+	handle_path /img/* {
+		reverse_proxy imgproxy:8080 {
+			transport http {
+				read_timeout 30s
+				write_timeout 30s
+			}
+		}
+		header Cache-Control "public, max-age=31536000, immutable"
+	}
+
+	reverse_proxy app:3000 {
+		# Streaming is not optional: Cache Components/PPR ships a static shell
+		# and streams the rest. Buffering here silently destroys that.
+		flush_interval -1
+
+		header_up Host {host}
+		header_up X-Forwarded-Host {host}
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Real-IP {remote_host}
+
+		transport http {
+			read_timeout 300s
+			write_timeout 300s
+		}
+	}
+
+	# No X-Robots-Tag here: this origin IS meant to be indexed. The app sets its
+	# own CSP/HSTS via next.config.ts — do not duplicate them here.
+	header -Server
+}
+
+# www redirects to the apex rather than serving a second copy. Caddy still
+# obtains a certificate for it, so https://www.fastsocio.online is valid and
+# does not warn before redirecting.
+www.fastsocio.online {
+	redir https://fastsocio.online{uri} permanent
 }
 
 169-58-149-230.sslip.io {
