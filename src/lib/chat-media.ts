@@ -7,7 +7,10 @@
  * these helpers normalize either form to a bucket-relative path.
  */
 
-const PUBLIC_MARKER = "/storage/v1/object/public/chat-media/";
+// Matches both the Contabo form ({base}/chat-media/…) and any legacy Supabase
+// URL still stored on an old row, so attachments keep resolving across the
+// migration instead of silently failing on pre-migration data.
+const PUBLIC_MARKER = "/chat-media/";
 
 /** Normalize a stored attachment value (path OR legacy public URL) to a path. */
 export function chatMediaPath(stored: string | null | undefined): string | null {

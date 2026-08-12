@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headObject } from "@/lib/s3/sign";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
@@ -191,16 +192,8 @@ export async function postSocietyAnnouncement(
         opts.attachmentPath.includes("..")) {
       return { ok: false, error: "Invalid attachment." };
     }
-    const slash = opts.attachmentPath.lastIndexOf("/");
-    const { data: objects } = await supabase.storage
-      .from("chat-media")
-      .list(opts.attachmentPath.slice(0, slash), {
-        search: opts.attachmentPath.slice(slash + 1),
-        limit: 1,
-      });
-    const mime = (objects?.[0]?.metadata as { mimetype?: string } | undefined)
-      ?.mimetype;
-    if (!mime || !mime.startsWith("image/"))
+    const head = await headObject("chat-media", opts.attachmentPath);
+    if (!head?.contentType?.startsWith("image/"))
       return { ok: false, error: "Only images can be attached." };
   }
 

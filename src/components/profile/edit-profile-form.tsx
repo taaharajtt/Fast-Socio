@@ -120,7 +120,8 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
     try {
       await uploadWithProgress("avatars", path, blob, {
         contentType: mimeType,
-        upsert: true,
+        // No `upsert` flag any more: an S3 PUT always overwrites the key, so
+        // the insert/upsert distinction Supabase Storage drew doesn't exist.
         onProgress: (p) => setUploadPct(p.percent),
       });
       setAvatarUrl(publicStorageUrl("avatars", path));

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headObject } from "@/lib/s3/sign";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
@@ -160,16 +161,11 @@ export async function sendCommunityImage(
   if (!allowed) return { ok: false, error: "You're sending too fast." };
 
   // Server-side MIME check. The accept attribute is a convenience; this asks
-  // storage what the object actually is.
-  const slash = path.lastIndexOf("/");
-  const folder = path.slice(0, slash);
-  const name = path.slice(slash + 1);
-  const { data: objects } = await supabase.storage
-    .from("chat-media")
-    .list(folder, { search: name, limit: 1 });
-  const mime = (objects?.[0]?.metadata as { mimetype?: string } | undefined)
-    ?.mimetype;
-  if (!mime || !mime.startsWith("image/")) {
+  // storage what the object actually is. It matters more now than it did on
+  // Supabase: the presigned PUT carried the content type the CLIENT declared,
+  // so this is the first point at which the real bytes are inspected.
+  const head = await headObject("chat-media", path);
+  if (!head?.contentType?.startsWith("image/")) {
     return { ok: false, error: "Only images can be attached." };
   }
 

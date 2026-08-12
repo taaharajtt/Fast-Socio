@@ -31,14 +31,18 @@ export function safeNextPath(next: unknown, fallback = "/home"): string {
 }
 
 /**
- * True if `url` is a public object URL served by this project's Supabase
- * storage. `baseUrl` defaults to the configured Supabase URL.
+ * True if `url` is a public object URL served by this project's own object
+ * storage. `baseUrl` defaults to the configured Contabo public base URL.
+ *
+ * Callers use this to refuse a client-supplied media URL before persisting it,
+ * so it must stay an exact prefix match: anything looser (a `.includes()`, or
+ * accepting any https URL) would let a caller store a URL pointing at somebody
+ * else's host and have the app render it as if it were ours.
  */
 export function isAppStorageUrl(
   url: unknown,
-  baseUrl: string | undefined = process.env.NEXT_PUBLIC_SUPABASE_URL
+  baseUrl: string | undefined = process.env.NEXT_PUBLIC_CONTABO_PUBLIC_BASE_URL
 ): boolean {
   if (typeof url !== "string" || !baseUrl) return false;
-  const prefix = `${baseUrl.replace(/\/$/, "")}/storage/v1/object/public/`;
-  return url.startsWith(prefix);
+  return url.startsWith(`${baseUrl.replace(/\/$/, "")}/`);
 }

@@ -5,8 +5,13 @@ import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { chatMediaPath } from "@/lib/chat-media";
+import { listObjects, deleteObjects } from "@/lib/s3/sign";
 
-const POST_MEDIA_MARKER = "/storage/v1/object/public/post-media/";
+// Matches both the Contabo form ({base}/post-media/…) and any legacy Supabase
+// URL still stored on an old row ({base}/storage/v1/object/public/post-media/…),
+// so account deletion keeps working across the migration rather than silently
+// skipping files whose URL predates it.
+const POST_MEDIA_MARKER = "/post-media/";
 
 /**
  * Permanently delete the caller's account. Deleting the auth user cascades to
@@ -34,28 +39,26 @@ export async function deleteAccount(): Promise<{ error: string } | void> {
 
   const admin = createAdminClient();
 
+  // Media now lives in Contabo Object Storage, which has no cascade — these
+  // deletes are the only thing stopping a removed account's files from living
+  // on indefinitely.
+
   // Avatars live under avatars/<uid>/…
-  const { data: avatarFiles } = await admin.storage
-    .from("avatars")
-    .list(uid, { limit: 1000 });
-  if (avatarFiles?.length) {
-    await admin.storage
-      .from("avatars")
-      .remove(avatarFiles.map((f) => `${uid}/${f.name}`));
-  }
+  const avatarPaths = await listObjects("avatars", uid);
+  await deleteObjects("avatars", avatarPaths);
 
   // Post images (post-media/shared/<uuid>): extract paths from the public URLs.
   const postPaths = (myPosts ?? [])
     .map((p) => p.image_url as string | null)
     .filter((u): u is string => u !== null && u.includes(POST_MEDIA_MARKER))
     .map((u) => u.slice(u.indexOf(POST_MEDIA_MARKER) + POST_MEDIA_MARKER.length));
-  if (postPaths.length) await admin.storage.from("post-media").remove(postPaths);
+  await deleteObjects("post-media", postPaths);
 
   // DM attachments (chat-media): normalize each stored value to a path.
   const chatPaths = (myMsgs ?? [])
     .map((m) => chatMediaPath(m.attachment_url as string | null))
     .filter((p): p is string => Boolean(p));
-  if (chatPaths.length) await admin.storage.from("chat-media").remove(chatPaths);
+  await deleteObjects("chat-media", chatPaths);
 
   const { error } = await admin.auth.admin.deleteUser(uid);
   if (error) return { error: error.message };
