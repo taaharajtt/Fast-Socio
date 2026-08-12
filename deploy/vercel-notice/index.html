@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Fast Socio has a new home</title>
+<meta name="description" content="Fast Socio is now live at fastsocio.online." />
+<meta name="theme-color" content="#0d0d12" />
+<link rel="icon" href="logo.png" />
+<link rel="canonical" href="https://fastsocio.online" />
+
+<!--
+  Static notice for visitors arriving at the previous address.
+
+  Deliberately self-contained: one HTML file plus a logo. No framework, no
+  fonts fetched from a CDN, no scripts, no network calls — so it paints on the
+  first response and cannot fail for reasons outside this file.
+
+  There is intentionally NO automatic redirect. A visitor should recognise the
+  brand and choose to continue, rather than being thrown to an address they
+  did not type; an auto-redirect also breaks the back button.
+
+  Colours, gradient, halo and type scale are lifted verbatim from the app's own
+  auth screens (globals.css --auth-gradient, --accent, --fg-muted) so this
+  reads as the same product, not a generic holding page.
+-->
+<style>
+  :root {
+    --bg: #0d0d12;
+    --fg: #ffffff;
+    --fg-muted: #9ca3af;
+    --fg-disabled: #4b5563;
+    --accent: #7c3aed;
+    --accent-light: #8b5cf6;
+    --accent-grad-end: #a855f7;
+    --violet-text: #a78bfa;
+    --auth-gradient: radial-gradient(55rem 38rem at 50% -8%, #2d1b69 0%, #17123a 42%, #0d0d12 72%);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    background: var(--bg);
+    background-image: var(--auth-gradient);
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    color: var(--fg);
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    /* Respect notches on phones. */
+    padding: max(2.5rem, env(safe-area-inset-top)) 1.5rem
+             max(2.5rem, env(safe-area-inset-bottom));
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  /* The soft purple halo from the auth shell. Decorative only. */
+  .halo {
+    position: absolute;
+    top: -6rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 20rem;
+    height: 20rem;
+    border-radius: 9999px;
+    opacity: 0.4;
+    background: radial-gradient(circle, #7c3aed, transparent 70%);
+    pointer-events: none;
+  }
+
+  main {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 30rem;
+    text-align: center;
+  }
+
+  .logo {
+    width: min(270px, 72vw);
+    height: auto;
+    display: block;
+    margin: 0 auto;
+  }
+
+  h1 {
+    margin: 2.75rem 0 0;
+    font-size: clamp(1.75rem, 7vw, 2.5rem);
+    font-weight: 900;
+    line-height: 1.12;
+    letter-spacing: -0.02em;
+  }
+
+  h1 .accent {
+    display: block;
+    background-image: linear-gradient(135deg, var(--accent-light) 0%, var(--accent-grad-end) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .lead {
+    margin: 1.75rem 0 0;
+    font-size: 1rem;
+    color: var(--fg-muted);
+  }
+
+  /* The domain, large and unmistakably a link. */
+  .domain {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.6rem;
+    font-size: clamp(1.25rem, 5vw, 1.6rem);
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: var(--violet-text);
+    text-decoration: none;
+    border-radius: 0.5rem;
+    padding: 0.25rem 0.5rem;
+  }
+  .domain:hover,
+  .domain:focus-visible { text-decoration: underline; }
+  .domain svg { flex: none; }
+
+  .cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 2rem;
+    padding: 0.95rem 1.9rem;
+    width: 100%;
+    max-width: 20rem;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #ffffff;
+    text-decoration: none;
+    border-radius: 9999px;
+    background-image: linear-gradient(135deg, var(--accent) 0%, var(--accent-grad-end) 100%);
+    box-shadow: 0 10px 30px -10px rgba(124, 58, 237, 0.75);
+    transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+  }
+  .cta:hover { filter: brightness(1.08); transform: translateY(-1px); }
+  .cta:active { transform: translateY(0); }
+
+  /* Visible keyboard focus on every interactive element. */
+  a:focus-visible {
+    outline: 3px solid var(--violet-text);
+    outline-offset: 3px;
+  }
+
+  .tagline {
+    margin: 2.25rem 0 0;
+    font-size: 1rem;
+    color: var(--fg-muted);
+  }
+  .tagline strong { color: var(--violet-text); font-weight: 700; }
+
+  hr {
+    margin: 1.75rem auto 0;
+    width: min(22rem, 100%);
+    border: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .farewell {
+    margin: 1.5rem 0 0;
+    font-size: 1rem;
+    color: var(--fg-muted);
+  }
+
+  footer {
+    margin-top: 3rem;
+    font-size: 0.6875rem;
+    color: var(--fg-disabled);
+  }
+
+  @media (max-width: 380px) {
+    h1 { margin-top: 2rem; }
+    .cta { padding: 0.85rem 1.5rem; }
+  }
+
+  /* Honour users who prefer less movement. */
+  @media (prefers-reduced-motion: reduce) {
+    .cta { transition: none; }
+    .cta:hover { transform: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="halo" aria-hidden="true"></div>
+
+  <main>
+    <img class="logo" src="logo.png" alt="Fast Socio" width="270" height="135" />
+
+    <h1>
+      FAST SOCIO
+      <span class="accent">HAS A NEW HOME !</span>
+    </h1>
+
+    <p class="lead">We’re now live at:</p>
+
+    <a class="domain" href="https://fastsocio.online">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+      </svg>
+      fastsocio.online
+    </a>
+
+    <p>
+      <a class="cta" href="https://fastsocio.online">Go to Fast Socio →</a>
+    </p>
+
+    <p class="tagline">Same <strong>Fast Socio</strong>. New home.</p>
+
+    <hr />
+
+    <p class="farewell">See you on the other side! 👋</p>
+
+    <footer>Terms of Service · Privacy Policy</footer>
+  </main>
+</body>
+</html>
