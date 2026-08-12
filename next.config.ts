@@ -44,15 +44,27 @@ const isDev = process.env.NODE_ENV === "development";
 const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
   ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).host
   : "*.supabase.co";
+// Object storage moved to Contabo. Images and audio are now served from that
+// host (or, when imgproxy is enabled, from our own origin via /img), and the
+// browser PUTs uploads straight to it using a presigned URL — so it has to
+// appear in connect-src as well as img-src/media-src, or every upload is
+// blocked by the CSP rather than by anything meaningful.
+//
+// Supabase stays listed: it is still the API/Realtime host, and legacy media
+// URLs may persist on old rows while both stacks run in parallel.
+const storageHost = process.env.NEXT_PUBLIC_CONTABO_PUBLIC_BASE_URL
+  ? new URL(process.env.NEXT_PUBLIC_CONTABO_PUBLIC_BASE_URL).host
+  : "";
+const storageSrc = storageHost ? ` https://${storageHost}` : "";
 const csp = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
   "object-src 'none'",
-  `img-src 'self' blob: data: https://${supabaseHost}`,
-  `media-src 'self' blob: https://${supabaseHost}`,
+  `img-src 'self' blob: data: https://${supabaseHost}${storageSrc}`,
+  `media-src 'self' blob: https://${supabaseHost}${storageSrc}`,
   "font-src 'self' data:",
-  `connect-src 'self' https://${supabaseHost} wss://${supabaseHost}`,
+  `connect-src 'self' https://${supabaseHost} wss://${supabaseHost}${storageSrc}`,
   "worker-src 'self'",
   "manifest-src 'self'",
   "frame-ancestors 'none'",
@@ -115,6 +127,25 @@ const nextConfig: NextConfig = {
     // Next DevTools → "Instant Navs": freeze the UI at the static shell to see
     // exactly what a tab switch paints before any data arrives.
     instantNavigationDevToolsToggle: true,
+    // Server Actions compare the request's Origin against the Host it believes
+    // it is serving. Behind Caddy the app sees the INTERNAL host (app:3000),
+    // so every action — all 33 "use server" modules, i.e. every write in the
+    // product — would be rejected as a cross-origin attempt. Listing the real
+    // public origins is what keeps writes working once we are behind a proxy.
+    //
+    // This is an allow-list guarding against CSRF-style cross-origin action
+    // invocation, so it must stay an explicit list: no wildcards, and nothing
+    // added here that we do not actually serve.
+    serverActions: {
+      allowedOrigins: [
+        "fastsocio.online",
+        "www.fastsocio.online",
+        // Temporary VPS origin, needed to smoke-test the container before DNS
+        // moves. Remove once the domain is live.
+        "169-58-149-230.sslip.io",
+        "localhost:3000",
+      ],
+    },
   },
   // next-pwa injects a webpack config; an empty turbopack config lets `next dev`
   // run on Turbopack without conflict (the SW is disabled in dev anyway).

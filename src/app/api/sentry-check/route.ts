@@ -12,6 +12,10 @@ import { connection } from "next/server";
 // arrives, so the prerender pass walks straight past it.
 export async function GET() {
   await connection();
-  if (process.env.VERCEL_ENV === "production") notFound();
+  // Guard on NODE_ENV, not VERCEL_ENV. Off Vercel nothing sets VERCEL_ENV, so
+  // the old check could never be true and this deliberate-error route would
+  // have gone live in production the moment we moved to the VPS — a guard that
+  // silently inverts rather than failing loudly.
+  if (process.env.NODE_ENV === "production") notFound();
   throw new Error("Sentry check: deliberate test error from /api/sentry-check");
 }

@@ -31,6 +31,28 @@
 		# magic-link tokens travel in those, and they must never reach disk.
 	}
 
+	# Image transforms. Served from our own origin rather than exposing the
+	# imgproxy container directly: it keeps images same-origin (so the CSP does
+	# not need another host), and imgproxy is never publicly reachable except
+	# through this path.
+	#
+	# handle_path strips the /img prefix, so /img/insecure/rs:fit:… arrives at
+	# imgproxy as /insecure/rs:fit:… — which is the URL shape lib/image.ts and
+	# the next/image loader build.
+	handle_path /img/* {
+		reverse_proxy imgproxy:8080 {
+			# Renders are deterministic and content-addressed by their options,
+			# so a slow first byte is a cache miss, not a stalled stream.
+			transport http {
+				read_timeout 30s
+				write_timeout 30s
+			}
+		}
+		# Derivatives never change for a given URL: the source objects are
+		# written once under a token-bearing path and never overwritten.
+		header Cache-Control "public, max-age=31536000, immutable"
+	}
+
 	reverse_proxy app:3000 {
 		# Streaming is not optional for this app: Cache Components/PPR means
 		# every route ships a static shell and streams the rest behind Suspense.

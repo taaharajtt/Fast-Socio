@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { createClientForRedirect } from "@/lib/supabase/server";
 import { safeNextPath } from "@/lib/url-safety";
+import { siteUrl } from "@/lib/site-url";
 
 /**
  * Token-hash confirmation (the standard @supabase/ssr flow). Complements the
@@ -11,7 +12,8 @@ import { safeNextPath } from "@/lib/url-safety";
  * (createClientForRedirect) so the cookies actually reach the browser.
  */
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
+  const origin = siteUrl();
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;
   // Validate to a same-site path — never let `next` redirect off-domain (P2-01).
