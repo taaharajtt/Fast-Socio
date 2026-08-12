@@ -6,6 +6,7 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { APPEARANCE_INIT_SCRIPT } from "@/lib/appearance";
+import { MigrationWelcome } from "@/components/pwa/migration-welcome";
 import { AppleSplashScreens } from "./apple-splash-screens";
 
 const inter = Inter({
@@ -82,6 +83,10 @@ export default function RootLayout({
               /maintenance, the auth callbacks) — it exists so none of them can
               hold the document back with a blank screen. */}
           <Suspense>{children}</Suspense>
+          {/* One-time hello for arrivals from the previous address. Mounted at
+              the root (not the student layout) because they land on /login as
+              often as /home, and it must render before they sign in. */}
+          <MigrationWelcome />
         </ThemeProvider>
         <Analytics />
         <SpeedInsights />

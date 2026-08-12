@@ -7,7 +7,7 @@
 <meta name="description" content="Fast Socio is now live at fastsocio.online." />
 <meta name="theme-color" content="#0d0d12" />
 <link rel="icon" href="logo.png" />
-<link rel="canonical" href="https://fastsocio.online" />
+<link rel="canonical" href="https://fastsocio.online/?from=old" />
 
 <!--
   Static notice for visitors arriving at the previous address.
@@ -205,14 +205,19 @@
   <main>
     <img class="logo" src="logo.png" alt="Fast Socio" width="270" height="135" />
 
+    <!--
+      Default copy is for a browser visitor. migration.js swaps these strings
+      when the page is opened as the OLD INSTALLED APP, where "we've moved" is
+      not enough — the thing that moved is the icon they just tapped.
+    -->
     <h1>
-      FAST SOCIO
-      <span class="accent">HAS A NEW HOME !</span>
+      <span id="headline-top">FAST SOCIO</span>
+      <span class="accent" id="headline-accent">HAS A NEW HOME !</span>
     </h1>
 
-    <p class="lead">We’re now live at:</p>
+    <p class="lead" id="lead">We’re now live at:</p>
 
-    <a class="domain" href="https://fastsocio.online">
+    <a class="domain" href="https://fastsocio.online/?from=old">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
@@ -222,10 +227,10 @@
     </a>
 
     <p>
-      <a class="cta" href="https://fastsocio.online">Go to Fast Socio →</a>
+      <a class="cta" id="cta" href="https://fastsocio.online/?from=old">Go to Fast Socio →</a>
     </p>
 
-    <p class="tagline">Same <strong>Fast Socio</strong>. New home.</p>
+    <p class="tagline" id="tagline-text">Same <strong>Fast Socio</strong>. New home.</p>
 
     <hr />
 
@@ -233,5 +238,12 @@
 
     <footer>Terms of Service · Privacy Policy</footer>
   </main>
+
+  <!--
+    Tears down the old origin's service worker and caches, and rewords the page
+    when opened as the OLD INSTALLED APP. Deferred: nothing above depends on it,
+    and the message must render even if this never executes.
+  -->
+  <script src="migration.js" defer></script>
 </body>
 </html>
