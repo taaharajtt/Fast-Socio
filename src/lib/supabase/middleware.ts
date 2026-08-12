@@ -77,6 +77,15 @@ export async function updateSession(request: NextRequest) {
 
   // Unauthenticated users may only see public routes.
   if (!userId && !isPublicRoute) {
+    // API routes answer fetch(), not navigation. Redirecting one to /login
+    // sends back a 200 page of HTML, so the caller's `res.ok` is true and it
+    // fails later on JSON parsing with something unrelated to the real cause.
+    // A 401 lets the client say "your session expired" — which matters most
+    // for /api/storage/*, where an expired session mid-upload would otherwise
+    // surface as an inscrutable upload failure.
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "You are not signed in." }, { status: 401 });
+    }
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
