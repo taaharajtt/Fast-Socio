@@ -120,64 +120,75 @@ nothing is broken. Debug with `docker compose logs caddy`.
 
 ## T-0 — cutover
 
-### 1. Freeze writes — TWO layers, both required
+### 1. Freeze writes — freeze the Vercel app, not the database
 
 The freeze is what makes the final sync exact. Any row written to Tokyo after
 the sync starts exists nowhere afterwards.
 
-**Maintenance mode alone is NOT a write freeze.** `app_settings.maintenance`
-only makes the student layout redirect to `/maintenance`
-(`src/app/(student)/layout.tsx`). A tab that is already open can still invoke
-Server Actions, and many writes run through `SECURITY DEFINER` RPCs that ignore
-table grants entirely. It is a courtesy notice, not a guarantee.
+**A database-level freeze was tried and REJECTED.** Setting
+`default_transaction_read_only = on` on the `authenticator` role, with all its
+connections recycled, did **not** block writes — a rehearsal on Frankfurt showed
+an insert still returning `201 Created`. PostgREST appears to set each
+transaction's access mode itself, overriding the role default. It looked
+applied, reported as applied, and did nothing. **Do not use it, and do not
+modify Tokyo's grants or roles as a substitute.**
 
-**Layer 1 — user-facing notice (Tokyo):**
+**Maintenance mode is also NOT a freeze.** `app_settings.maintenance` only
+redirects the student layout to `/maintenance`; an already-open tab can still
+invoke Server Actions.
 
-```bash
-TOKEN=$(grep -m1 '^SUPABASE_ACCESS_TOKEN=' .env.local | cut -d= -f2- | tr -d '"\r')
-curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  "https://api.supabase.com/v1/projects/skgphoupbwdexfevgcnn/database/query" \
-  -d '{"query":"update app_settings set value = jsonb_build_object('"'"'enabled'"'"', true, '"'"'message'"'"', '"'"'FAST SOCIO is moving to a new home. Back in a few minutes.'"'"') where key = '"'"'maintenance'"'"'"}'
-```
-
-**Layer 2 — the actual freeze (Tokyo).** Make every PostgREST connection
-read-only. `authenticator` is the login role PostgREST uses; a read-only
-transaction blocks writes regardless of role, so this covers `SECURITY DEFINER`
-RPCs too — which table-level `REVOKE` would not.
+**The mechanism: block the Vercel app.** Verified by inspection of the codebase
+— every real mutation (posts, comments, messages, uploads, community and society
+actions) runs through a Server Action or API route hosted on Vercel. Take Vercel
+out of the request path and those writes cannot reach Tokyo at all.
 
 ```bash
-# FREEZE
-curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  "https://api.supabase.com/v1/projects/skgphoupbwdexfevgcnn/database/query" \
-  -d '{"query":"alter role authenticator set default_transaction_read_only = on"}'
+V=$(grep -m1 '^VERCEL_API_TOKEN=' .env.local | cut -d= -f2- | tr -d '"
+')
+PRJ=prj_0iHAyTMxqXZd0K3kb9W0lEaLf7JP
 
-# Existing pooled connections keep the old setting until recycled, so force it.
-curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  "https://api.supabase.com/v1/projects/skgphoupbwdexfevgcnn/database/query" \
-  -d '{"query":"select pg_terminate_backend(pid) from pg_stat_activity where usename = '"'"'authenticator'"'"' and pid <> pg_backend_pid()"}'
+# FREEZE — require Vercel authentication for every deployment, including the
+# *.vercel.app production alias. Public requests then get 401 and no Server
+# Action, API route or RPC-backed mutation can run.
+curl -s -X PATCH "https://api.vercel.com/v9/projects/$PRJ"   -H "Authorization: Bearer $V" -H "Content-Type: application/json"   -d '{"ssoProtection":{"deploymentType":"all"}}'
 ```
 
-**Verify the freeze actually bit** before continuing — do not assume:
+**Verify the freeze bit — required, do not assume (this is the step the
+database mechanism failed):**
 
 ```bash
-# Reads must still work; a write must fail with 'read-only transaction'.
-curl -s "https://skgphoupbwdexfevgcnn.supabase.co/rest/v1/posts?select=id&limit=1" \
-  -H "apikey: $TOKYO_ANON" -H "Authorization: Bearer $TOKYO_ANON" -o /dev/null -w "read  %{http_code}\n"
+curl -s -o /dev/null -w "login  %{http_code}  (expect 401)
+" https://fast-socio.vercel.app/login
 ```
 
-Then confirm in a browser on `fast-socio.vercel.app` that posting fails.
+Then, in a browser on `fast-socio.vercel.app`, confirm the app is unreachable
+and that attempting to post fails.
 
-**UNFREEZE (rollback, or after a decision to abort):**
+**UNFREEZE (rollback only — see step 10):**
 
 ```bash
-curl -s -X POST … -d '{"query":"alter role authenticator reset default_transaction_read_only"}'
-curl -s -X POST … -d '{"query":"select pg_terminate_backend(pid) from pg_stat_activity where usename = '"'"'authenticator'"'"' and pid <> pg_backend_pid()"}'
-# and set app_settings.maintenance back to {"enabled": false, "message": ""}
+curl -s -X PATCH "https://api.vercel.com/v9/projects/$PRJ"   -H "Authorization: Bearer $V" -H "Content-Type: application/json"   -d '{"ssoProtection":{"deploymentType":"all_except_custom_domains"}}'
 ```
 
-Note the exact time the freeze went on. Tokyo is read-only from here until
-either rollback or retirement — it is never written to again on the success
-path, which is precisely what makes it a trustworthy rollback target.
+Nothing is deleted or reconfigured: the deployment, its domains and its
+environment variables are untouched, and reverting is one call.
+
+**Two residual write paths, documented rather than hidden.** Both only apply to
+tabs already open at freeze time, because a paused app serves no new pages:
+
+- `supabase.rpc("touch_last_seen")` — the presence heartbeat
+  (`src/components/presence/heartbeat.tsx`) is the ONLY direct browser-to-
+  Supabase write in the codebase. It updates `last_seen` metadata; losing a few
+  seconds of it is harmless.
+- Direct Storage uploads — the OLD code on Vercel uploads straight to Supabase
+  Storage with the user's JWT, so an open tab could still push a file. Requires
+  deliberate user action mid-window.
+
+Neither can create or modify a post, message, profile or comment. If even that
+is unacceptable, the only stronger option is revoking Tokyo's grants — which is
+explicitly out of scope by decision.
+
+Note the exact time the freeze went on.
 
 ### 2. Final data sync (Tokyo → Frankfurt)
 
@@ -281,21 +292,27 @@ Go/no-go — every line must be a yes, verified in a browser on
 
 If every line passes, proceed.
 
-### 10. Unfreeze
+### 10. Restore writes on the NEW production only
+
+Only after every box in step 9 is ticked.
+
+Writes on Frankfurt were never frozen — the VPS has been serving them all along.
+There is nothing to switch on there beyond clearing the maintenance notice, if
+one was set:
 
 ```bash
-# Tokyo: lift maintenance notice only. Do NOT lift the read-only freeze —
-# Tokyo must stay frozen so it remains a clean rollback snapshot.
-# Frankfurt was never frozen; the VPS is already serving writes to it.
+# on FRANKFURT (now the live database)
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json"   "https://api.supabase.com/v1/projects/xnbzenixmgghxsjpektp/database/query"   -d '{"query":"update app_settings set value = jsonb_build_object('"'"'enabled'"'"', false, '"'"'message'"'"', '"'"''"'"') where key = '"'"'maintenance'"'"'"}'
 ```
 
-Set `app_settings.maintenance` to `{"enabled": false, "message": ""}` **on
-Frankfurt** (the live database from now on). Leave Tokyo read-only.
+**Leave the Vercel freeze ON.** Vercel and Tokyo remain intact and available as
+rollback infrastructure, but must not accept writes now that Frankfurt is
+authoritative — two databases both taking writes is the one state from which
+there is no clean recovery. Tokyo therefore stays exactly as it was at the
+moment of the final sync, which is what makes it a trustworthy snapshot.
 
-**From this moment, Frankfurt is the source of truth and rollback to Tokyo
-means losing every row written since.**
-
----
+**From here, Frankfurt is the source of truth and rolling back to Tokyo means
+losing every row written since.**
 
 ## Rollback
 
