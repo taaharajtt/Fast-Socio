@@ -73,7 +73,13 @@ export async function updateSession(request: NextRequest) {
     // session or the container healthcheck sees the /login redirect and starts
     // killing healthy containers. Exposes nothing (see the route).
     pathname === "/api/health" ||
-    pathname.startsWith("/styleguide");
+    pathname.startsWith("/styleguide") ||
+    // Public informational pages — must render for signed-out visitors, not
+    // bounce them to /login. See src/app/(public)/.
+    pathname === "/privacy" ||
+    pathname === "/terms" ||
+    pathname === "/about" ||
+    pathname === "/support";
 
   // Unauthenticated users may only see public routes.
   if (!userId && !isPublicRoute) {
