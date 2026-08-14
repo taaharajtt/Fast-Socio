@@ -7,11 +7,7 @@ import { MyHelpPanel } from "@/components/help/my-help-panel";
 import { compareSocio, type HelpUrgency } from "@/lib/help/logic";
 import type { HelpTab } from "@/lib/help/constants";
 import { HELP_REQUEST_COLUMNS, type HelpRequestRow } from "@/lib/help/types";
-
-/** Neutralize characters that would break PostgREST's or()/ilike grammar. */
-function safeLike(input: string): string {
-  return input.replace(/[,()*%\\]/g, " ").trim();
-}
+import { ilikeContains, orIlike } from "@/lib/postgrest/search";
 
 /**
  * The complete Campus Help experience — the internal SOCIO | ME tabs, the SOCIO
@@ -76,13 +72,20 @@ async function SocioSection({
     .eq("is_mine", false);
 
   if (category) query = query.eq("category", category);
-  if (department) query = query.ilike("department", `%${safeLike(department)}%`);
   if (semester) query = query.eq("semester", Number(semester));
-  if (course) query = query.ilike("course_code", `%${safeLike(course)}%`);
-  if (q) {
-    const s = safeLike(q);
-    if (s) query = query.or(`title.ilike.%${s}%,body.ilike.%${s}%`);
-  }
+
+  // Each helper returns null when the escaped term is empty, and the filter is
+  // then skipped entirely. The previous inline version built `%%` in that case,
+  // which is an ilike that matches every row — a filter the user asked for but
+  // that silently did nothing.
+  const departmentPattern = ilikeContains(department);
+  if (departmentPattern) query = query.ilike("department", departmentPattern);
+
+  const coursePattern = ilikeContains(course);
+  if (coursePattern) query = query.ilike("course_code", coursePattern);
+
+  const search = orIlike(["title", "body"], q);
+  if (search) query = query.or(search);
 
   const { data } = await query
     .order("created_at", { ascending: false })

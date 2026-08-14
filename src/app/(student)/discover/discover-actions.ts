@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { resolveAvatarUrl } from "@/lib/avatar";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { orIlike } from "@/lib/postgrest/search";
 import { isPostMode, type PostMode } from "@/lib/smart-match/modes";
 import {
   buildSwipeDeck,
@@ -517,10 +518,8 @@ export async function hasAnyMatches(): Promise<boolean> {
 
 /** Search the current user's matches (onboarded, non-banned) to tag as current team members. */
 export async function searchTeammates(query: string): Promise<TeamMember[]> {
-  const q = query.trim();
-  if (q.length < 2) return [];
-  const safe = q.replace(/[,()*%\\]/g, " ").trim();
-  if (!safe) return [];
+  const search = orIlike(["full_name", "username"], query, { minLength: 2 });
+  if (!search) return [];
   const uid = await getAuthUserId();
   if (!uid) return [];
   const matchIds = await getMatchIds(uid);
@@ -532,7 +531,7 @@ export async function searchTeammates(query: string): Promise<TeamMember[]> {
     .eq("onboarding_completed", true)
     .eq("is_banned", false)
     .in("id", matchIds)
-    .or(`full_name.ilike.%${safe}%,username.ilike.%${safe}%`)
+    .or(search)
     .limit(8);
   return ((data ?? []) as Array<{
     id: string;

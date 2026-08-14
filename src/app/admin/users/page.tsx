@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PageHeader, Table, Th, Td, field, ctrl, rowClass } from "@/components/admin/kit";
 import { createClient } from "@/lib/supabase/server";
+import { orIlike } from "@/lib/postgrest/search";
 
 export default async function AdminUsersPage({
   searchParams,
@@ -27,7 +28,14 @@ export default async function AdminUsersPage({
     .limit(PAGE_SIZE);
   // Search covers the roll number too: 41 profiles have no full_name, and a
   // name-only filter made them unreachable from this page.
-  if (term) query = query.or(`full_name.ilike.%${term}%,username.ilike.%${term}%`);
+  //
+  // `term` comes straight off the query string, so it goes through orIlike
+  // rather than into the template directly: a bare `%` here would drop the
+  // filter to a full-table ilike scan, and a comma would append an extra
+  // condition to the or() group. orIlike returns null when nothing usable is
+  // left, which correctly means "show the unfiltered list".
+  const search = orIlike(["full_name", "username"], term);
+  if (search) query = query.or(search);
 
   const { data: users, count } = await query;
   const rows = users ?? [];
