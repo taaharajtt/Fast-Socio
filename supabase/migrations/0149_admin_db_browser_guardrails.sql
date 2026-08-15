@@ -196,6 +196,16 @@ revoke execute on function public._admin_browser_guard(text, text, jsonb) from p
 revoke execute on function public._admin_browser_denied_tables() from public, anon, authenticated;
 revoke execute on function public._admin_browser_denied_profile_columns() from public, anon, authenticated;
 
+-- Postgres grants EXECUTE to PUBLIC by default, and Supabase's default
+-- privileges additionally grant it to anon. Every admin_* RPC from 0038
+-- inherited that and is anon-executable today, relying on _admin_guard_super()
+-- to raise for a caller with no auth.uid(). That is sound but it is one guard
+-- deep, so these new functions do not repeat it: an anonymous caller has no
+-- business reaching an admin mutation entry point at all.
+revoke execute on function public.admin_browser_update_row(text, text, text, jsonb) from public, anon;
+revoke execute on function public.admin_browser_insert_row(text, jsonb) from public, anon;
+revoke execute on function public.admin_browser_delete_row(text, text, text) from public, anon;
+
 grant execute on function public.admin_browser_update_row(text, text, text, jsonb) to authenticated;
 grant execute on function public.admin_browser_insert_row(text, jsonb) to authenticated;
 grant execute on function public.admin_browser_delete_row(text, text, text) to authenticated;

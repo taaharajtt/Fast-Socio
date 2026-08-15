@@ -57,13 +57,15 @@ where n.nspname = 'public'
 -- the shape instead — a SECURITY DEFINER function that takes text and runs it —
 -- by matching on both the name and the body.
 --
--- Expect some false positives from legitimate functions that use EXECUTE with
--- format(%I/%L), which is safe. The generic row RPCs from migration 0038
--- (admin_update_row, admin_insert_row, admin_delete_row, admin_table_rows) do
--- exactly that and will match the body pattern. Those are known and reviewed;
--- see also migration 0149, which constrains what the database browser may reach
--- through them. What must NOT appear is a function that executes a text
--- argument directly.
+-- The filter matches on a name that reads like a SQL runner, or on a body that
+-- EXECUTEs a variable named like raw SQL. It deliberately does NOT match the
+-- ordinary `execute format('... %I ...', ...)` idiom, so the generic row RPCs
+-- from migration 0038 (admin_update_row, admin_insert_row, admin_delete_row,
+-- admin_table_rows) correctly do not appear — verified empty against Frankfurt
+-- on 2026-08-16. Those are reviewed separately; see migration 0149, which
+-- constrains what the database browser may reach through them.
+--
+-- What must NOT appear is a function that executes a text argument directly.
 select
   '2. SQL-EXECUTOR SHAPED' as check,
   p.proname as function_name,

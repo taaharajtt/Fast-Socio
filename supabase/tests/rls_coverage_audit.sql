@@ -19,8 +19,10 @@
 --   after any migration that adds a table or changes a policy.
 --
 -- WHAT "PASS" MEANS
---   Sections 1 and 2 must be empty. Sections 3-6 are inventories to eyeball,
---   not pass/fail gates — read the notes above each one.
+--   Section 1 must be empty. Sections 2-7 are inventories to read, not pass/fail
+--   gates — each has a known-expected set documented above it. Verified against
+--   the Frankfurt project on 2026-08-16; the expected sets below are what it
+--   actually returned, so a future run that differs is the signal.
 -- =============================================================================
 
 
@@ -46,13 +48,26 @@ order by c.relname;
 
 
 -- -----------------------------------------------------------------------------
--- 2. Tables with RLS enabled but NO policies.  Expected result: zero rows.
+-- 2. Tables with RLS enabled but NO policies.  REVIEW — not a failure by itself.
 -- -----------------------------------------------------------------------------
--- This is the quieter failure. RLS with no policy denies everything, so the
--- table looks secure — and it is — but any feature that reads it is silently
--- broken, and the usual fix under time pressure is a permissive catch-all
--- policy. Rows here are either dead tables (drop them) or a feature that is
--- about to get a bad policy written for it.
+-- RLS with no policy denies everything to anon and authenticated. For this
+-- codebase that is frequently the INTENDED design, not an oversight: several
+-- features are reached only through SECURITY DEFINER RPCs and masking views,
+-- which run as the owner and bypass RLS, so the base table is deliberately
+-- sealed against direct PostgREST access.
+--
+-- Known-expected on 2026-08-16 (all deny-all by design — confirm before
+-- assuming any of them is a bug):
+--   help_requests, help_responses      reached via help_request_feed /
+--                                      help_response_feed and the Campus Help
+--                                      RPCs (migrations 0102, 0106, 0109)
+--   society_announcements              reached via society_announcement_feed
+--   rate_limit_events                  written only by check_rate_limit()
+--
+-- What to actually look for: a NEW name appearing here. That is either a dead
+-- table (drop it) or a feature whose reads are silently failing — and the usual
+-- fix under time pressure is a permissive catch-all policy, which is how a
+-- `using (true)` ends up in section 3.
 select
   '2. RLS ON, NO POLICIES' as check,
   c.relname                as table_name
@@ -97,17 +112,38 @@ order by c.relname, p.polname;
 
 
 -- -----------------------------------------------------------------------------
--- 4. Write policies granted to `anon`.  REVIEW EACH ONE. Expect very few.
+-- 4. Write policies reachable by `anon`.  REVIEW the ones flagged CHECK MANUALLY.
 -- -----------------------------------------------------------------------------
--- This app has no anonymous write feature that the maintainer should have to
--- think hard about. Anything here deserves an explicit justification.
+-- A policy created without a `TO` clause applies to PUBLIC, which includes
+-- anon. Most policies in this database are written that way, so matching on the
+-- role alone flags almost every write policy and tells you nothing.
+--
+-- What makes a PUBLIC write policy safe here is its EXPRESSION: nearly all of
+-- them are scoped by `auth.uid()`, which is null for an anonymous caller, so
+-- the policy can never grant anything to anon. The `scoping` column below makes
+-- that the sort key, so the interesting rows come first.
+--
+-- Known-expected on 2026-08-16: four rows, three of them auth.uid()-scoped
+-- (posts, profile_private x2). The fourth — community_chat_messages "authorized
+-- may tombstone community chat" — delegates to can_delete_community_message(),
+-- whose four branches each resolve `auth.uid()` themselves (author, community
+-- owner/moderator, society officer, admin), so all four are null for anon and
+-- the policy grants it nothing. Verified by reading the function body on
+-- 2026-08-16. It is still correctly surfaced here: the safety lives one call
+-- away from the policy, which is exactly the case a human should re-check.
 select
-  '4. ANON WRITE POLICY' as check,
-  c.relname              as table_name,
-  p.polname              as policy,
+  '4. ANON-REACHABLE WRITE' as check,
+  c.relname                 as table_name,
+  p.polname                 as policy,
   case p.polcmd
     when 'a' then 'INSERT' when 'w' then 'UPDATE'
     when 'd' then 'DELETE' else 'ALL' end as command,
+  case
+    when coalesce(pg_get_expr(p.polqual, p.polrelid), '') like '%auth.uid%'
+      or coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '') like '%auth.uid%'
+      then 'scoped by auth.uid() - safe for anon'
+    else 'CHECK MANUALLY - no auth.uid() in the expression'
+  end as scoping,
   pg_get_expr(p.polqual, p.polrelid)      as using_expr,
   pg_get_expr(p.polwithcheck, p.polrelid) as with_check_expr
 from pg_policy p
@@ -119,7 +155,7 @@ where n.nspname = 'public'
     select 1 from unnest(p.polroles) r
     where r = 'anon'::regrole or r = 0   -- 0 == PUBLIC
   )
-order by c.relname, p.polname;
+order by scoping, c.relname, p.polname;
 
 
 -- -----------------------------------------------------------------------------
@@ -130,8 +166,16 @@ order by c.relname, p.polname;
 -- for exactly this reason. Read this next to section 1: a table with RLS off
 -- and a wide GRANT is the bad combination.
 --
--- `anon` should hold essentially nothing outside of whatever the signed-out
--- surfaces genuinely need.
+-- Observed on 2026-08-16: `anon` holds SELECT, INSERT, UPDATE and DELETE on
+-- essentially every table, including moderation_audit_log. That is Supabase's
+-- default grant to the anon role, not something this project did, and RLS is
+-- what actually stops it — every table came back RLS-enabled in section 1, so
+-- the grants are inert today.
+--
+-- It is still worth knowing, because it sets the failure mode: if RLS is ever
+-- disabled on one table, or a policy is ever widened to `using (true)` for a
+-- write command, the grant is already there and the exposure is immediate and
+-- anonymous. Section 1 is not a formality.
 select
   '5. GRANTS' as check,
   table_name,
