@@ -1,119 +1,122 @@
 "use client";
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
-import { PlusSquare, Share } from "lucide-react";
 import { GlassButton, GlassCard, GlassSheet } from "@/components/ui";
+import { promptInstall } from "@/lib/pwa/install-store";
+import { recordInstallEvent } from "@/lib/pwa/telemetry";
+import { useInstallState } from "@/lib/pwa/use-install-state";
+import { isInstallSnoozed, snoozeInstall } from "@/lib/pwa/snooze";
 import {
-  isIOS,
-  isIOSInAppBrowser,
-  isStandalone,
-  type BeforeInstallPromptEvent,
-} from "@/lib/pwa/install";
+  IOSInstallSteps,
+  IOSReloginNote,
+  MenuInstallSteps,
+} from "./install-instructions";
 
 /**
- * Invites browser-tab users to install FAST SOCIO to their home screen.
+ * Invites browser-tab users to put FAST SOCIO on their home screen.
  *
- * Android/Chromium: `beforeinstallprompt` is the gate AND the trigger. It only
- * fires when the app is installable and not already installed, so its arrival
- * is the most reliable "this user can install" signal there is — we show the
- * banner only once it lands, and tapping Install opens the native dialog.
+ * The event is not listened for here. It is banked before hydration by the
+ * inline script in the root layout (see `src/lib/pwa/install-store.ts` for why
+ * a `useEffect` loses it) and resolved into a state by `useInstallState`.
  *
- * iOS: Safari exposes no install API and never fires that event, so we detect
- * iOS + not-standalone and show the manual Share -> Add to Home Screen steps.
+ * WHICH STATES THIS SURFACE IS ALLOWED TO SHOW — this is a banner the user did
+ * not ask for, so it only appears when there is something certain to say:
+ *
+ *   native   a real Install button, backed by a real event
+ *   ios      share-sheet steps, worded for the specific iOS browser
+ *   menu     a browser positively known to have no install event but a working
+ *            menu item (Firefox Android, desktop Safari) — the silent dead end
+ *            the audit found, now filled
+ *
+ * It deliberately says NOTHING for `waiting`. That state covers Chromium
+ * before its event arrives AND Chromium where the app is already installed, and
+ * an uninvited "open your browser menu" would be wrong advice in both. It also
+ * says nothing for `webview` (InstallFunnel routes those to the handoff) or
+ * `installed`. Settings is where an uncertain state still gets an answer,
+ * because there the user asked the question.
  *
  * Dismissal is snoozed (not permanent) so we re-ask later without nagging, and
- * an install (or an already-installed launch) silences it for good.
+ * an install — ours or the browser's own — silences it for good.
  */
-const SNOOZE_KEY = "pwa-install-snoozed-at";
-const SNOOZE_DAYS = 7;
-
-function isSnoozed(): boolean {
-  const at = Number(localStorage.getItem(SNOOZE_KEY) ?? 0);
-  if (!at) return false;
-  return Date.now() - at < SNOOZE_DAYS * 24 * 60 * 60 * 1000;
-}
-
-/**
- * Whether this device can only install via the iOS share sheet. It is a static
- * property of the device — not an event — so it is read through
- * useSyncExternalStore (never changes, hence the no-op subscribe) rather than
- * assigned via setState in an effect. The server snapshot is false so SSR and
- * the first client render agree, and the banner appears on hydration.
- */
-const noopSubscribe = () => () => {};
-
-function useIOSInstallable(): boolean {
-  return useSyncExternalStore(
-    noopSubscribe,
-    () => isIOS() && !isIOSInAppBrowser() && !isStandalone() && !isSnoozed(),
-    () => false
-  );
-}
-
-export function InstallPrompt() {
-  // The stashed Chromium event — present only when Android can install.
-  const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(
-    null
-  );
+export function InstallPrompt({
+  placement = "dock",
+}: {
+  /**
+   * Where the card sits. "dock" clears the floating dock on student screens;
+   * "plain" is for the routes that have no dock (login, signup), which only
+   * became reachable once the funnel moved above the (student) route group.
+   */
+  placement?: "dock" | "plain";
+}) {
+  const state = useInstallState();
   const [dismissed, setDismissed] = useState(false);
   const [stepsOpen, setStepsOpen] = useState(false);
 
-  const showIOS = useIOSInstallable() && !dismissed;
-
-  useEffect(() => {
-    // Already installed, or recently told us to go away → never listen.
-    if (isStandalone() || isSnoozed()) return;
-    // iOS never fires the event; that path is handled by useIOSInstallable.
-    if (isIOS()) return;
-
-    // Android/desktop Chromium: wait for the browser to tell us it's installable.
-    function onBeforeInstallPrompt(e: Event) {
-      // Stop Chrome's own mini-infobar so ours is the only ask.
-      e.preventDefault();
-      setDeferred(e as BeforeInstallPromptEvent);
-    }
-    // Installed mid-session (or from the browser menu) → tear the banner down.
-    function onInstalled() {
-      setDeferred(null);
-      setDismissed(true);
-      localStorage.setItem(SNOOZE_KEY, String(Date.now()));
-    }
-
-    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
-    window.addEventListener("appinstalled", onInstalled);
-    return () => {
-      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
-      window.removeEventListener("appinstalled", onInstalled);
-    };
-  }, []);
+  // There is deliberately no "write a snooze when appinstalled fires" effect
+  // here. It would never run — InstallFunnel stops rendering this component the
+  // moment the state becomes "installed" — and it would be redundant anyway:
+  // Chromium does not re-fire `beforeinstallprompt` once the app is installed,
+  // so the state falls to `waiting` on the next load and this surface is
+  // already silent. (iOS fires no `appinstalled` at all, so nothing could have
+  // depended on it there either.)
 
   const snooze = useCallback(() => {
-    localStorage.setItem(SNOOZE_KEY, String(Date.now()));
-    setDeferred(null);
+    recordInstallEvent("ask_snoozed", "banner", { once: false });
+    snoozeInstall();
     setDismissed(true);
     setStepsOpen(false);
   }, []);
 
   const install = useCallback(async () => {
-    if (!deferred) return;
-    await deferred.prompt();
-    const { outcome } = await deferred.userChoice;
-    // The event is single-use — Chrome will re-fire it on a later visit if the
-    // user declined, so just drop our reference either way.
-    setDeferred(null);
-    if (outcome === "dismissed") {
-      localStorage.setItem(SNOOZE_KEY, String(Date.now()));
+    recordInstallEvent("cta_tapped", "banner", { once: false });
+    const outcome = await promptInstall();
+    if (outcome !== "unavailable") {
+      recordInstallEvent(
+        outcome === "accepted" ? "outcome_accepted" : "outcome_dismissed",
+        "banner",
+        { once: false }
+      );
     }
-  }, [deferred]);
+    // Chrome re-fires the event on a later visit if the user declined, so a
+    // dismissal only needs to quiet us for the snooze window.
+    if (outcome === "dismissed") snoozeInstall();
+    if (outcome === "unavailable") setDismissed(true);
+  }, []);
 
-  if (!deferred && !showIOS) return null;
+  const showSteps = useCallback(() => {
+    recordInstallEvent("cta_tapped", "banner", { once: false });
+    setStepsOpen(true);
+  }, []);
+
+  const speakable =
+    state.kind === "native" || state.kind === "ios" || state.kind === "menu";
+  const visible = speakable && !dismissed && !isSnoozed();
+
+  // Impressions. Once per tab (see telemetry.ts): the banner re-renders on
+  // every client-side navigation, so counting renders would turn one visit into
+  // one count per screen browsed. The effect sits above the early return
+  // because hooks must run unconditionally; `visible` is what gates the count.
+  useEffect(() => {
+    if (visible) recordInstallEvent("cta_shown", "banner");
+  }, [visible]);
+
+  if (!visible) return null;
 
   return (
     <>
-      {/* Sits above the floating dock (fixed, bottom-0, ~5rem tall) and below
-          the modal layer (z-50) so sheets cover it. */}
-      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--dock-total)+1rem)] z-40 px-4">
+      {/* On student screens this sits above the floating dock (fixed, bottom-0,
+          ~5rem tall) and below the modal layer (z-50) so sheets cover it. On
+          dockless screens it sits just above the safe area instead. */}
+      <div
+        className="pointer-events-none fixed inset-x-0 z-40 px-4"
+        style={{
+          bottom:
+            placement === "dock"
+              ? "calc(var(--dock-total) + 1rem)"
+              : "max(1rem, calc(env(safe-area-inset-bottom, 0px) + 1rem))",
+        }}
+      >
         <GlassCard
           strong
           radius="lg"
@@ -127,18 +130,20 @@ export function InstallPrompt() {
             className="h-11 w-11 shrink-0 rounded-[12px]"
           />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold">Install FAST SOCIO</p>
+            <p className="text-sm font-semibold">Keep Socio one tap away</p>
             <p className="text-xs text-fg-muted">
-              {showIOS
-                ? "Add to your Home Screen for notifications and a full-screen app."
-                : "Get the full-screen app and notifications."}
+              {state.kind === "native"
+                ? "Get the full-screen app and notifications."
+                : "Add to your Home Screen for notifications and a full-screen app."}
             </p>
           </div>
+          {/* The label tells the truth about what the tap does: "Install" only
+              where a tap really opens the browser's install dialog. */}
           <GlassButton
             size="sm"
-            onClick={showIOS ? () => setStepsOpen(true) : install}
+            onClick={state.kind === "native" ? install : showSteps}
           >
-            {showIOS ? "How" : "Install"}
+            {state.kind === "native" ? "Install" : "How"}
           </GlassButton>
           <GlassButton
             size="sm"
@@ -152,46 +157,40 @@ export function InstallPrompt() {
         </GlassCard>
       </div>
 
-      {/* iOS has no install API — the only route is the share sheet, so spell it
-          out rather than pretending we can trigger it. */}
+      {/* No install API on these platforms — the only route is the browser's own
+          menu, so spell it out rather than pretending we can trigger it. */}
       <GlassSheet
         open={stepsOpen}
         onClose={() => setStepsOpen(false)}
-        label="Install FAST SOCIO"
+        label="Add FAST SOCIO to your Home Screen"
       >
         <h2 className="text-lg font-bold">Add to Home Screen</h2>
-        <p className="mt-1 text-sm text-fg-muted">
-          iPhone and iPad can only install from the share menu — it takes two
-          taps.
-        </p>
-        <ol className="mt-5 space-y-4">
-          <Step n={1}>
-            Tap the{" "}
-            <Share
-              className="mx-0.5 inline-block h-4 w-4 -translate-y-px align-middle text-accent"
-              aria-hidden
-            />{" "}
-            <strong>Share</strong> button in Safari&rsquo;s toolbar (the square
-            with an arrow pointing up).
-          </Step>
-          <Step n={2}>
-            Scroll down and choose{" "}
-            <PlusSquare
-              className="mx-0.5 inline-block h-4 w-4 -translate-y-px align-middle text-accent"
-              aria-hidden
-            />{" "}
-            <strong>Add to Home Screen</strong>.
-          </Step>
-          <Step n={3}>
-            Tap <strong>Add</strong> — FAST SOCIO now opens full-screen and can
-            send you notifications.
-          </Step>
-        </ol>
-        <GlassButton
-          className="mt-6 w-full"
-          variant="glass"
-          onClick={() => setStepsOpen(false)}
-        >
+        {state.kind === "ios" && (
+          <>
+            <p className="mt-1 text-sm text-fg-muted">
+              iPhone and iPad can only install from the share menu — it takes two
+              taps.
+            </p>
+            <div className="mt-5">
+              <IOSInstallSteps browser={state.browser} />
+            </div>
+            <div className="mt-5 border-t border-glass-border pt-4">
+              <IOSReloginNote />
+            </div>
+          </>
+        )}
+        {state.kind === "menu" && (
+          <div className="mt-4">
+            <MenuInstallSteps browser={state.browser} />
+          </div>
+        )}
+        {/* "Got it" snoozes as well as closing. Neither iOS nor a menu-based
+            install tells us it happened — there is no `appinstalled` on iOS at
+            all — so someone who reads the steps and follows them would
+            otherwise be asked again on every single load. Treating "I've read
+            them" as "stop asking for a while" is the closest thing to an
+            install signal these platforms give us. */}
+        <GlassButton className="mt-6 w-full" variant="glass" onClick={snooze}>
           Got it
         </GlassButton>
       </GlassSheet>
@@ -199,13 +198,12 @@ export function InstallPrompt() {
   );
 }
 
-function Step({ n, children }: { n: number; children: React.ReactNode }) {
-  return (
-    <li className="flex gap-3">
-      <span className="gradient-brand flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white">
-        {n}
-      </span>
-      <span className="text-sm leading-relaxed">{children}</span>
-    </li>
-  );
+/**
+ * Reading the snooze during render is safe here and nowhere near the hydration
+ * path: every state that can reach this line is client-only, so the server and
+ * the first client pass both render null regardless of what storage says.
+ */
+function isSnoozed(): boolean {
+  if (typeof window === "undefined") return false;
+  return isInstallSnoozed();
 }

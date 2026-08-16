@@ -7,6 +7,7 @@ import { DeleteAccountButton } from "@/components/delete-account-button";
 import { NotificationPrefs } from "@/components/settings/notification-prefs";
 import { EnablePush } from "@/components/settings/enable-push";
 import { AppearanceSettings } from "@/components/settings/appearance-settings";
+import { InstallApp } from "@/components/settings/install-app";
 import { ShieldCheck, UserCog, MonitorSmartphone, Ban, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthEmail, getAuthUserId } from "@/lib/auth/user";
@@ -55,6 +56,17 @@ export default async function SettingsPage() {
             label="Devices & security"
           />
           <SettingsLink href="/settings/blocked" icon={Ban} label="Blocked & muted" />
+        </GlassCard>
+      </section>
+
+      <section className="mt-5 space-y-2">
+        <h2 className="text-sm font-medium text-fg-muted">App</h2>
+        {/* The permanent, user-initiated install path. The banner is snoozeable
+            and the onboarding step is one-shot, so without this a user who
+            declined once had no way back. Renders an "Installed" confirmation
+            rather than an ask once the app is on the home screen. */}
+        <GlassCard className="p-5">
+          <InstallApp />
         </GlassCard>
       </section>
 

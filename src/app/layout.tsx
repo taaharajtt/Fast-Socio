@@ -7,6 +7,8 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { APPEARANCE_INIT_SCRIPT } from "@/lib/appearance";
 import { MigrationWelcome } from "@/components/pwa/migration-welcome";
+import { InstallFunnel } from "@/components/pwa/install-funnel";
+import { INSTALL_CAPTURE_SCRIPT } from "@/lib/pwa/install-store";
 import { AppleSplashScreens } from "./apple-splash-screens";
 
 const inter = Inter({
@@ -72,6 +74,11 @@ export default function RootLayout({
         {/* Apply saved appearance (font size / density / motion) before first
             paint to avoid a flash. Theme is handled separately by next-themes. */}
         <script dangerouslySetInnerHTML={{ __html: APPEARANCE_INIT_SCRIPT }} />
+        {/* Bank Chromium's `beforeinstallprompt` the instant it fires.
+            It arrives once per load, cannot be replayed, and routinely beats
+            hydration on a phone — so the listener CANNOT live in a useEffect
+            or the install CTA silently never appears. See install-store.ts. */}
+        <script dangerouslySetInnerHTML={{ __html: INSTALL_CAPTURE_SCRIPT }} />
         {/* iOS PWA launch (splash) screens — Android uses the manifest. */}
         <AppleSplashScreens />
       </head>
@@ -87,6 +94,24 @@ export default function RootLayout({
               the root (not the student layout) because they land on /login as
               often as /home, and it must render before they sign in. */}
           <MigrationWelcome />
+          {/* The install funnel. Mounted HERE, not in the student layout, so it
+              exists before an account does — on /login, /signup and the
+              onboarding wizard, which is where an Instagram arrival decides
+              whether to stay. It picks the right ask (or none) per route and
+              platform; see install-funnel.tsx.
+
+              The Suspense boundary is NOT optional. The funnel reads
+              usePathname(), which on a dynamic route (/profile/[id],
+              /societies/[id], /admin/users/[id]) is request-scoped data. Read
+              from the root layout without a boundary it is "uncached data
+              outside <Suspense>", and under Cache Components that collapses the
+              prerendered static shell of EVERY route — the exact regression the
+              student layout is carefully written to avoid. Behind a boundary it
+              is a null-rendering hole that streams in and costs nothing: this
+              component renders nothing on the server in any case. */}
+          <Suspense>
+            <InstallFunnel />
+          </Suspense>
         </ThemeProvider>
         <Analytics />
         <SpeedInsights />

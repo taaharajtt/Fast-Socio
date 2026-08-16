@@ -7,6 +7,7 @@ import { GlassInput } from "@/components/ui/glass-input";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { uploadWithProgress, publicStorageUrl } from "@/lib/storage-upload";
+import { InstallStep } from "@/components/pwa/install-step";
 import { saveOnboardingStep, saveProfile, type OnboardingDraft } from "./actions";
 import {
   BIO_MAX,
@@ -32,6 +33,11 @@ const STEPS = [
   "About you",
   "Discover",
   "Bio",
+  // The install ask. Last on purpose — see the note in <InstallStep/>: this is
+  // the point of peak commitment, and the only moment in the whole journey
+  // where asking pre-empts a return trip instead of interrupting one. It is
+  // skippable like every other optional step ("Finish" is always enabled).
+  "Home Screen",
 ];
 
 /**
@@ -161,6 +167,7 @@ export function OnboardingWizard({
     true, // about you
     true, // discover
     bio.length <= BIO_MAX,
+    true, // home screen — never blocks Finish
   ][step];
 
   const isLast = step === STEPS.length - 1;
@@ -471,6 +478,8 @@ export function OnboardingWizard({
           </p>
         </section>
       )}
+
+      {step === 7 && <InstallStep />}
 
       {error && <p className="mt-4 text-sm text-error">{error}</p>}
 
