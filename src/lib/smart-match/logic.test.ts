@@ -174,11 +174,35 @@ describe("required-field validation", () => {
   });
 
   it("passes a complete project request", () => {
+    // "Complete" tracks MODE_META.project_partner — description and
+    // people_needed became required in 5918482, which updated the mode
+    // definition and the card but not this payload, so the case had been
+    // asserting that an INCOMPLETE request passes. If you add a required
+    // field to the mode, add it here too.
     const r = validatePostInput("project_partner", {
       title: "x",
       course_code: "CS-302",
+      description: "Need a 4th for the DB project — schema design and queries.",
+      people_needed: "1",
     });
     expect(r.ok).toBe(true);
+  });
+
+  it("names every required project field that is missing", () => {
+    // Guards the case above: if a new required field is introduced, this
+    // fails with the field's label rather than a bare `false !== true`.
+    const r = validatePostInput("project_partner", {});
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.missing).toEqual(
+        expect.arrayContaining([
+          "What you need",
+          "Course Name",
+          "Project Description (150 words)",
+          "People still needed",
+        ]),
+      );
+    }
   });
 
   it("requires a society or event for recruitment", () => {
