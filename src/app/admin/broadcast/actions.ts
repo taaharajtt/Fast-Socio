@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireSuperAdmin } from "@/lib/admin/access";
+import { orIlike } from "@/lib/postgrest/search";
 
 export type BroadcastResult = { error: string } | { ok: true; recipients: number };
 
@@ -91,13 +92,13 @@ export async function searchAudienceUsers(
   query: string
 ): Promise<{ id: string; full_name: string | null; username: string | null }[]> {
   await requireSuperAdmin();
-  const q = query.replace(/[,()*%\\]/g, " ").trim();
-  if (q.length < 2) return [];
+  const search = orIlike(["full_name", "username"], query, { minLength: 2 });
+  if (!search) return [];
   const supabase = await createClient();
   const { data } = await supabase
     .from("profiles")
     .select("id, full_name, username")
-    .or(`full_name.ilike.%${q}%,username.ilike.%${q}%`)
+    .or(search)
     .eq("onboarding_completed", true)
     .limit(10);
   return (data as { id: string; full_name: string | null; username: string | null }[]) ?? [];

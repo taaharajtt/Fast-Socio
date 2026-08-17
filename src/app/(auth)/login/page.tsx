@@ -2,10 +2,15 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { GlassButton } from "@/components/ui/glass-button";
 import { GlassInput } from "@/components/ui/glass-input";
 import { createClient } from "@/lib/supabase/client";
+import { recallEmail, rememberEmail } from "@/lib/auth/last-email";
+import { isStandalone } from "@/lib/pwa/install";
+
+/** Static for the lifetime of the document — nothing to subscribe to. */
+const noopSubscribe = () => () => {};
 
 /**
  * Login — email + password for returning users (accounts that already exist).
@@ -20,7 +25,22 @@ import { createClient } from "@/lib/supabase/client";
 export default function LoginPage() {
   const supabase = createClient();
 
-  const [email, setEmail] = useState("");
+  // The email field is prefilled from the last successful sign-in IN THIS
+  // STORAGE PARTITION — on an installed iOS app that is its own partition, so
+  // it is empty on the very first launch and useful on every one after it (see
+  // lib/auth/last-email.ts for why nothing can cross that boundary).
+  //
+  // Two values rather than one lazy `useState`, because /login is statically
+  // prerendered: the server renders an empty field, and seeding state straight
+  // from localStorage would make the client's first render disagree — a
+  // hydration mismatch on a controlled input. `useSyncExternalStore` uses the
+  // server snapshot ("") for the hydration pass and the real value on the very
+  // next render, and `typed` takes over the moment the user edits.
+  const remembered = useSyncExternalStore(noopSubscribe, recallEmail, () => "");
+  const [typed, setTyped] = useState<string | null>(null);
+  const email = typed ?? remembered;
+  const setEmail = setTyped;
+
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   // Surface auth-link failures. The /auth/callback and /auth/confirm handlers
@@ -43,8 +63,9 @@ export default function LoginPage() {
       return;
     }
     setLoading(true);
+    const address = email.trim().toLowerCase();
     const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim().toLowerCase(),
+      email: address,
       password,
     });
     if (error) {
@@ -54,6 +75,10 @@ export default function LoginPage() {
       setError("Incorrect email or password.");
       return;
     }
+    // Remember the address (never the password) so the next sign-in in this
+    // browser — or in this installed app, where the session does not survive an
+    // iOS storage partition — is one field instead of two.
+    rememberEmail(address);
     // Full navigation so the server picks up the just-set session cookies.
     window.location.assign("/home");
   }
@@ -80,6 +105,15 @@ export default function LoginPage() {
           Sign in with your email and password.
         </p>
       </div>
+
+      {/* The installed-app explainer. An installed Home Screen app has its own
+          storage, so it never inherits the browser's session — someone who
+          signed up in Safari two minutes ago opens the new icon and is asked to
+          log in again. Nothing can carry the session across that boundary, so
+          the honest fix is to say why rather than let it read as "the app I
+          just installed has already forgotten me". Shown only in the installed
+          app, and only while signed out (this route redirects when signed in). */}
+      <StandaloneNote />
 
       <form onSubmit={submit} className="mt-8 flex flex-col gap-3">
         <GlassInput
@@ -143,5 +177,26 @@ export default function LoginPage() {
         Terms of Service · Privacy Policy
       </p>
     </main>
+  );
+}
+
+/**
+ * Renders nothing in a browser tab, and one reassuring line inside the
+ * installed app. Read through useSyncExternalStore so the prerendered HTML and
+ * the hydration pass agree (both render nothing) — the same reason the install
+ * detectors elsewhere use this pattern rather than an effect.
+ */
+function StandaloneNote() {
+  const standalone = useSyncExternalStore(
+    noopSubscribe,
+    isStandalone,
+    () => false
+  );
+  if (!standalone) return null;
+  return (
+    <p className="glass mx-auto mt-5 rounded-[14px] px-4 py-3 text-[13px] leading-relaxed text-fg-muted">
+      Welcome to the app. Your phone keeps the app and your browser separate, so
+      sign in once here — after that you&rsquo;ll stay signed in.
+    </p>
   );
 }

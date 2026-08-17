@@ -1,38 +1,41 @@
 /**
  * next/image custom loader (audit C2).
  *
- * Routes storage images through Supabase's render/transform endpoint so the
- * browser downloads a WebP/AVIF render at exactly the width next/image asks for
- * (responsive srcset) instead of the full-size original. Verified live: a 78 KB
- * JPEG avatar returns as a 4.7 KB WebP at 256px.
+ * Routes storage images through imgproxy so the browser downloads a WebP/AVIF
+ * render at exactly the width next/image asks for (responsive srcset) instead
+ * of the full-size original.
  *
- * Using a per-`<Image>` loader (rather than the built-in optimizer) means we
- * reuse the Supabase transform we already pay for, avoid Vercel image units,
- * and don't need `images.remotePatterns`. Signed/private URLs (chat media) or
- * any non-public object are returned unchanged — they cannot be transformed.
+ * Using a per-`<Image>` loader (rather than the built-in optimizer) keeps image
+ * resizing on the imgproxy container we already run, instead of burning VPS CPU
+ * in the Next.js process on every request, and avoids needing
+ * `images.remotePatterns`. Presigned/private URLs (chat media) and external
+ * images are returned unchanged — imgproxy is locked to our own public bucket,
+ * and a presigned URL's signature would not survive proxying anyway.
  */
 
-const PUBLIC_SEGMENT = "/storage/v1/object/public/";
-const RENDER_SEGMENT = "/storage/v1/render/image/public/";
+const IMGPROXY = process.env.NEXT_PUBLIC_IMGPROXY_URL?.replace(/\/$/, "") ?? "";
+const PUBLIC_BASE = process.env.NEXT_PUBLIC_CONTABO_PUBLIC_BASE_URL?.replace(/\/$/, "") ?? "";
 
 /**
- * Normalize `src` back to its `object/public` form so the transform below
- * always applies exactly once. A src can already be pre-transformed if a
- * caller ran it through `optimizedImage`/`optimizedAvatar` (lib/image.ts)
- * before handing it to <AppImage> — without this, re-applying width/quality
- * on top of an existing render URL would stack query params and request a
- * transform-of-a-transform instead of the single width next/image actually
- * wants for its current breakpoint.
+ * Normalize `src` back to the plain object URL so the transform below always
+ * applies exactly once. A src can already be pre-transformed if a caller ran it
+ * through `optimizedImage`/`optimizedAvatar` (lib/image.ts) before handing it
+ * to <AppImage> — without this, wrapping an imgproxy URL in another imgproxy
+ * URL would request a transform-of-a-transform instead of the single width
+ * next/image actually wants for its current breakpoint.
  */
-function toPublicForm(src: string): string | null {
-  if (src.includes(PUBLIC_SEGMENT)) return src;
-  if (src.includes(RENDER_SEGMENT)) {
-    return src.split("?")[0].replace(RENDER_SEGMENT, PUBLIC_SEGMENT);
+function toPlainSource(src: string): string | null {
+  if (IMGPROXY && src.startsWith(`${IMGPROXY}/`)) {
+    const encoded = src.split("/plain/")[1];
+    if (!encoded) return null;
+    const decoded = decodeURIComponent(encoded);
+    return decoded.startsWith(`${PUBLIC_BASE}/`) ? decoded : null;
   }
-  return null;
+  if (PUBLIC_BASE && src.startsWith(`${PUBLIC_BASE}/`)) return src;
+  return null; // presigned / external — not ours to transform
 }
 
-export function supabaseLoader({
+export function storageLoader({
   src,
   width,
   quality,
@@ -41,9 +44,10 @@ export function supabaseLoader({
   width: number;
   quality?: number;
 }): string {
-  const publicForm = toPublicForm(src);
-  if (!publicForm) return src; // signed / external — leave as-is
-  const rendered = publicForm.replace(PUBLIC_SEGMENT, RENDER_SEGMENT);
-  // width only → aspect ratio preserved; the sized container crops via object-fit.
-  return `${rendered}?width=${width}&resize=contain&quality=${quality ?? 70}`;
+  if (!IMGPROXY) return src;
+  const plain = toPlainSource(src);
+  if (!plain) return src;
+  // Width only → aspect ratio preserved; the sized container crops via
+  // object-fit. The trailing :0 disables enlargement past the original.
+  return `${IMGPROXY}/insecure/rs:fit:${width}:0:0/q:${quality ?? 70}/plain/${encodeURIComponent(plain)}`;
 }

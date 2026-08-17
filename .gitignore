@@ -84,3 +84,15 @@ vapt_report.md
 
 # Local scratch screenshot (not part of the app)
 where_badges_are_placed.png
+
+# Playwright run output. NEVER commit these: the repo is public, and the run
+# artifacts carry live credentials — test-results/.auth/*.json is a saved
+# storage-state file holding a real Supabase session, and the trace bundles
+# under playwright-report/data/ capture the network log, Authorization headers
+# and sb-*-auth-token cookies along with it. They are also ~125 MB per run.
+# The visual-regression BASELINES under tests/visual/__screenshots__/ are the
+# exception and stay committed — they are the reference images.
+/playwright-report/
+/test-results/
+/blob-report/
+/playwright/.cache/

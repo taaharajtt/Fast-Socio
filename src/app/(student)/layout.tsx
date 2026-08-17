@@ -4,7 +4,6 @@ import { headers } from "next/headers";
 import { after } from "next/server";
 import { FloatingDock } from "@/components/floating-dock";
 import { PushAutoEnable } from "@/components/push/push-auto-enable";
-import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { PresenceHeartbeat } from "@/components/presence/heartbeat";
 import { DockRealtime } from "@/components/chat/dock-realtime";
 import { AnnouncementModal } from "@/components/notifications/announcement-modal";
@@ -68,9 +67,6 @@ export default function StudentLayout({
       <ExternalLinkInterceptor />
       {/* Enable push notifications by default for signed-in students. */}
       <PushAutoEnable />
-      {/* Browser-tab users: invite them to install. On iOS this is the only way
-          they can ever receive push at all. Renders nothing once installed. */}
-      <InstallPrompt />
       {/* Stamps last_seen_at while the tab is visible, so presence is real. */}
       <PresenceHeartbeat />
       {/* The fallback is a REAL dock — every tab is present, labelled and

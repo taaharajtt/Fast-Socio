@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { isAppStorageUrl } from "@/lib/url-safety";
+import { orIlike } from "@/lib/postgrest/search";
 
 /** Submit a new event for admin approval (status starts pending). */
 export async function createEvent(input: {
@@ -264,11 +265,10 @@ export type OrganizerCandidate = {
 export async function searchStudents(
   query: string
 ): Promise<OrganizerCandidate[]> {
-  const q = query.trim();
-  if (q.length < 2) return [];
-  // Neutralize the characters that would break PostgREST's or()/ilike grammar.
-  const safe = q.replace(/[,()*%\\]/g, " ").trim();
-  if (!safe) return [];
+  // orIlike neutralizes the characters that would break PostgREST's or()/ilike
+  // grammar, and returns null when nothing usable is left.
+  const search = orIlike(["full_name", "username"], query, { minLength: 2 });
+  if (!search) return [];
 
   const supabase = await createClient();
   const { data } = await supabase
@@ -276,7 +276,7 @@ export async function searchStudents(
     .select("id, full_name, username, avatar_url, gender")
     .eq("onboarding_completed", true)
     .eq("is_banned", false)
-    .or(`full_name.ilike.%${safe}%,username.ilike.%${safe}%`)
+    .or(search)
     .limit(8);
   return (data as OrganizerCandidate[]) ?? [];
 }

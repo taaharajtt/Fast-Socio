@@ -1,0 +1,152 @@
+# Fast Socio — self-hosted compute stack (Phase 1).
+#
+# This is a COMPLETELY SEPARATE Compose project from the pre-existing
+# `supabase` project at ~/supabase-stack/supabase/docker. It shares no files,
+# no network, no volumes and no env file with it. `docker compose ls` must
+# continue to show `supabase` untouched alongside `fastsocio-app`.
+#
+# Backend is Supabase CLOUD. Nothing here talks to the local Supabase stack,
+# which stays empty and loopback-only.
+name: fastsocio-app
+
+services:
+  app:
+    build:
+      context: ./repo
+      dockerfile: deploy/contabo/Dockerfile
+      args:
+        # Interpolated from ./.env (mode 0600). Public values only — see the
+        # Dockerfile note on why secrets are never build args.
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+        NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY}
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN}
+        # Baked in at build time because they are inlined into client bundles:
+        # image URLs and the canonical origin are both built in the browser.
+        NEXT_PUBLIC_CONTABO_PUBLIC_BASE_URL: ${NEXT_PUBLIC_CONTABO_PUBLIC_BASE_URL}
+        NEXT_PUBLIC_IMGPROXY_URL: ${NEXT_PUBLIC_IMGPROXY_URL}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
+    image: fastsocio-app:phase1
+    container_name: fastsocio-app
+    restart: unless-stopped
+
+    # Server-only secrets arrive at RUNTIME only.
+    env_file:
+      - ./.env
+
+    # NOT published to the host. The only way in is through Caddy on the
+    # shared internal network — the app is unreachable from the internet
+    # directly, so there is no way to bypass TLS or the proxy's rate limits.
+    expose:
+      - "3000"
+
+    networks:
+      - fastsocio-net
+
+    # Leaves ~5.5 GiB and 2 vCPU for the existing Supabase stack, which
+    # currently sits at ~2.2 GiB. A runaway Next.js process cannot starve it.
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+
+    # Bounded logs. Without this, json-file logging grows until the disk fills
+    # and takes the Supabase stack down with it.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # Image resizing, replacing Supabase Storage's /render/image/ endpoint.
+  #
+  # Runs here rather than in the Next.js process so resizing cannot compete with
+  # request handling for the app's 2 vCPU — a feed of full-size photos would
+  # otherwise make every page slow while sharp churns.
+  imgproxy:
+    image: darthsim/imgproxy:v3
+    container_name: fastsocio-imgproxy
+    restart: unless-stopped
+
+    environment:
+      # THE critical setting. imgproxy fetches whatever source URL it is given,
+      # so without this allow-list it is an open image proxy: anyone could use
+      # our bandwidth to fetch and resize arbitrary internet images, and could
+      # reach anything our network can reach. Locked to our own bucket only.
+      IMGPROXY_ALLOWED_SOURCES: ${NEXT_PUBLIC_CONTABO_PUBLIC_BASE_URL}/
+      # Unsigned URLs are acceptable ONLY because of the allow-list above: the
+      # worst a forged URL can do is request a different size of an image that
+      # is already public.
+      IMGPROXY_ALLOW_UNSAFE_URL: "1"
+      # Serve WebP/AVIF to browsers that accept them — the whole point of the
+      # transform is smaller bytes on mobile.
+      IMGPROXY_ENABLE_WEBP_DETECTION: "1"
+      IMGPROXY_ENABLE_AVIF_DETECTION: "1"
+      # Bound the work a single request can cause.
+      IMGPROXY_MAX_SRC_RESOLUTION: "50"
+      IMGPROXY_MAX_SRC_FILE_SIZE: "20971520"
+      IMGPROXY_DOWNLOAD_TIMEOUT: "10"
+      IMGPROXY_TTL: "31536000"
+
+    expose:
+      - "8080"
+
+    networks:
+      - fastsocio-net
+
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: fastsocio-caddy
+    restart: unless-stopped
+    depends_on:
+      - app
+      - imgproxy
+
+    # The only publicly bound ports in this project. 80 is required for the
+    # Let's Encrypt HTTP-01 challenge and for the automatic HTTP->HTTPS
+    # redirect; both are already permitted by the existing UFW rules, so no
+    # firewall change is needed.
+    ports:
+      - "80:80"
+      - "443:443"
+
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates and ACME account state. Losing caddy_data means
+      # re-issuing certificates and burning Let's Encrypt rate limit.
+      - caddy_data:/data
+      - caddy_config:/config
+
+    networks:
+      - fastsocio-net
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+networks:
+  # Dedicated bridge. Explicitly NOT joined to the supabase project's network.
+  fastsocio-net:
+    name: fastsocio-net
+    driver: bridge
+
+volumes:
+  caddy_data:
+    name: fastsocio-caddy-data
+  caddy_config:
+    name: fastsocio-caddy-config

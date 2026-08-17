@@ -7,6 +7,7 @@ import { GlassButton } from "@/components/ui/glass-button";
 import { GlassInput } from "@/components/ui/glass-input";
 import { createClient } from "@/lib/supabase/client";
 import { isValidFastEmail } from "@/lib/auth/email";
+import { rememberEmail } from "@/lib/auth/last-email";
 
 type Step = "email" | "sent";
 
@@ -47,6 +48,9 @@ export default function SignupPage() {
       setError(error.message);
       return;
     }
+    // Remember the address (never anything else) so a later sign-in in this
+    // browser starts with the field filled — see lib/auth/last-email.ts.
+    rememberEmail(email.trim().toLowerCase());
     setStep("sent");
   }
 
@@ -134,8 +138,30 @@ export default function SignupPage() {
           </h2>
           <p className="mx-auto mt-2 max-w-[20rem] text-[15px] leading-relaxed text-fg-muted">
             We sent a verification link to{" "}
-            <span className="font-semibold text-white">{email}</span>. Tap it on
-            this device to set your password and finish setting up.
+            <span className="font-semibold text-white">{email}</span>. Tap it to
+            set your password and finish setting up.
+          </p>
+          {/* The old copy said "tap it on this device", which was both
+              unnecessarily restrictive and pointed the wrong way for the users
+              who need the most help.
+
+              It is safe to open the link anywhere: verification uses Supabase's
+              default confirmation URL, which completes the IMPLICIT flow and
+              returns the session in the URL hash — there is no PKCE verifier
+              pinned to the browser that requested it (see the long note in
+              src/app/auth/callback/page.tsx). So the link signs the user in
+              wherever it lands.
+
+              And where it lands matters enormously. Most arrivals come from an
+              Instagram link, which opens in Instagram's own webview: a browser
+              that cannot install the app, cannot receive notifications, and
+              keeps its cookies where no real browser can see them. Opening the
+              email in Chrome or Safari is the moment that whole problem solves
+              itself — so this is the moment to say so. */}
+          <p className="mx-auto mt-3 max-w-[20rem] text-[13px] leading-relaxed text-fg-muted">
+            Open it in <span className="font-semibold text-fg">Chrome</span> or{" "}
+            <span className="font-semibold text-fg">Safari</span> — not inside
+            Instagram. Any device works.
           </p>
           <button
             type="button"

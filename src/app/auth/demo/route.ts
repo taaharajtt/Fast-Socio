@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClientForRedirect } from "@/lib/supabase/server";
+import { siteUrl } from "@/lib/site-url";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isDemoLoginEnabled } from "@/lib/auth/gates";
 
@@ -15,7 +16,7 @@ import { isDemoLoginEnabled } from "@/lib/auth/gates";
 const DEMO_EMAIL = "demo-user@nu.edu.pk";
 
 export async function GET(request: Request) {
-  const { origin } = new URL(request.url);
+  const origin = siteUrl();
 
   // Never expose an unauthenticated session-minting endpoint in production.
   // Hard NODE_ENV gate first (launch audit Phase 0.2, matching /auth/dev-login)

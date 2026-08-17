@@ -1,0 +1,156 @@
+# Fast Socio — production origin (fastsocio.online) + temporary test origin.
+#
+# Two site blocks are served during the cutover:
+#
+#   fastsocio.online / www.fastsocio.online — the production domain. Caddy
+#     obtains and renews Let's Encrypt certificates for BOTH over HTTP-01, so
+#     nothing has to be provisioned by hand. www redirects to the apex so there
+#     is exactly one canonical origin: two live origins would split auth cookies
+#     and make the Server Actions origin check harder to reason about.
+#
+#   169-58-149-230.sslip.io — the pre-DNS test origin. Kept ONLY so the box
+#     stays reachable if the domain is misconfigured mid-cutover; it is the
+#     rollback path for reaching the app directly. REMOVE IT once the domain is
+#     verified (see the cleanup step in the cutover runbook).
+#
+# Certificates are only issued once the domain actually resolves here, so this
+# file can be deployed BEFORE the DNS change: the fastsocio.online block simply
+# fails to obtain a certificate and the sslip.io origin keeps serving.
+
+{
+	# Fail loudly at startup rather than silently serving plaintext.
+	# Let's Encrypt expiry notices. Must be a real mailbox.
+	email admin@fastsocio.online
+
+	# Access logs go to stdout so `docker compose logs` is the single place to
+	# look, and Docker's json-file rotation (set in compose) bounds them.
+	log {
+		output stdout
+		format console
+	}
+}
+
+# Canonical production origin.
+fastsocio.online {
+	encode zstd gzip
+
+	log {
+		output stdout
+		format console
+		# Do NOT add request/response header logging here. Auth cookies and
+		# magic-link tokens travel in those, and they must never reach disk.
+	}
+
+	# Image transforms — see the note in the sslip.io block below.
+	handle_path /img/* {
+		reverse_proxy imgproxy:8080 {
+			transport http {
+				read_timeout 30s
+				write_timeout 30s
+			}
+		}
+		header Cache-Control "public, max-age=31536000, immutable"
+	}
+
+	reverse_proxy app:3000 {
+		# Streaming is not optional: Cache Components/PPR ships a static shell
+		# and streams the rest. Buffering here silently destroys that.
+		flush_interval -1
+
+		header_up Host {host}
+		header_up X-Forwarded-Host {host}
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Real-IP {remote_host}
+
+		transport http {
+			read_timeout 300s
+			write_timeout 300s
+		}
+	}
+
+	# No X-Robots-Tag here: this origin IS meant to be indexed. The app sets its
+	# own CSP/HSTS via next.config.ts — do not duplicate them here.
+	header -Server
+}
+
+# www redirects to the apex rather than serving a second copy. Caddy still
+# obtains a certificate for it, so https://www.fastsocio.online is valid and
+# does not warn before redirecting.
+www.fastsocio.online {
+	redir https://fastsocio.online{uri} permanent
+}
+
+169-58-149-230.sslip.io {
+	# Automatic HTTPS: Caddy obtains and renews the Let's Encrypt certificate
+	# over HTTP-01 with no configuration, and redirects :80 -> :443 itself.
+
+	encode zstd gzip
+
+	log {
+		output stdout
+		format console
+		# Do NOT add request/response header logging here. Auth cookies and
+		# magic-link tokens travel in those, and they must never reach disk.
+	}
+
+	# Image transforms. Served from our own origin rather than exposing the
+	# imgproxy container directly: it keeps images same-origin (so the CSP does
+	# not need another host), and imgproxy is never publicly reachable except
+	# through this path.
+	#
+	# handle_path strips the /img prefix, so /img/insecure/rs:fit:… arrives at
+	# imgproxy as /insecure/rs:fit:… — which is the URL shape lib/image.ts and
+	# the next/image loader build.
+	handle_path /img/* {
+		reverse_proxy imgproxy:8080 {
+			# Renders are deterministic and content-addressed by their options,
+			# so a slow first byte is a cache miss, not a stalled stream.
+			transport http {
+				read_timeout 30s
+				write_timeout 30s
+			}
+		}
+		# Derivatives never change for a given URL: the source objects are
+		# written once under a token-bearing path and never overwritten.
+		header Cache-Control "public, max-age=31536000, immutable"
+	}
+
+	reverse_proxy app:3000 {
+		# Streaming is not optional for this app: Cache Components/PPR means
+		# every route ships a static shell and streams the rest behind Suspense.
+		# Any buffering in this hop silently destroys that and the shell stops
+		# painting first. -1 disables response buffering entirely.
+		flush_interval -1
+
+		# Preserve what Next.js needs to reconstruct absolute URLs. Caddy sets
+		# X-Forwarded-For/Proto/Host by default; Host is made explicit because
+		# the auth routes build redirects from the request origin.
+		header_up Host {host}
+		header_up X-Forwarded-Host {host}
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Real-IP {remote_host}
+
+		# Long-lived connections. Supabase Realtime is browser-direct and never
+		# passes through here, but RSC streaming and Server Action responses can
+		# legitimately stay open, so no aggressive read timeout is set.
+		transport http {
+			read_timeout 300s
+			write_timeout 300s
+		}
+	}
+
+	# Phase 1 origin protection. This box is publicly reachable and the app is
+	# not yet meant to receive real traffic, so keep it out of search results
+	# and off the radar of casual scanners. Removed at cutover.
+	header {
+		X-Robots-Tag "noindex, nofollow, noarchive"
+		# The app sets its own CSP/HSTS/etc via next.config.ts; do not duplicate
+		# or override them here or they will conflict at cutover.
+		-Server
+	}
+}
+
+# No catch-all site block is defined on purpose. Caddy only answers for the
+# hostname above; a request arriving by raw IP or an unexpected Host has no
+# matching site and no certificate, so it is refused. Adding an explicit
+# `:443` block here would fight Automatic HTTPS for the TLS handshake.

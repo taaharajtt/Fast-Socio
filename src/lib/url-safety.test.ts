@@ -36,14 +36,19 @@ describe("safeNextPath (open-redirect guard, P2-01)", () => {
 });
 
 describe("isAppStorageUrl (P2-04)", () => {
-  const base = "https://skgphoupbwdexfevgcnn.supabase.co";
-  it("accepts this project's public storage URLs", () => {
-    expect(isAppStorageUrl(`${base}/storage/v1/object/public/post-media/uid/x.png`, base)).toBe(true);
+  const base = "https://eu2.contabostorage.com/tenant:fast-socio";
+  it("accepts this project's public object URLs", () => {
+    expect(isAppStorageUrl(`${base}/post-media/uid/x.png`, base)).toBe(true);
+    expect(isAppStorageUrl(`${base}/avatars/uid/x.png`, base)).toBe(true);
   });
-  it("rejects foreign / non-storage URLs", () => {
+  it("rejects foreign URLs and other tenants/buckets on the same host", () => {
     expect(isAppStorageUrl("https://evil.com/x.png", base)).toBe(false);
-    expect(isAppStorageUrl("https://other.supabase.co/storage/v1/object/public/x", base)).toBe(false);
-    expect(isAppStorageUrl(`${base}/rest/v1/x`, base)).toBe(false);
+    // Same storage host, different tenant/bucket — the prefix match must be
+    // exact, or another Contabo customer's bucket would be accepted as ours.
+    expect(isAppStorageUrl("https://eu2.contabostorage.com/tenant:other-bucket/x.png", base)).toBe(false);
+    // A sibling bucket whose name merely starts with ours must not slip through
+    // on a bare startsWith — this is why the check appends a trailing slash.
+    expect(isAppStorageUrl(`${base}-staging/post-media/x.png`, base)).toBe(false);
     expect(isAppStorageUrl("", base)).toBe(false);
     expect(isAppStorageUrl(null, base)).toBe(false);
   });

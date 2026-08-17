@@ -15,9 +15,9 @@ import { isOnline, presenceLabel } from "@/lib/time";
 import {
   chatMediaPath,
   CHAT_MEDIA_TTL_SECONDS,
-  CHAT_IMAGE_DISPLAY_SIZE,
   MESSAGE_PAGE_SIZE,
 } from "@/lib/chat-media";
+import { presignDownload } from "@/lib/s3/sign";
 
 export default async function ConversationPage({
   params,
@@ -70,34 +70,26 @@ export default async function ConversationPage({
   const messages = ((msgs as ChatMessage[]) ?? []).slice().reverse();
   const hasMore = (msgs?.length ?? 0) === MESSAGE_PAGE_SIZE;
 
-  // chat-media is private (P5-01): resolve a short-lived signed URL for each
-  // attachment. Images are signed at display size (perf pass — bubbles render
-  // at a fixed ~220px, not the full 1080px upload); voice notes as-is.
+  // chat-media is private (P5-01): resolve a short-lived presigned URL for each
+  // attachment on the server-rendered first paint. The client signer
+  // (lib/chat-media-sign.ts) does the same for messages that arrive later.
+  //
+  // No display-size transform any more. Supabase Storage could resize while
+  // signing; Contabo cannot, and imgproxy is deliberately restricted to the
+  // PUBLIC bucket prefixes, so it must not — and could not — fetch a private
+  // chat attachment. Bubbles therefore receive the full-size object and scale
+  // it in CSS. Uploads are already capped at ~1080p client-side, so this costs
+  // bytes on a chat thread but keeps private media private, which matters more.
+  //
+  // Authorization is unchanged in substance: the caller is already established
+  // as a participant of this conversation above, and the URL is short-lived.
   const signedAttachments: Record<string, string> = {};
-  await Promise.all(
-    messages
-      .filter((m) => m.attachment_url)
-      .map(async (m) => {
-        const path = chatMediaPath(m.attachment_url);
-        if (!path) return;
-        const { data: signed } = await supabase.storage
-          .from("chat-media")
-          .createSignedUrl(
-            path,
-            CHAT_MEDIA_TTL_SECONDS,
-            m.attachment_type === "image"
-              ? {
-                  transform: {
-                    width: CHAT_IMAGE_DISPLAY_SIZE,
-                    height: CHAT_IMAGE_DISPLAY_SIZE,
-                    resize: "contain",
-                  },
-                }
-              : undefined
-          );
-        if (signed?.signedUrl) signedAttachments[m.id] = signed.signedUrl;
-      })
-  );
+  for (const m of messages) {
+    if (!m.attachment_url) continue;
+    const path = chatMediaPath(m.attachment_url);
+    if (!path) continue;
+    signedAttachments[m.id] = presignDownload("chat-media", path, CHAT_MEDIA_TTL_SECONDS);
+  }
   const sharedIds = [
     ...new Set(
       messages.map((m) => m.shared_post_id).filter(Boolean) as string[]

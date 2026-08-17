@@ -1,19 +1,31 @@
 /**
- * Image rendering helpers (audit fix P4-04).
+ * Image rendering helpers.
  *
- * Storage objects are served through Supabase's image transformation endpoint
- * so the browser downloads a resized/optimized render instead of the full-size
- * original. We cap the largest edge at 1080px (feed/detail images never need
- * more on a phone) and let Supabase pick modern formats + quality.
+ * Objects live in Contabo Object Storage, which — unlike Supabase Storage — has
+ * no image transformation endpoint. Resizing is done by an imgproxy instance
+ * running alongside the app on the VPS, so the browser still downloads a
+ * resized/optimized render instead of the full-size original.
  *
- * Public object URLs look like:
- *   {base}/storage/v1/object/public/{bucket}/{path}
- * The render endpoint is:
+ * Supabase render URLs looked like:
  *   {base}/storage/v1/render/image/public/{bucket}/{path}?width=&height=&resize=
+ * imgproxy URLs look like:
+ *   {imgproxy}/insecure/rs:fit:{w}:{h}:0/q:{quality}/plain/{source-url}
+ *
+ * `insecure` (unsigned) is safe here only because the imgproxy deployment is
+ * locked to our own bucket via IMGPROXY_ALLOWED_SOURCES — without that it would
+ * be an open image proxy for the whole internet. Keep those two in step.
+ *
+ * When IMGPROXY is unset (local dev, or before the VPS side is up) every helper
+ * returns the original URL untouched, so images still render — just unresized.
  */
 
-const PUBLIC_SEGMENT = "/storage/v1/object/public/";
-const RENDER_SEGMENT = "/storage/v1/render/image/public/";
+const IMGPROXY = process.env.NEXT_PUBLIC_IMGPROXY_URL?.replace(/\/$/, "") ?? "";
+const PUBLIC_BASE = process.env.NEXT_PUBLIC_CONTABO_PUBLIC_BASE_URL?.replace(/\/$/, "") ?? "";
+
+/** True if `url` is one of our own storage objects and so safe to send to imgproxy. */
+function isOwnStorageUrl(url: string): boolean {
+  return Boolean(PUBLIC_BASE) && url.startsWith(`${PUBLIC_BASE}/`);
+}
 
 /**
  * Return a transformed URL that renders `url` at most `size`px on its largest
@@ -21,14 +33,14 @@ const RENDER_SEGMENT = "/storage/v1/render/image/public/";
  */
 export function optimizedImage(
   url: string | null | undefined,
-  size = 1080
+  size = 1080,
+  quality = 75
 ): string | null {
   if (!url) return null;
-  if (!url.includes(PUBLIC_SEGMENT)) return url; // not one of our storage objects
-  const rendered = url.replace(PUBLIC_SEGMENT, RENDER_SEGMENT);
-  const sep = rendered.includes("?") ? "&" : "?";
-  // resize=contain keeps aspect ratio and never upscales past the original.
-  return `${rendered}${sep}width=${size}&height=${size}&resize=contain&quality=75`;
+  if (!IMGPROXY || !isOwnStorageUrl(url)) return url;
+  // rs:fit keeps aspect ratio; the trailing :0 disables enlargement, matching
+  // the old resize=contain behaviour of never upscaling past the original.
+  return `${IMGPROXY}/insecure/rs:fit:${size}:${size}:0/q:${quality}/plain/${encodeURIComponent(url)}`;
 }
 
 /** Avatars are small; 256px is plenty and much lighter than a full upload. */

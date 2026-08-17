@@ -1,10 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headObject } from "@/lib/s3/sign";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { isAppStorageUrl } from "@/lib/url-safety";
+import { orIlike } from "@/lib/postgrest/search";
 import {
   isSocietyCategory,
   isOfficerRole,
@@ -191,16 +193,8 @@ export async function postSocietyAnnouncement(
         opts.attachmentPath.includes("..")) {
       return { ok: false, error: "Invalid attachment." };
     }
-    const slash = opts.attachmentPath.lastIndexOf("/");
-    const { data: objects } = await supabase.storage
-      .from("chat-media")
-      .list(opts.attachmentPath.slice(0, slash), {
-        search: opts.attachmentPath.slice(slash + 1),
-        limit: 1,
-      });
-    const mime = (objects?.[0]?.metadata as { mimetype?: string } | undefined)
-      ?.mimetype;
-    if (!mime || !mime.startsWith("image/"))
+    const head = await headObject("chat-media", opts.attachmentPath);
+    if (!head?.contentType?.startsWith("image/"))
       return { ok: false, error: "Only images can be attached." };
   }
 
@@ -314,10 +308,8 @@ export type StudentHit = {
 
 /** Search onboarded students to appoint as officers (name or roll number). */
 export async function searchStudents(query: string): Promise<StudentHit[]> {
-  const q = query.trim();
-  if (q.length < 2) return [];
-  const safe = q.replace(/[,()*%\\]/g, " ").trim();
-  if (!safe) return [];
+  const search = orIlike(["full_name", "username"], query, { minLength: 2 });
+  if (!search) return [];
 
   const supabase = await createClient();
   const { data } = await supabase
@@ -325,7 +317,7 @@ export async function searchStudents(query: string): Promise<StudentHit[]> {
     .select("id, full_name, username, avatar_url, gender")
     .eq("onboarding_completed", true)
     .eq("is_banned", false)
-    .or(`full_name.ilike.%${safe}%,username.ilike.%${safe}%`)
+    .or(search)
     .limit(8);
   return (data as StudentHit[]) ?? [];
 }

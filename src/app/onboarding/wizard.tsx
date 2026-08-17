@@ -6,6 +6,8 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { GlassInput } from "@/components/ui/glass-input";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import { uploadWithProgress, publicStorageUrl } from "@/lib/storage-upload";
+import { InstallStep } from "@/components/pwa/install-step";
 import { saveOnboardingStep, saveProfile, type OnboardingDraft } from "./actions";
 import {
   BIO_MAX,
@@ -31,6 +33,11 @@ const STEPS = [
   "About you",
   "Discover",
   "Bio",
+  // The install ask. Last on purpose — see the note in <InstallStep/>: this is
+  // the point of peak commitment, and the only moment in the whole journey
+  // where asking pre-empts a return trip instead of interrupting one. It is
+  // skippable like every other optional step ("Finish" is always enabled).
+  "Home Screen",
 ];
 
 /**
@@ -125,17 +132,14 @@ export function OnboardingWizard({
     }
     const ext = file.name.split(".").pop() ?? "jpg";
     const path = `${user.id}/${Date.now()}.${ext}`;
-    const { error: upErr } = await supabase.storage
-      .from("avatars")
-      .upload(path, file, { upsert: true, contentType: file.type });
-    if (upErr) {
+    try {
+      await uploadWithProgress("avatars", path, file, { contentType: file.type });
+      setAvatarUrl(publicStorageUrl("avatars", path));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Upload failed.");
+    } finally {
       setUploading(false);
-      setError(upErr.message);
-      return;
     }
-    const { data } = supabase.storage.from("avatars").getPublicUrl(path);
-    setAvatarUrl(data.publicUrl);
-    setUploading(false);
   }
 
   function toggle(
@@ -163,6 +167,7 @@ export function OnboardingWizard({
     true, // about you
     true, // discover
     bio.length <= BIO_MAX,
+    true, // home screen — never blocks Finish
   ][step];
 
   const isLast = step === STEPS.length - 1;
@@ -473,6 +478,8 @@ export function OnboardingWizard({
           </p>
         </section>
       )}
+
+      {step === 7 && <InstallStep />}
 
       {error && <p className="mt-4 text-sm text-error">{error}</p>}
 

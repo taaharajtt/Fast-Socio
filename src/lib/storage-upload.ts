@@ -1,42 +1,38 @@
-import { createClient } from "@/lib/supabase/client";
 import { compressImageTo1080p } from "@/lib/image-compression";
+import { publicObjectUrl, type StoragePrefix } from "@/lib/s3/buckets";
 
 /**
- * Upload a blob to Supabase Storage with real progress events (UAT-004).
+ * Upload a blob to Contabo Object Storage with real progress events.
  *
- * `supabase.storage.upload()` resolves only once, with no progress — it wraps
- * fetch, which can't report upload progress in browsers. So we PUT straight to
- * the Storage REST endpoint via XHR, whose `upload.onprogress` gives byte-level
- * progress for the loading bar. RLS on `storage.objects` still applies: the
- * request carries the user's access token, exactly like the SDK call it
- * replaces, so the same bucket policies gate it.
+ * Two-step, because plain S3 has no per-user authorization: we ask our own
+ * server to authorize this exact object and mint a short-lived presigned PUT,
+ * then PUT the bytes straight to Contabo. The server-side checks in
+ * `/api/storage/presign` stand in for the RLS policies that used to gate the
+ * equivalent request to Supabase Storage.
+ *
+ * Progress still comes from XHR rather than fetch — `upload.onprogress` is the
+ * only way a browser reports byte-level upload progress, and the loading bar
+ * depends on it. (UAT-004.)
  */
 export type UploadProgress = { loaded: number; total: number; percent: number };
 
 export async function uploadWithProgress(
-  bucket: string,
+  prefix: StoragePrefix,
   path: string,
   blob: Blob,
   opts: {
     contentType?: string;
-    upsert?: boolean;
     onProgress?: (p: UploadProgress) => void;
     signal?: AbortSignal;
   } = {}
 ): Promise<{ path: string }> {
-  const supabase = createClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session) throw new Error("You are not signed in.");
-
   // Every image upload (chat attachments, post media, avatars, community/
   // society covers) is scaled to ~1080p and re-compressed before it ever
-  // reaches Storage — the cropper already does its own capped export, but
+  // leaves the browser — the cropper already does its own capped export, but
   // uncropped images (raw attachments, avatar picks) had no size limit at all.
   let uploadBlob = blob;
-  const contentType = opts.contentType ?? blob.type;
-  if (contentType.startsWith("image/") && contentType !== "image/svg+xml") {
+  const declaredType = opts.contentType ?? blob.type;
+  if (declaredType.startsWith("image/") && declaredType !== "image/svg+xml") {
     try {
       uploadBlob = await compressImageTo1080p(blob);
     } catch {
@@ -44,29 +40,33 @@ export async function uploadWithProgress(
     }
   }
 
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-  const url = `${base}/storage/v1/object/${bucket}/${encodeURI(path)}`;
+  // Compression can change the encoded format (e.g. a non-alpha PNG becomes
+  // JPEG), so everything from here on must use the FINAL blob's type and size,
+  // not the caller's original guess — the server validates what we declare
+  // against the prefix's allow-list and size cap.
+  const contentType = uploadBlob.type || declaredType;
+
+  const presignRes = await fetch("/api/storage/presign", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ prefix, path, contentType, sizeBytes: uploadBlob.size }),
+    signal: opts.signal,
+  });
+  if (!presignRes.ok) {
+    const body = await presignRes.json().catch(() => null);
+    throw new Error(body?.error ?? `Upload was refused (${presignRes.status}).`);
+  }
+  const { uploadUrl } = (await presignRes.json()) as { uploadUrl: string };
 
   return new Promise<{ path: string }>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    // POST inserts, PUT upserts — mirrors the SDK's own routing.
-    xhr.open(opts.upsert ? "PUT" : "POST", url);
-    xhr.setRequestHeader("authorization", `Bearer ${session.access_token}`);
-    xhr.setRequestHeader("apikey", anon);
-    // Compression can change the encoded format (e.g. a non-alpha PNG becomes
-    // JPEG), so the header must reflect uploadBlob's actual type, not the
-    // caller's original guess.
-    xhr.setRequestHeader("content-type", uploadBlob.type || opts.contentType || contentType);
-    xhr.setRequestHeader("x-upsert", opts.upsert ? "true" : "false");
-    // Every current caller (avatars, post-media, chat-media) embeds a
-    // Date.now()/crypto.randomUUID() token in the path itself, so the object
-    // at this exact path never changes after it's written — safe to cache as
-    // long-lived and immutable. `upsert` here only guards a same-millisecond
-    // retry, not a stable path meant to be overwritten. If a future caller
-    // ever uploads to a STABLE, reused path (e.g. no per-upload token), it
-    // must not go through this header, or the old bytes will keep serving
-    // from cache after the overwrite.
+    xhr.open("PUT", uploadUrl);
+    xhr.setRequestHeader("content-type", contentType);
+    // Every current caller embeds a Date.now()/crypto.randomUUID() token in the
+    // path itself, so the object at this exact path never changes after it is
+    // written — safe to cache as long-lived and immutable. If a future caller
+    // ever uploads to a STABLE, reused path, it must not go through this
+    // header, or the old bytes will keep serving from cache after the overwrite.
     xhr.setRequestHeader("cache-control", "public, max-age=31536000, immutable");
 
     xhr.upload.onprogress = (e) => {
@@ -83,15 +83,9 @@ export async function uploadWithProgress(
         opts.onProgress?.({ loaded: uploadBlob.size, total: uploadBlob.size, percent: 100 });
         resolve({ path });
       } else {
-        // Storage returns a JSON { message } on failure.
-        let message = `Upload failed (${xhr.status}).`;
-        try {
-          const body = JSON.parse(xhr.responseText);
-          if (body?.message) message = body.message;
-        } catch {
-          /* keep the generic message */
-        }
-        reject(new Error(message));
+        // S3 returns an XML <Error><Code>… body on failure, not JSON.
+        const code = /<Code>([^<]+)<\/Code>/.exec(xhr.responseText)?.[1];
+        reject(new Error(code ? `Upload failed (${code}).` : `Upload failed (${xhr.status}).`));
       }
     };
     xhr.onerror = () => reject(new Error("Network error during upload."));
@@ -106,8 +100,7 @@ export async function uploadWithProgress(
   });
 }
 
-/** Public URL for an object in a public bucket, without another round-trip. */
-export function publicStorageUrl(bucket: string, path: string): string {
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  return `${base}/storage/v1/object/public/${bucket}/${encodeURI(path)}`;
+/** Public URL for an object under a publicly-readable prefix. */
+export function publicStorageUrl(prefix: StoragePrefix, path: string): string {
+  return publicObjectUrl(prefix, path);
 }

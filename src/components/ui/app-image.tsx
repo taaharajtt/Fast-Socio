@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { supabaseLoader } from "@/lib/image-loader";
+import { storageLoader } from "@/lib/image-loader";
 
 /** Once a src has finished loading in this tab, treat it as warm: skip the
  *  placeholder + fade entirely on any later mount of the same URL (revisited
@@ -81,7 +81,7 @@ export function AppImage({
         />
       )}
       <Image
-        loader={supabaseLoader}
+        loader={storageLoader}
         src={src}
         alt={alt}
         fill

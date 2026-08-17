@@ -69,10 +69,29 @@ export async function updateSession(request: NextRequest) {
     // production (see the route). Public so the capture check works on a
     // preview deploy without needing to authenticate first.
     pathname === "/api/sentry-check" ||
-    pathname.startsWith("/styleguide");
+    // Liveness probe for the self-hosted deployment. Must answer 200 without a
+    // session or the container healthcheck sees the /login redirect and starts
+    // killing healthy containers. Exposes nothing (see the route).
+    pathname === "/api/health" ||
+    pathname.startsWith("/styleguide") ||
+    // Public informational pages — must render for signed-out visitors, not
+    // bounce them to /login. See src/app/(public)/.
+    pathname === "/privacy" ||
+    pathname === "/terms" ||
+    pathname === "/about" ||
+    pathname === "/support";
 
   // Unauthenticated users may only see public routes.
   if (!userId && !isPublicRoute) {
+    // API routes answer fetch(), not navigation. Redirecting one to /login
+    // sends back a 200 page of HTML, so the caller's `res.ok` is true and it
+    // fails later on JSON parsing with something unrelated to the real cause.
+    // A 401 lets the client say "your session expired" — which matters most
+    // for /api/storage/*, where an expired session mid-upload would otherwise
+    // surface as an inscrutable upload failure.
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "You are not signed in." }, { status: 401 });
+    }
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
