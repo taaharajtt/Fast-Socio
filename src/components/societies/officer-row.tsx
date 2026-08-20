@@ -16,7 +16,10 @@ export function OfficerRow({
 }) {
   const name = officer.full_name ?? officer.username ?? "Member";
   return (
-    <div className="flex items-center gap-3 rounded-[14px] bg-card p-3">
+    // Plain row, no card — matches the events attendee list, and keeps
+    // officers visually consistent with the plain-member rows below them in
+    // the same list rather than reading as a separate, boxed tier.
+    <div className="flex items-center gap-3 rounded-[12px] px-2 py-2.5 transition-colors hover:bg-card">
       <Link
         href={`/profile/${officer.user_id}`}
         className="flex min-w-0 flex-1 items-center gap-3"

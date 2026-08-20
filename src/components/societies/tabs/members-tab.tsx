@@ -103,7 +103,8 @@ export function MembersTab({
                     <Link
                       key={p.id}
                       href={`/profile/${p.id}`}
-                      className="flex items-center gap-3 rounded-[14px] bg-card p-3"
+                      // Plain row, no card — matches the events attendee list.
+                      className="flex items-center gap-3 rounded-[12px] px-2 py-2.5 transition-colors hover:bg-card"
                     >
                       <span className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/10 text-sm font-bold text-fg-muted">
                         {resolveAvatarUrl(p.avatar_url, p.gender) ? (

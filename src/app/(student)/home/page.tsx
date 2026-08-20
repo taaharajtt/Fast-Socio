@@ -44,12 +44,13 @@ export default function HomePage() {
       {/* Header (UISpec V3 Screen 2) — brand logo + Activity (top-right).
           The in-app notification bell was removed; notifications now surface as
           PWA push on mobile/iOS (Settings → Enable push). */}
-      <header className="flex h-[104px] items-center justify-between px-4">
+      <header className="flex h-[80px] items-center justify-between px-4">
         {/* Brand logo (UAT-001). PNG lives at public/brand/logo.png; the h1 text
             stays as the accessible name and renders if the asset is missing.
-            85px tall, sized down from an earlier 112px pass that read as too
-            large for the masthead. Header height matches with the same margin
-            around it as before. */}
+            70px tall. Header height is deliberately just 10px taller on each
+            side (80px total) rather than the previous looser 104px — that gap
+            below the logo is what becomes the space before the composer, and
+            it's now roughly half what it was (~5px vs ~9.5px). */}
         <h1 className="text-xl font-black tracking-tight">
           {/* App is dark-only; always render the dark-mode logo asset. */}
           <Image
@@ -58,7 +59,7 @@ export default function HomePage() {
             width={512}
             height={256}
             priority
-            className="h-[85px] w-auto"
+            className="h-[70px] w-auto"
           />
           <span className="sr-only">FAST SOCIO</span>
         </h1>
