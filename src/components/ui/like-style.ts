@@ -3,24 +3,20 @@ import { cn } from "@/lib/utils";
 /**
  * The one definition of what "liked" looks like.
  *
- * Post likes and comment likes had independently landed on a red heart, which
- * collided with the two other things red means in this app: destructive actions
- * (delete, report) and the Matches counter on the profile. A like is neither —
- * it is the most ordinary positive interaction in the product, and it is where
- * FAST SOCIO's own colour belongs.
+ * Liked is a FILLED RED heart, unliked is a grey outline — the universal
+ * convention (Instagram, Twitter/X, most of the web), and what this app used
+ * before the neutral-chrome pass briefly moved it to purple. The count
+ * travels with the icon so the pair reads as one control rather than a glyph
+ * beside an unrelated number.
  *
- * Liked is a FILLED PURPLE heart, unliked is a grey outline. The count travels
- * with the icon so the pair reads as one control rather than a glyph beside an
- * unrelated number.
- *
- * Matches on the profile keeps its red heart on purpose — that is a separate
- * product concept (mutual interest), not an accumulation of taps, and giving it
- * the like colour would imply the two numbers are the same kind of thing.
+ * Matches on the profile is also red, and that is fine: both are "someone
+ * cared about this," just at different scales (a tap vs. a mutual match), so
+ * sharing the hue is consistent rather than confusing.
  */
 
 /** Colour for the like control as a whole (icon + count). */
 export function likeToneClass(liked: boolean, idle = "hover:text-fg") {
-  return liked ? "text-accent" : idle;
+  return liked ? "text-error" : idle;
 }
 
 /** Applied to the heart glyph itself; fills it when liked. */

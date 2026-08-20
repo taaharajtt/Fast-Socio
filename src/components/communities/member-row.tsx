@@ -25,7 +25,10 @@ export function MemberRow({ member }: { member: CommunityMemberVM }) {
   return (
     <Link
       href={`/profile/${member.user_id}`}
-      className="flex items-center gap-3 rounded-[14px] bg-card p-3"
+      // Plain row, no card — matches the events attendee list. A member row
+      // is a name in a roster, not a standalone object; a card behind each
+      // one made a 40-person roster read as 40 stacked panels.
+      className="flex items-center gap-3 rounded-[12px] px-2 py-2.5 transition-colors hover:bg-card"
     >
       <span className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/10 text-sm font-bold text-fg-muted">
         {resolveAvatarUrl(member.avatar_url, member.gender) ? (

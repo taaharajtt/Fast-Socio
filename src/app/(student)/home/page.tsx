@@ -44,13 +44,12 @@ export default function HomePage() {
       {/* Header (UISpec V3 Screen 2) — brand logo + Activity (top-right).
           The in-app notification bell was removed; notifications now surface as
           PWA push on mobile/iOS (Settings → Enable push). */}
-      <header className="flex h-[76px] items-center justify-between px-4">
+      <header className="flex h-[104px] items-center justify-between px-4">
         {/* Brand logo (UAT-001). PNG lives at public/brand/logo.png; the h1 text
             stays as the accessible name and renders if the asset is missing.
-            56px tall, up from 44px: at the smaller size the wordmark read as a
-            label on the feed rather than as the product's name, which is the
-            one job a masthead has. Deliberately not larger than that — this is
-            an identity anchor above a feed, not a banner. */}
+            85px tall, sized down from an earlier 112px pass that read as too
+            large for the masthead. Header height matches with the same margin
+            around it as before. */}
         <h1 className="text-xl font-black tracking-tight">
           {/* App is dark-only; always render the dark-mode logo asset. */}
           <Image
@@ -59,7 +58,7 @@ export default function HomePage() {
             width={512}
             height={256}
             priority
-            className="h-14 w-auto"
+            className="h-[85px] w-auto"
           />
           <span className="sr-only">FAST SOCIO</span>
         </h1>

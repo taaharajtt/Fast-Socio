@@ -168,16 +168,17 @@ export function FloatingDock({
   return (
     <nav
       aria-label="Primary"
-      className="material-bar fixed inset-x-0 bottom-0 z-40 border-t border-chrome-border pb-[var(--safe-bottom)]"
+      // Opaque, not a translucent material: content scrolling underneath a
+      // blurred dock read as visual noise behind the tab bar, so this is a
+      // flat `--chrome-solid` fill instead of `material-bar`. Other chrome
+      // (the profile header button, glass-chip) still uses the translucent
+      // material — this is scoped to the dock only.
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-chrome-border bg-[var(--chrome-solid)] pb-[var(--safe-bottom)]"
     >
-      {/* Scroll edge: content fades into the bar instead of colliding with a
-          hard rule (apple.md §12). Sits just above the material, decorative
-          only, and is the reason the bar can be translucent without the last
-          feed row reading as clipped. */}
-      <div
-        aria-hidden
-        className="scroll-edge pointer-events-none absolute inset-x-0 bottom-full h-6"
-      />
+      {/* No scroll-edge fade above the bar: that gradient existed to soften
+          content showing through a translucent material, and reads as a
+          smudge above a bar that's now fully opaque. The border-t hairline
+          is the whole edge. */}
       <div className="mx-auto flex h-[var(--dock-h)] max-w-md items-stretch">
         {items.map(({ href, label, icon: Icon }) => {
           const active = activeHref === href;
