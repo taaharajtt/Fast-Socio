@@ -29,7 +29,6 @@ export function DiscoverPostForm({
   viewer,
   recruitAnchors,
   editing,
-  onClose,
   onSaved,
 }: {
   kind: PostMode;
@@ -37,7 +36,6 @@ export function DiscoverPostForm({
   recruitAnchors: RecruitAnchor[];
   /** When set, the form updates this post instead of creating one. */
   editing?: SmartMatchPost | null;
-  onClose: () => void;
   onSaved: () => void;
 }) {
   return (
@@ -48,7 +46,6 @@ export function DiscoverPostForm({
       viewer={viewer}
       recruitAnchors={recruitAnchors}
       editing={editing ?? null}
-      onClose={onClose}
       onSaved={onSaved}
     />
   );
@@ -59,14 +56,12 @@ function DiscoverPostFormBody({
   viewer,
   recruitAnchors,
   editing,
-  onClose,
   onSaved,
 }: {
   kind: PostMode;
   viewer: SmartMatchViewer;
   recruitAnchors: RecruitAnchor[];
   editing: SmartMatchPost | null;
-  onClose: () => void;
   onSaved: () => void;
 }) {
   const meta = modeMeta(kind);
@@ -131,21 +126,12 @@ function DiscoverPostFormBody({
     });
   }
 
-  const title = editing ? `Edit — ${meta.label}` : meta.formTitle;
-
+  // No title row here. /discover/post is a drill-down now: the page header
+  // above this card already reads "Project Partner / Find a project partner"
+  // and carries the back control, so a second copy of the title with a second
+  // way out beside it would be two of each.
   return (
     <div className="space-y-4 rounded-[18px] bg-card p-4">
-      <div className="flex items-start justify-between gap-3">
-        <h2 className="text-lg font-bold">{title}</h2>
-        <button
-          type="button"
-          onClick={onClose}
-          className="shrink-0 text-sm font-medium text-fg-muted hover:text-fg"
-        >
-          Cancel
-        </button>
-      </div>
-
       {recruitBlocked ? (
         <p className="rounded-[14px] bg-bg-elevated px-4 py-6 text-center text-sm text-fg-muted">
           Recruitment posts are for society officers and event organizers. Run a

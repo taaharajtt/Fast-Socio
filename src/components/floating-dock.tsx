@@ -5,16 +5,109 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_ITEMS, activeNavHref } from "@/lib/nav";
 import { AppImage } from "@/components/ui/app-image";
+import {
+  HouseOutline,
+  HouseSolid,
+  TrophySolid,
+} from "@/components/dock-glyphs";
 import { useChatBadge } from "@/lib/chat/badge-store";
 import { markDockTap, reportDockNavigation } from "@/lib/nav-perf";
 import { cn } from "@/lib/utils";
 
 /**
- * Bottom navigation bar — UISpec V3 §2.1. A flush (non-floating) bar pinned to
- * the screen edge: solid app-background, a 1px top hairline, 56px of visible
- * height plus the safe-area inset. Six equal tabs (Home · Discover · Ranks ·
- * Events · Chat · Me). The active tab shows a purple-tinted icon well + purple
- * label; inactive tabs are muted grey.
+ * How each dock glyph becomes solid when its tab is active.
+ *
+ * lucide is an outline-only family — there is no `HouseSolid` to import — so
+ * the solid state is produced from the SAME icon by filling its paths, which
+ * keeps the silhouette identical between states instead of swapping in a
+ * second, subtly different drawing from another icon set.
+ *
+ * There are three ways a tab goes solid, and which one an icon gets depends on
+ * how lucide happens to have drawn it. All three were settled by rendering the
+ * result, not by reading path data.
+ *
+ *   `fill`   MessageCircle and Users are single closed silhouettes, so plain
+ *            `fill-current` on the whole SVG is exactly right.
+ *
+ *            Compass is the same trick with a child selector: filling
+ *            everything turns it into a white DISC, which is not a compass, so
+ *            `circle` stays a stroked ring and only the needle `path` fills.
+ *            The active state reads as "the needle lit up".
+ *
+ *   `solid`  House and Trophy cannot be filled at all. House draws its door as
+ *            a SEPARATE path from its body, so filling the SVG paints the door
+ *            the same colour as the wall behind it and the doorway vanishes.
+ *            Trophy is six paths of which only the cup is closed — the
+ *            handles, the two stem legs and the base rule are all open curves,
+ *            and an open path fills by closing itself implicitly, which turned
+ *            the whole glyph into a mushroom.
+ *
+ *            Both are hand-authored in `dock-glyphs.tsx` instead: same 24x24
+ *            grid, same lucide path data, same caps and joins — the doorway
+ *            becomes an evenodd hole, and the stand becomes one closed shape
+ *            walked down lucide's left leg and back up its right. The inactive
+ *            state still uses the real lucide icon, so the silhouettes match.
+ *
+ * Sizes and stroke weights are per-icon on purpose. A solid shape carries far
+ * more ink than its outline at the same bounding box, so the filled glyphs sit
+ * a pixel under the 22px the outlines use and take a THINNER stroke — the
+ * stroke rides the path centre, so leaving it at 1.8 grows a solid shape by
+ * most of a pixel in every direction. The active tab has to read as STRONGER,
+ * not BIGGER. Users is the widest silhouette of the six and comes down
+ * furthest.
+ */
+type Glyph = React.ComponentType<{
+  className?: string;
+  style?: React.CSSProperties;
+  strokeWidth?: number;
+}>;
+
+const ACTIVE_GLYPH: Record<
+  string,
+  {
+    /** Class that fills the lucide icon in place. */
+    fill?: string;
+    /** Hand-authored solid, used instead of the lucide icon when active. */
+    solid?: Glyph;
+    /** Hand-authored outline, used instead of the lucide icon when INACTIVE. */
+    outline?: Glyph;
+    size: number;
+    stroke: number;
+  }
+> = {
+  // Home is the one tab that overrides BOTH states. lucide's House runs its
+  // floor straight across the doorway, so the outline version has a line under
+  // the door while the solid version has a hole — tapping the tab looked like
+  // the door swinging open. Both are drawn here instead, from the same
+  // coordinates, so the doorway is the same doorway in both states.
+  "/home": { solid: HouseSolid, outline: HouseOutline, size: 21, stroke: 1.5 },
+  "/discover": { fill: "[&>path]:fill-current", size: 22, stroke: 2 },
+  "/leaderboard": { solid: TrophySolid, size: 21, stroke: 1.8 },
+  "/communities": { fill: "fill-current", size: 20, stroke: 1.5 },
+  "/chat": { fill: "fill-current", size: 21, stroke: 1.5 },
+};
+
+/**
+ * Bottom navigation bar. A translucent blurred material pinned to the screen
+ * edge that content scrolls *under*, with a 1px top hairline, 56px of visible
+ * height plus the safe-area inset, and six equal tabs (Home · Discover · Ranks
+ * · Community · Chat · Me). Under `prefers-reduced-transparency` the material
+ * resolves to a solid bar (handled in globals.css, not here).
+ *
+ * Selection is expressed as OUTLINE → SOLID, not as colour: an inactive tab is
+ * a thin grey outline glyph over grey text, an active tab is the same glyph
+ * filled white over white text. Nothing sits behind the active tab — no
+ * capsule, no tile, no underline, no glow. The glyph and the label are the
+ * whole selected state.
+ *
+ * That is also why it works without colour at all: desaturate the bar and the
+ * active tab is still obvious, because the silhouette changed, not the hue.
+ * Two channels carry the state (shape + contrast), which is what keeps it
+ * legible for colour-blind users too.
+ *
+ * Purple survives here in exactly two places, both of them signals rather than
+ * decoration: the unread count badge, and the ring on your own avatar when the
+ * Me tab is active.
  *
  * z-40 keeps it below the modal layer (z-50) so sheets cover it. Hidden on the
  * immersive conversation screen (/chat/<id>) so the composer is unobstructed.
@@ -42,7 +135,7 @@ export function FloatingDock({
 
   // Optimistic active tab. A tab switch still has to reach the server for the
   // new segment, and until it commits `pathname` is the OLD route — so without
-  // this the purple highlight sat on the tab you just left for the whole round
+  // this the selected state sat on the tab you just left for the whole round
   // trip and the dock read as unresponsive. Tapping moves the highlight on the
   // same frame as the press; the real pathname takes over the moment it lands.
   // Stored WITH the pathname it was tapped from, so it can be cleared during
@@ -75,8 +168,16 @@ export function FloatingDock({
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.08] bg-bg pb-[var(--safe-bottom)]"
+      className="material-bar fixed inset-x-0 bottom-0 z-40 border-t border-chrome-border pb-[var(--safe-bottom)]"
     >
+      {/* Scroll edge: content fades into the bar instead of colliding with a
+          hard rule (apple.md §12). Sits just above the material, decorative
+          only, and is the reason the bar can be translucent without the last
+          feed row reading as clipped. */}
+      <div
+        aria-hidden
+        className="scroll-edge pointer-events-none absolute inset-x-0 bottom-full h-6"
+      />
       <div className="mx-auto flex h-[var(--dock-h)] max-w-md items-stretch">
         {items.map(({ href, label, icon: Icon }) => {
           const active = activeHref === href;
@@ -92,45 +193,96 @@ export function FloatingDock({
               }}
               aria-label={badge ? `${label}, ${badge} unread` : label}
               aria-current={active ? "page" : undefined}
-              className="flex flex-1 flex-col items-center justify-center gap-1 transition-transform duration-150 active:scale-90 focus-visible:outline-none"
+              // `min-w-0` is what actually makes the six tabs equal. `flex-1`
+              // alone still honours each item's automatic minimum size, so at
+              // 320px "Community" — the longest label — refused to shrink and
+              // took 19.6% of the bar while the other five were squeezed to
+              // 16.1%. With the minimum released, every tab is exactly 1/6 at
+              // every width.
+              className="pressable focus-ring flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl"
             >
-              <span
-                className={cn(
-                  "relative flex h-7 w-11 items-center justify-center rounded-xl transition-colors",
-                  active && "bg-accent/15"
-                )}
-              >
+              {/* A 28px glyph box, not the old 44px one. The tap target comes
+                  from this Link (full dock height x one sixth of the width),
+                  so the box only has to be as wide as the glyph — and once it
+                  is, the unread badge hangs off the ICON's corner instead of
+                  floating 10px away from it in dead space. */}
+              <span className="relative flex h-7 w-7 items-center justify-center">
                 {/* UAT-005: the "Me" tab shows the user's dp instead of a
                     generic person icon. Falls back to the icon if no avatar. */}
                 {href === "/profile" && avatarUrl ? (
+                  // The avatar is the icon, so there is no outline-to-solid
+                  // move available here; the active signal is a thin purple
+                  // ring instead — one of the two purples left in the dock.
+                  // The ring is drawn on a 26px box around a 22px photo, so
+                  // there is 2px of air between the two and the photo itself
+                  // never changes size between states (a resizing avatar
+                  // would make every tab switch jiggle).
                   <span
                     className={cn(
-                      "relative block h-[24px] w-[24px] overflow-hidden rounded-full ring-2",
-                      active ? "ring-accent" : "ring-transparent"
+                      "flex h-[26px] w-[26px] items-center justify-center rounded-full transition-shadow duration-150",
+                      active ? "ring-[1.5px] ring-accent" : "ring-0"
                     )}
                   >
-                    <AppImage src={avatarUrl} alt="" sizes="24px" />
+                    <span
+                      className={cn(
+                        "relative block h-[22px] w-[22px] overflow-hidden rounded-full",
+                        // A hairline edge on the inactive avatar, so a dark
+                        // profile photo does not dissolve into a dark bar.
+                        !active && "ring-1 ring-white/10"
+                      )}
+                    >
+                      <AppImage src={avatarUrl} alt="" sizes="22px" />
+                    </span>
                   </span>
                 ) : (
-                  <Icon
-                    className={cn(
-                      "h-[22px] w-[22px]",
-                      active ? "text-accent" : "text-fg-muted"
-                    )}
-                    strokeWidth={active ? 2.4 : 1.9}
-                    aria-hidden
-                  />
+                  (() => {
+                    const g = ACTIVE_GLYPH[href];
+                    // A hand-authored glyph is used only where lucide's own
+                    // icon cannot express the state; everything without an
+                    // override falls through to the real lucide icon, so the
+                    // two states stay the same drawing.
+                    const Shape = (active ? g?.solid : g?.outline) || Icon;
+                    const size = active ? (g?.size ?? 22) : 22;
+                    return (
+                      <Shape
+                        className={cn(
+                          "transition-colors duration-150",
+                          active ? cn("text-fg", g?.fill) : "text-fg-muted"
+                        )}
+                        style={{ width: size, height: size }}
+                        strokeWidth={active ? (g?.stroke ?? 1.5) : 1.8}
+                        aria-hidden
+                      />
+                    );
+                  })()
                 )}
                 {badge > 0 && (
-                  <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[9px] font-bold text-white">
+                  <span className="absolute -right-1.5 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[9px] font-bold text-white">
                     {badge > 9 ? "9+" : badge}
                   </span>
                 )}
               </span>
+              {/*
+                Inactive is `fg-muted`, not `fg-subtle`: subtle is dark enough
+                against the bar to fall under 4.5:1, and the brief asks for a
+                medium grey that still names every destination clearly. Active
+                gains weight and full contrast — and nothing else. No purple,
+                no size jump.
+
+                The size is fluid rather than the flat 11px of `type-footnote`.
+                Once every tab is a true sixth of the bar, a 320px screen gives
+                each label 53.3px, and "Community" — the longest of the six —
+                measures 62.6px at 11px. Labels are never hidden or truncated
+                here, so the type gives way instead: 11px from 390px up (the
+                design size), easing to 9px on the narrowest phone we support,
+                where the same word measures 51.4px and fits with room to
+                spare.
+              */}
               <span
                 className={cn(
-                  "text-[11px] leading-none",
-                  active ? "font-semibold text-accent" : "text-fg-muted"
+                  "text-[clamp(0.55rem,2.8vw,0.6875rem)] leading-[1.2] tracking-[0.01em]",
+                  "transition-colors duration-150",
+                  active ? "font-semibold text-fg" : "font-medium text-fg-muted"
                 )}
               >
                 {label}
