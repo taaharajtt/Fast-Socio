@@ -110,7 +110,7 @@ async function SocioSection({
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div>
           {rows.map((req) => (
             <HelpCard key={req.id} req={req} />
           ))}

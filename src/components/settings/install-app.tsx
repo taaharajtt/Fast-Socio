@@ -76,7 +76,7 @@ export function InstallApp() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-fill text-fg-muted">
           <Smartphone className="h-5 w-5" aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
@@ -88,13 +88,17 @@ export function InstallApp() {
         {/* A real Install button ONLY where a tap really installs. Every other
             state gets a button that promises directions and delivers them. */}
         {state.kind === "native" ? (
-          <GlassButton size="sm" onClick={install} disabled={busy}>
+          // The one purple control on an otherwise monochrome Settings screen.
+          // Installing is the thing this product most wants you to do, and it
+          // is a brand moment rather than a utility action — the toggles and
+          // navigation rows around it stay neutral precisely so this one reads.
+          <GlassButton size="sm" variant="brand" onClick={install} disabled={busy}>
             {busy ? "Opening…" : "Install"}
           </GlassButton>
         ) : (
           <GlassButton
             size="sm"
-            variant="glass"
+            variant="secondary"
             onClick={() => setOpen((v) => !v)}
             aria-expanded={open}
           >

@@ -66,6 +66,49 @@ export const KIND_CAPSULE: Record<SwipeCardKind, string> = {
 };
 
 /**
+ * Per-intent colour, used on the "Post to Discover" picker.
+ *
+ * Every intent tile used to carry the same purple glyph, so the five options
+ * were distinguishable only by reading their labels — the grid had no shape a
+ * returning user could aim at. Giving each kind a fixed hue makes "the orange
+ * one" a real way to find Project Partner on your second visit (apple.md §16 —
+ * familiarity and predictability), and the colours stay confined to a 40px
+ * glyph well so the screen still reads as one palette.
+ *
+ * Full class strings, not interpolated fragments: Tailwind only emits classes
+ * it can find as literal text at build time.
+ */
+export type KindTint = { well: string; icon: string; ring: string };
+
+export const KIND_TINT: Record<IntentKind, KindTint> = {
+  project_partner: {
+    well: "bg-[#f9731f]/12",
+    icon: "text-[#fb923c]",
+    ring: "ring-[#fb923c]/35",
+  },
+  hackathon_team: {
+    well: "bg-[#7c3aed]/15",
+    icon: "text-[#a78bfa]",
+    ring: "ring-[#a78bfa]/35",
+  },
+  sports: {
+    well: "bg-[#f43f5e]/12",
+    icon: "text-[#fb7185]",
+    ring: "ring-[#fb7185]/35",
+  },
+  recruitment: {
+    well: "bg-[#3b82f6]/12",
+    icon: "text-[#60a5fa]",
+    ring: "ring-[#60a5fa]/35",
+  },
+  fyp_teammate: {
+    well: "bg-[#22c55e]/12",
+    icon: "text-[#4ade80]",
+    ring: "ring-[#4ade80]/35",
+  },
+};
+
+/**
  * What a right swipe MEANS on this card, in the card's own words. The deck
  * shows it so the gesture is never ambiguous — you always know whether you're
  * liking a person or applying to a thing.

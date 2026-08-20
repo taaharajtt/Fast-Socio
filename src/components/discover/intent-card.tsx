@@ -13,9 +13,9 @@ import {
   Sparkles,
   Tags,
   Users,
-  Zap,
   type LucideIcon,
 } from "lucide-react";
+import { AuraIcon } from "@/components/ui/aura-icon";
 import { AppImage } from "@/components/ui/app-image";
 import { VerifiedBadge } from "@/components/ui";
 import { semesterLabel } from "@/lib/profile/constants";
@@ -100,7 +100,7 @@ export function IntentCardBody({
         </div>
         {post.authorAura > 0 && (
           <span className="flex shrink-0 items-center gap-1 rounded-full bg-black/30 px-2 py-1">
-            <Zap className="h-3 w-3 text-gold-text" aria-hidden />
+            <AuraIcon className="h-3 w-3 text-gold-text" tone="inherit" />
             <span className="text-[11px] font-semibold text-gold-text">
               {post.authorAura.toLocaleString()}
             </span>
@@ -116,11 +116,11 @@ export function IntentCardBody({
   );
 
   return (
-    <div className="relative h-full w-full rounded-3xl bg-gradient-to-br from-accent/70 via-aura/30 to-transparent p-[1.5px] shadow-[0_0_32px_-8px_rgba(124,58,237,0.35)]">
+    <div className="relative h-full w-full rounded-[var(--radius-xl)] bg-glass-border p-px">
       <div className="relative flex h-full w-full flex-col overflow-hidden rounded-[22px] bg-card">
         {/* Type capsule — the first thing you read on every card in the deck. */}
         <div className="flex items-center justify-between px-5 pt-5">
-          <span className="gradient-brand inline-flex items-center gap-1.5 rounded-full py-1 pl-1 pr-3 text-[11px] font-bold uppercase tracking-wide text-white shadow-[0_2px_10px_-2px_rgba(124,58,237,0.6)]">
+          <span className="gradient-brand inline-flex items-center gap-1.5 rounded-full py-1 pl-1 pr-3 text-[11px] font-bold uppercase tracking-wide text-white">
             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20">
               <Icon className="h-3 w-3" aria-hidden />
             </span>
@@ -160,7 +160,7 @@ export function IntentCardBody({
                       target="_blank"
                       rel="noopener noreferrer nofollow"
                       onPointerDownCapture={(e) => e.stopPropagation()}
-                      className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-aura"
+                      className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-fg-muted"
                     >
                       <ExternalLink className="h-3.5 w-3.5" aria-hidden />
                       Hackathon site
@@ -175,12 +175,12 @@ export function IntentCardBody({
                 <div className="flex flex-wrap items-center gap-2">
                   {post.semester != null && (
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-3 py-1 text-[12px] font-semibold text-fg">
-                      <CalendarClock className="h-3.5 w-3.5 text-aura" aria-hidden />
+                      <CalendarClock className="h-3.5 w-3.5 text-fg-muted" aria-hidden />
                       {semesterLabel(post.semester)}
                     </span>
                   )}
                   {post.degree && (
-                    <span className="gradient-brand inline-flex items-center gap-1 rounded-full px-3 py-1 text-[12px] font-bold text-white">
+                    <span className="type-caption inline-flex items-center gap-1 rounded-full bg-fill px-3 py-1 font-semibold text-fg">
                       {post.degree}
                     </span>
                   )}
@@ -188,7 +188,7 @@ export function IntentCardBody({
               )}
               {post.courseCode && (
                 <p className="flex items-center gap-1.5 text-[13px] font-medium text-fg-muted">
-                  <BookOpen className="h-3.5 w-3.5 text-aura" aria-hidden />
+                  <BookOpen className="h-3.5 w-3.5 text-fg-muted" aria-hidden />
                   Course: {post.courseCode}
                 </p>
               )}
@@ -219,14 +219,14 @@ export function IntentCardBody({
                   target="_blank"
                   rel="noopener noreferrer nofollow"
                   onPointerDownCapture={(e) => e.stopPropagation()}
-                  className="gradient-brand inline-flex w-fit items-center gap-1.5 rounded-full px-4 py-2 text-[13px] font-bold text-white shadow-[0_2px_10px_-2px_rgba(124,58,237,0.6)]"
+                  className="type-caption inline-flex w-fit items-center gap-1.5 rounded-[10px] bg-emphasis px-4 py-2 font-semibold text-emphasis-fg"
                 >
                   Apply via Form <ExternalLink className="h-3.5 w-3.5" aria-hidden />
                 </a>
               )}
               {post.deadline && (
                 <p className="flex items-center gap-1.5 text-[13px] font-medium text-fg-muted">
-                  <CalendarClock className="h-3.5 w-3.5 text-aura" aria-hidden />
+                  <CalendarClock className="h-3.5 w-3.5 text-fg-muted" aria-hidden />
                   Apply by {formatWhen(post.deadline)}
                 </p>
               )}
@@ -246,13 +246,13 @@ export function IntentCardBody({
                 <div className="flex flex-wrap gap-3 text-[13px] font-medium">
                   {post.place && (
                     <span className="inline-flex items-center gap-1.5">
-                      <MapPin className="h-3.5 w-3.5 text-aura" aria-hidden />
+                      <MapPin className="h-3.5 w-3.5 text-fg-muted" aria-hidden />
                       {post.place}
                     </span>
                   )}
                   {post.scheduledAt && (
                     <span className="inline-flex items-center gap-1.5">
-                      <CalendarClock className="h-3.5 w-3.5 text-aura" aria-hidden />
+                      <CalendarClock className="h-3.5 w-3.5 text-fg-muted" aria-hidden />
                       {formatWhen(post.scheduledAt)}
                     </span>
                   )}
@@ -263,7 +263,7 @@ export function IntentCardBody({
                 <Link
                   href={`/map?place=${encodeURIComponent(post.placeId ?? mapPlace?.id ?? post.place)}`}
                   onPointerDownCapture={(e) => e.stopPropagation()}
-                  className="inline-flex w-fit items-center gap-1.5 rounded-full bg-white/[0.06] px-3 py-1.5 text-[13px] font-semibold text-aura"
+                  className="type-caption inline-flex w-fit items-center gap-1.5 rounded-full bg-fill px-3 py-1.5 font-semibold text-fg-muted"
                 >
                   <MapPin className="h-3.5 w-3.5" aria-hidden />
                   Show on map 📍
@@ -293,7 +293,7 @@ export function IntentCardBody({
               target="_blank"
               rel="noopener noreferrer nofollow"
               onPointerDownCapture={(e) => e.stopPropagation()}
-              className="inline-flex w-fit items-center gap-1 text-xs font-medium text-aura"
+              className="inline-flex w-fit items-center gap-1 text-xs font-medium text-fg-muted"
             >
               <ExternalLink className="h-3.5 w-3.5" aria-hidden />
               {post.mode === "contributor" ? "Portfolio" : "Event page"}
@@ -304,7 +304,7 @@ export function IntentCardBody({
 
           {/* What a right swipe means here — never leave the gesture ambiguous. */}
           <p className="flex items-center justify-center gap-1.5 text-center text-[12px] font-semibold text-fg-disabled">
-            <Sparkles className="h-3.5 w-3.5 text-aura/70" aria-hidden />
+            <Sparkles className="h-3.5 w-3.5 text-fg-subtle" aria-hidden />
             {SWIPE_CTA[card.kind]}
           </p>
         </div>

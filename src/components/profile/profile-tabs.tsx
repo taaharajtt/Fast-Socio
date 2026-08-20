@@ -4,6 +4,11 @@ import { useState } from "react";
 import Link from "next/link";
 import { Award, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  tabListClass,
+  tabTriggerClass,
+  TAB_INDICATOR_CLASS,
+} from "@/components/ui/tab-style";
 import { PostCard } from "@/components/feed/post-card";
 import { levelProgress } from "@/lib/aura/levels";
 import {
@@ -74,7 +79,7 @@ export function ProfileTabs({
   return (
     <div>
       {showTabBar ? (
-        <div className="mb-4 flex border-b border-white/[0.08]">
+        <div className={cn(tabListClass(), "mb-5")}>
           {available.map((value) => {
             const active = tab === value;
             return (
@@ -84,15 +89,10 @@ export function ProfileTabs({
                 role="tab"
                 aria-selected={active}
                 onClick={() => setTab(value)}
-                className={cn(
-                  "relative flex flex-1 items-center justify-center pb-3 text-center text-[16px] font-semibold transition-colors",
-                  active ? "text-fg" : "text-fg-muted hover:text-fg"
-                )}
+                className={tabTriggerClass(active)}
               >
                 {TAB_LABEL[value]}
-                {active && (
-                  <span className="absolute inset-x-0 -bottom-px h-[3px] rounded-full bg-accent" />
-                )}
+                {active && <span className={TAB_INDICATOR_CLASS} />}
               </button>
             );
           })}
@@ -194,7 +194,7 @@ function StatsPanel({ stats }: { stats: ProfileStats }) {
         href="/profile/badges"
         className="glass flex items-center gap-3 rounded-[var(--radius-md)] p-3"
       >
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-fill text-fg-muted">
           <Award className="h-5 w-5" aria-hidden />
         </span>
         <div className="min-w-0 flex-1">

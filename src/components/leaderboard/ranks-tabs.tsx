@@ -2,8 +2,14 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowUp, Zap } from "lucide-react";
+import { CalendarDays, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  tabListClass,
+  tabTriggerClass,
+  TAB_INDICATOR_CLASS,
+} from "@/components/ui/tab-style";
+import { AuraIcon } from "@/components/ui/aura-icon";
 import { AppImage } from "@/components/ui/app-image";
 import { resolveAvatarUrl } from "@/lib/avatar";
 import { SkeletonRow } from "@/components/ui/skeleton";
@@ -14,11 +20,14 @@ import {
   type LeaderboardPeriod,
 } from "@/app/(student)/leaderboard/actions";
 
-const PERIODS: { key: LeaderboardPeriod; label: string }[] = [
-  { key: "weekly", label: "Weekly" },
-  { key: "monthly", label: "Monthly" },
-  { key: "alltime", label: "All-Time" },
+const PERIODS: { key: LeaderboardPeriod; label: string; span: string }[] = [
+  { key: "weekly", label: "Weekly", span: "This week" },
+  { key: "monthly", label: "Monthly", span: "This month" },
+  { key: "alltime", label: "All-Time", span: "All time" },
 ];
+
+const periodSpan = (p: LeaderboardPeriod) =>
+  PERIODS.find((x) => x.key === p)?.span ?? "This week";
 
 /**
  * Shows a shimmer for a short beat after a tab change so switching feels smooth
@@ -83,7 +92,7 @@ export function RanksTabs({
   return (
     <>
       {/* Underlined text tabs (Leaderboard refresh). */}
-      <div className="mb-5 flex border-b border-white/[0.08]">
+      <div className={cn(tabListClass(), "mb-6")}>
         <Tab active={tab === "students"} onClick={() => setTab("students")}>
           Leaderboard
         </Tab>
@@ -121,16 +130,10 @@ function Tab({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={cn(
-        "relative flex-1 pb-3 text-center text-[17px] font-semibold transition-colors",
-        active ? "text-fg" : "text-fg-muted hover:text-fg"
-      )}
+      className={tabTriggerClass(active)}
     >
       {children}
-      {/* Purple underline for the active tab, sitting on top of the hairline. */}
-      {active && (
-        <span className="absolute inset-x-0 -bottom-px h-[3px] rounded-full bg-accent" />
-      )}
+      {active && <span className={TAB_INDICATOR_CLASS} />}
     </button>
   );
 }
@@ -167,24 +170,7 @@ function StudentSection({
 
   return (
     <>
-      <div className="mb-4 flex gap-1.5">
-        {PERIODS.map((p) => (
-          <button
-            key={p.key}
-            type="button"
-            onClick={() => select(p.key)}
-            aria-pressed={period === p.key}
-            className={cn(
-              "rounded-full px-4 py-2 text-[15px] font-semibold transition-all active:scale-95",
-              period === p.key
-                ? "gradient-brand text-white shadow-[0_4px_16px_rgba(124,58,237,0.4)]"
-                : "text-fg-muted hover:text-fg"
-            )}
-          >
-            {p.label}
-          </button>
-        ))}
-      </div>
+      <PeriodPicker period={period} onSelect={select} />
 
       {loading ? (
         <div className="space-y-2">
@@ -208,12 +194,7 @@ function StudentBoard({
   meId: string;
   period: LeaderboardPeriod;
 }) {
-  const span =
-    period === "monthly"
-      ? "this month"
-      : period === "alltime"
-        ? "all time"
-        : "this week";
+  const span = periodSpan(period).toLowerCase();
   if (rows.length === 0) {
     return (
       <p className="rounded-[14px] bg-card p-6 text-center text-sm text-fg-muted">
@@ -223,13 +204,7 @@ function StudentBoard({
   }
   return (
     <>
-      {/* Always "Top 10" — the label is about rank (1..10), not row count.
-          Ties can make `rows.length` exceed 10 (e.g. two people sharing #10),
-          so counting rows here would misleadingly read "Top 13". */}
-      <p className="mb-1 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-disabled">
-        Top 10 {span}
-      </p>
-      <div className="divide-y divide-white/[0.06]">
+      <div>
         {rows.map((r) => {
           const medal = MEDAL[r.rank];
           const title = LEADERBOARD_TITLES[r.rank]?.title;
@@ -242,7 +217,7 @@ function StudentBoard({
               href={isMe ? "/profile" : `/profile/${r.user_id}`}
               className={cn(
                 "flex items-center gap-3.5 py-3.5 transition-transform active:scale-[0.99]",
-                isMe && "-mx-2 rounded-[12px] bg-accent/[0.10] px-2"
+                isMe && "-mx-2 rounded-[10px] bg-fill px-2"
               )}
             >
               <span
@@ -287,7 +262,7 @@ function StudentBoard({
               </div>
 
               <span className="flex shrink-0 items-center gap-1 text-[17px] font-semibold text-gold">
-                <Zap className="h-4 w-4" aria-hidden />
+                <AuraIcon className="h-4 w-4" />
                 {r.weekly_aura.toLocaleString()}
               </span>
             </Link>
@@ -312,6 +287,8 @@ const DEPT_RANK: Record<
     pill: string | null;
   }
 > = {
+  // `border` is no longer used for a container — the rows have no frames. It is
+  // kept on the type so the badge/accent/pill triple stays one table.
   1: { border: "#D97706", badge: "#D97706", accent: "#F59E0B", pill: "Current Leader" },
   2: { border: "rgba(148,163,184,0.30)", badge: "#9CA3AF", accent: null, pill: "Runner-Up" },
   3: { border: "#F97316", badge: "#F97316", accent: "#F97316", pill: null },
@@ -341,16 +318,6 @@ function ContributorRow({ d }: { d: DeptRow }) {
   );
 }
 
-function WeeklyChange({ value }: { value: number }) {
-  if (value <= 0) return null;
-  return (
-    <span className="flex shrink-0 items-center gap-1 text-[13px] font-semibold text-success">
-      <ArrowUp className="h-3.5 w-3.5" aria-hidden />+{value.toLocaleString()} this
-      week
-    </span>
-  );
-}
-
 function DepartmentBoard({ rows }: { rows: DeptRow[] }) {
   if (rows.length === 0) {
     return (
@@ -360,117 +327,80 @@ function DepartmentBoard({ rows }: { rows: DeptRow[] }) {
     );
   }
 
-  const top3 = rows.slice(0, 3);
+  /*
+    One row shape for every rank.
+
+    This was three different layouts: a 2xl "hero" card for #1 with a glowing
+    orange border, a differently-arranged card for #2, and a third variant for
+    #3 — so the eye had to re-learn where the Aura number lived on each row, and
+    the department that happened to be winning got a light-emitting box around
+    it. Ranking is a comparison, and a comparison only works when the things
+    being compared are laid out identically (apple.md 16: things that look the
+    same must behave the same, and live in the same place).
+
+    Rank now reads from position, the numbered badge, and a single accent on the
+    Aura figure — not from the container. The frames are gone; hairlines
+    separate the rows, the same way the student leaderboard above does it.
+  */
   return (
-    <div className="space-y-3">
-      {top3.map((d, i) =>
-        i === 0 ? (
-          <LeaderCard key={d.department} d={d} />
-        ) : (
-          <DeptCard key={d.department} d={d} rank={i + 1} />
-        )
-      )}
+    <div>
+      {rows.slice(0, 3).map((d, i) => (
+        <DeptRowItem key={d.department} d={d} rank={i + 1} />
+      ))}
     </div>
   );
 }
 
-/** Rank-1 hero card. */
-function LeaderCard({ d }: { d: DeptRow }) {
+function DeptRowItem({ d, rank }: { d: DeptRow; rank: number }) {
   const m = deptMeta(d.department);
-  const r = DEPT_RANK[1];
+  const r = DEPT_RANK[rank];
   return (
-    <div
-      className="rounded-2xl bg-card p-5"
-      style={{
-        border: `2px solid ${r.border}`,
-        boxShadow: "0 8px 36px rgba(217,119,6,0.26)",
-      }}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <RankBadge rank={1} />
+    <div className="py-5">
+      {/*
+        Rank badge and standing pill only. The green "+N this week" delta that
+        used to sit here restated the number already shown at full size on the
+        right, under a scope the tab itself declares — three ways of saying one
+        thing, and the only green on a screen whose colour is otherwise reserved
+        for rank (apple.md 16: accent colours have jobs).
+      */}
+      <div className="flex items-center gap-2.5">
+        <RankBadge rank={rank} />
+        {r.pill && (
           <span
-            className="rounded-full px-3 py-1 text-[13px] font-bold text-white"
+            className="rounded-full px-3 py-1 type-caption font-bold text-white"
             style={{ backgroundColor: r.badge }}
           >
             {r.pill}
           </span>
-        </div>
-        <div className="text-right">
-          <p
-            className="text-[32px] font-black leading-none"
-            style={{ color: r.accent ?? undefined }}
-          >
-            {d.total_aura.toLocaleString()}
-          </p>
-          <p className="mt-1 text-xs text-fg-muted">Total Aura</p>
-        </div>
+        )}
       </div>
 
       <div className="mt-3 flex items-end justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[32px] font-black leading-none text-fg">{m.abbr}</p>
-          <p className="mt-1.5 truncate text-[15px] text-fg-muted">
-            {d.department}
-          </p>
-        </div>
-        <WeeklyChange value={d.weekly_change} />
-      </div>
-
-      <div className="my-4 h-px bg-white/[0.06]" />
-      <ContributorRow d={d} />
-    </div>
-  );
-}
-
-/** Compact card for ranks 2 and 3. */
-function DeptCard({ d, rank }: { d: DeptRow; rank: number }) {
-  const m = deptMeta(d.department);
-  const r = DEPT_RANK[rank];
-  return (
-    <div
-      className="rounded-2xl bg-card p-4"
-      style={{ border: `2px solid ${r.border}` }}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <RankBadge rank={rank} />
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <p className="text-[22px] font-black leading-none text-fg">
-                {m.abbr}
-              </p>
-              {r.pill && (
-                <span className="rounded-full bg-[#64748B] px-2.5 py-0.5 text-[12px] font-bold text-white">
-                  {r.pill}
-                </span>
-              )}
-            </div>
-            <p className="mt-1 truncate text-[14px] text-fg-muted">
-              {d.department}
-            </p>
-          </div>
+          <p className="text-[30px] font-black leading-none text-fg">{m.abbr}</p>
+          {/* No truncation: "Fast School of Managem…" told the reader nothing
+              the abbreviation above it hadn't already said. It wraps instead. */}
+          <p className="type-callout mt-1.5 text-fg-muted">{d.department}</p>
         </div>
         <div className="shrink-0 text-right">
           <p
-            className="flex items-center justify-end gap-1 text-[24px] font-black leading-none"
+            className="flex items-center justify-end gap-1 text-[28px] font-black leading-none"
             style={{ color: r.accent ?? undefined }}
           >
-            <Zap
-              className={cn("h-4 w-4", !r.accent && "text-fg-muted")}
-              aria-hidden
+            <AuraIcon
+              className="h-5 w-5"
+              tone={r.accent ? "inherit" : "gold"}
             />
             <span className={r.accent ? undefined : "text-fg"}>
               {d.total_aura.toLocaleString()}
             </span>
           </p>
-          <p className="mt-1 text-xs text-fg-muted">Total Aura</p>
+          <p className="type-caption mt-1 text-fg-muted">Total Aura</p>
         </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-between gap-3">
+      <div className="mt-3">
         <ContributorRow d={d} />
-        <WeeklyChange value={d.weekly_change} />
       </div>
     </div>
   );
@@ -483,12 +413,104 @@ function AvatarStack({ urls }: { urls: string[] }) {
       {urls.slice(0, 4).map((u, i) => (
         <div
           key={i}
-          className="relative h-7 w-7 overflow-hidden rounded-full bg-bg-elevated ring-2 ring-card"
+          className="relative h-7 w-7 overflow-hidden rounded-full bg-bg-elevated ring-2 ring-bg"
           style={{ marginLeft: i === 0 ? 0 : -8, zIndex: 4 - i }}
         >
           <AppImage src={u} alt="" sizes="28px" />
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * The scope control: "Top 10 · This week", with a menu for the other periods.
+ *
+ * This replaces a row of three filled pills sitting directly above a
+ * `TOP 10 THIS WEEK` caps label — two elements saying the same thing, one of
+ * them the third-largest block of purple on the screen. Collapsing them into a
+ * single line means the scope is stated once, in the place you would change it
+ * (apple.md §16 — place a control next to what it affects; §6 — adding context
+ * can simplify).
+ *
+ * Closed by a click anywhere outside and by Escape, so it never traps focus.
+ */
+function PeriodPicker({
+  period,
+  onSelect,
+}: {
+  period: LeaderboardPeriod;
+  onSelect: (p: LeaderboardPeriod) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: PointerEvent) {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative mb-3">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className="pressable focus-ring -ml-2 flex items-center gap-2 rounded-lg px-2 py-2 type-callout"
+      >
+        <CalendarDays className="h-[18px] w-[18px] text-fg-muted" aria-hidden />
+        <span className="text-fg-muted">Top 10</span>
+        <span aria-hidden className="text-fg-disabled">
+          ·
+        </span>
+        <span className="font-semibold text-fg">{periodSpan(period)}</span>
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 text-fg-muted transition-transform duration-200",
+            open && "rotate-180"
+          )}
+          aria-hidden
+        />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="material-panel absolute left-0 top-full z-30 mt-1 min-w-[11rem] overflow-hidden rounded-[12px] border border-glass-border"
+        >
+          {PERIODS.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              role="menuitemradio"
+              aria-checked={p.key === period}
+              onClick={() => {
+                onSelect(p.key);
+                setOpen(false);
+              }}
+              className={cn(
+                "pressable flex w-full items-center justify-between gap-4 px-3.5 py-2.5 text-left type-callout",
+                p.key === period ? "font-semibold text-fg" : "text-fg-muted"
+              )}
+            >
+              {p.label}
+              {p.key === period && <span aria-hidden>✓</span>}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

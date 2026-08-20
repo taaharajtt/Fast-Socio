@@ -83,7 +83,7 @@ export default function AuthCallbackPage() {
 
   return (
     <main className="flex w-full max-w-sm flex-col items-center text-center">
-      <div className="flex h-16 w-16 items-center justify-center rounded-[18px] gradient-brand text-[28px] shadow-[0_12px_32px_rgba(124,58,237,0.5)]">
+      <div className="flex h-16 w-16 items-center justify-center rounded-[18px] gradient-brand text-[28px]">
         ⚡
       </div>
       <p className="mt-6 text-[15px] text-fg-muted">

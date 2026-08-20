@@ -2,6 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import {
+  tabListClass,
+  tabTriggerClass,
+  TAB_INDICATOR_CLASS,
+} from "@/components/ui/tab-style";
 
 export type SpaceShellTab = {
   key: string;
@@ -64,7 +69,7 @@ export function SpaceShell({
         <div
           role="tablist"
           className={cn(
-            "flex shrink-0 border-b border-white/[0.08]",
+            tabListClass(), "shrink-0",
             scrolls && "no-scrollbar overflow-x-auto overscroll-x-contain"
           )}
         >
@@ -78,19 +83,19 @@ export function SpaceShell({
                 aria-selected={isActive}
                 onClick={() => setActive(tab.key)}
                 className={cn(
-                  "relative flex items-center justify-center gap-1.5 whitespace-nowrap pb-3 text-center text-[15px] font-semibold transition-colors",
-                  scrolls ? "shrink-0 px-4" : "flex-1",
-                  isActive ? "text-fg" : "text-fg-muted hover:text-fg"
+                  tabTriggerClass(isActive, !scrolls),
+                  "whitespace-nowrap",
+                  scrolls && "shrink-0 px-4"
                 )}
               >
                 {tab.label}
                 {tab.badge ? (
-                  <span className="gradient-brand rounded-full px-1.5 text-xs text-white">
+                  <span className="rounded-full bg-accent px-1.5 text-xs text-white">
                     {tab.badge}
                   </span>
                 ) : null}
                 {isActive && (
-                  <span className="absolute inset-x-0 -bottom-px h-[3px] rounded-full bg-accent" />
+                  <span className={TAB_INDICATOR_CLASS} />
                 )}
               </button>
             );

@@ -8,10 +8,11 @@ import {
   useTransform,
   type PanInfo,
 } from "framer-motion";
-import { Heart, X, MessageCircle, RotateCcw, Flag, Info, Zap, Check } from "lucide-react";
+import { Heart, X, MessageCircle, RotateCcw, Flag, Info, Check } from "lucide-react";
 import { GlassButton, GlassChip, GlassSheet, GlassInput } from "@/components/ui";
 import { MotionReduced } from "@/components/ui/motion-reduced";
 import { VerifiedBadge } from "@/components/ui";
+import { AuraIcon } from "@/components/ui/aura-icon";
 import { cn } from "@/lib/utils";
 import { AppImage } from "@/components/ui/app-image";
 import { resolveAvatarUrl } from "@/lib/avatar";
@@ -219,12 +220,14 @@ export function SwipeDeck({ initial }: { initial: DiscoverSwipeCard[] }) {
 
   return (
     <MotionReduced>
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        {/* The aspect ratio is the ONLY thing that sizes the card stack. There
-            used to be a `flex-1` here too, which was inert only because no
-            ancestor had a definite height — the moment the shell became a real
-            flex column it started winning over the ratio, stretching the stack
-            until the action row below was pushed off screen. */}
+      {/* `justify-center` is the composition fix: the card is sized by its
+         aspect ratio, so on anything taller than an SE the leftover space all
+         collected BELOW the action row and the whole screen sat high, with a
+         band of nothing above the dock. Centring splits that slack above and
+         below, so the card floats in the viewport and the controls sit under
+         it with matching air on both sides. On short phones there is no slack
+         to split and this is inert — the ratio still shrinks as before. */}
+      <div className="relative flex min-h-0 flex-1 flex-col justify-center">
         {/* The aspect ratio is the ONLY thing that sizes the card stack. There
             used to be a `flex-1` here too, which was inert only because no
             ancestor had a definite height — the moment the shell became a real
@@ -298,15 +301,27 @@ export function SwipeDeck({ initial }: { initial: DiscoverSwipeCard[] }) {
           </AnimatePresence>
         </div>
 
-        {/* Action row (UISpec V3 Screen 5): Pass 56 · Message 56 · Like 64 (glow).
-            On an intent card the middle button opens details instead of a DM —
-            you can't message someone before they accept. */}
-        <div className="mt-5 flex items-center justify-center gap-6">
+        {/*
+          Action row: Pass · Message · Like. On an intent card the middle button
+          opens details instead of a DM — you can't message someone before they
+          accept.
+
+          Like was a solid accent disc with a coloured halo, which made it the
+          brightest object on the screen — brighter than the photograph it is a
+          verdict on. It rests as a neutral off-white RING and turns FILLED
+          PURPLE only while you are pressing it: the heart carries the verdict,
+          the disc does not light up around it. Still unmistakably the
+          affirmative and still the largest target, but it frames the decision
+          instead of shouting it. Pass and Message sit on a neutral fill so the
+          only hue down here belongs to the one control that means "yes"
+          (apple.md §16 — accent colours have jobs).
+        */}
+        <div className="mt-7 flex items-center justify-center gap-6">
           <button
             type="button"
             aria-label="Pass"
             onClick={() => act(top, "pass")}
-            className="flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-card text-fg-muted transition-all hover:text-fg active:scale-90"
+            className="pressable focus-ring flex h-14 w-14 items-center justify-center rounded-full bg-fill text-fg-muted hover:text-fg"
           >
             <X className="h-6 w-6" aria-hidden />
           </button>
@@ -316,22 +331,29 @@ export function SwipeDeck({ initial }: { initial: DiscoverSwipeCard[] }) {
             onClick={() =>
               topIsSocio ? setSheetFor(top.profile) : setDetailFor(top)
             }
-            className="flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-card text-fg-muted transition-all hover:text-fg active:scale-90"
+            className="pressable focus-ring flex h-14 w-14 items-center justify-center rounded-full bg-fill text-fg-muted hover:text-fg"
           >
             {topIsSocio ? (
-              <MessageCircle className="h-5 w-5" aria-hidden />
+              <MessageCircle className="h-6 w-6" aria-hidden />
             ) : (
-              <Info className="h-5 w-5" aria-hidden />
+              <Info className="h-6 w-6" aria-hidden />
             )}
           </button>
           <button
             type="button"
             aria-label={topIsSocio ? "Like" : "Request"}
             onClick={() => act(top, "like")}
-            className="flex h-16 w-16 items-center justify-center rounded-full bg-accent text-white shadow-[0_8px_24px_rgba(124,58,237,0.5)] transition-all hover:bg-accent-light active:scale-90"
+            className={cn(
+              "group pressable focus-ring flex h-16 w-16 items-center justify-center rounded-full",
+              "border-2 border-emphasis text-emphasis",
+              "active:border-accent active:bg-accent/10 active:text-accent"
+            )}
           >
             {topIsSocio ? (
-              <Heart className="h-7 w-7" aria-hidden />
+              <Heart
+                className="h-7 w-7 group-active:fill-current"
+                aria-hidden
+              />
             ) : (
               <Check className="h-7 w-7" aria-hidden />
             )}
@@ -439,7 +461,7 @@ function StackedCard({ card, index }: { card: DiscoverSwipeCard; index: number }
           zIndex: -index,
         }}
       >
-        <div className="h-full w-full rounded-3xl bg-card" />
+        <div className="h-full w-full rounded-[var(--radius-xl)] bg-card" />
       </div>
     </div>
   );
@@ -471,10 +493,9 @@ function ProfileCardBody({
   profile: DiscoverProfile;
   children?: React.ReactNode;
 }) {
-  const firstName = profile.full_name?.split(" ")[0] ?? "Student";
   const shared = new Set(profile.shared_interests ?? []);
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-3xl bg-card">
+    <div className="relative h-full w-full overflow-hidden rounded-[var(--radius-xl)] bg-card">
       {resolveAvatarUrl(profile.avatar_url, profile.gender) ? (
         <AppImage
           src={resolveAvatarUrl(profile.avatar_url, profile.gender)!}
@@ -489,28 +510,40 @@ function ProfileCardBody({
         </div>
       )}
 
-      {/* Type capsule so a person card is as self-identifying as an intent one. */}
-      <div className="absolute left-4 top-4 flex min-w-0 max-w-[70%] items-center gap-1.5 rounded-full bg-black/50 px-3 py-1.5">
-        <Zap className="h-3 w-3 shrink-0 text-gold-text" aria-hidden />
-        <span className="truncate text-[13px] font-semibold text-white">{firstName}</span>
-      </div>
-      <div className="absolute right-4 top-4 flex items-center gap-1.5">
-        {typeof profile.compatibility === "number" && (
-          // Compatibility "% match" (Refactor Phase 4) — accent pill so it reads
-          // as the headline signal, distinct from the gold Aura pill.
-          <span
-            className="flex items-center gap-1 rounded-full bg-accent/90 px-2.5 py-1 text-[13px] font-bold text-white"
-            aria-label={`${profile.compatibility}% compatibility`}
-          >
-            {profile.compatibility}% match
-          </span>
-        )}
-        <span className="flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-1">
-          <Zap className="h-3 w-3 text-gold-text" aria-hidden />
-          <span className="text-[13px] font-semibold text-gold-text">
+      {/*
+        Top corners carry the two numbers that decide whether you swipe: how
+        well you match, and how much Aura they carry. The card used to also
+        repeat the person's first name in a third capsule up here — the same
+        name that is already set in 22px directly below — so three chips
+        competed across the top of a photograph. The duplicate is gone and each
+        remaining signal owns a corner (apple.md §6 — simplicity is removing
+        what doesn't earn its place, not hiding it).
+
+        Match is the headline, so it keeps the accent pill — the number is
+        matching semantics and purple is what this app means by that. It is a
+        translucent material rather than a flat fill, though: at full opacity a
+        saturated block sat ON the photograph instead of over it and was the
+        first thing your eye landed on, ahead of the face it is describing.
+        Aura is supporting, so it is set as bare vibrant type over the photo
+        with its own label — no chip — which is also why the top of the image
+        stays readable.
+      */}
+      {typeof profile.compatibility === "number" && (
+        <span
+          className="absolute left-4 top-4 rounded-full bg-accent/85 px-3 py-1.5 type-caption font-semibold text-white backdrop-blur-sm"
+          aria-label={`${profile.compatibility}% compatibility`}
+        >
+          {profile.compatibility}% match
+        </span>
+      )}
+      <div className="absolute right-4 top-4 flex flex-col items-end drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+        <span className="flex items-center gap-1">
+          <AuraIcon className="h-4 w-4" />
+          <span className="text-[19px] font-bold leading-none text-white">
             {profile.aura_score.toLocaleString()}
           </span>
         </span>
+        <span className="type-caption text-white/75">Aura</span>
       </div>
 
       {/* BOTTOM OVERLAY — gradient fade + identity. */}
@@ -526,27 +559,36 @@ function ProfileCardBody({
         {profile.bio && (
           <p className="mt-1.5 line-clamp-2 text-sm text-white">{profile.bio}</p>
         )}
+        {/*
+          Interests were four saturated purple pills stacked over the
+          photograph — the loudest thing on a screen whose entire job is to show
+          you a person. They are supporting detail, so they are set as a single
+          dot-separated line of quiet type instead. Shared interests still sort
+          to the front and stay the only ones in white, which is a quieter way
+          of saying the same thing the ★ pills were shouting.
+        */}
         {profile.interests?.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {/* Shared interests float to the front and are accent-tinted so the
-                common ground is obvious at a glance (Refactor Phase 4). */}
+          <p className="mt-2.5 flex flex-wrap items-center gap-x-1.5 type-callout">
             {[...profile.interests]
               .sort((a, b) => Number(shared.has(b)) - Number(shared.has(a)))
               .slice(0, 4)
-              .map((tag) => (
-                <span
-                  key={tag}
-                  className={cn(
-                    "rounded-full px-2.5 py-0.5 text-xs",
-                    shared.has(tag)
-                      ? "bg-accent/80 font-semibold text-white"
-                      : "bg-white/15 text-white"
+              .map((tag, i, arr) => (
+                <span key={tag} className="flex items-center gap-1.5">
+                  <span
+                    className={
+                      shared.has(tag) ? "font-medium text-white" : "text-white/60"
+                    }
+                  >
+                    {tag}
+                  </span>
+                  {i < arr.length - 1 && (
+                    <span aria-hidden className="text-white/35">
+                      ·
+                    </span>
                   )}
-                >
-                  {shared.has(tag) ? `★ ${tag}` : tag}
                 </span>
               ))}
-          </div>
+          </p>
         )}
       </div>
       {children}

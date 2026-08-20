@@ -97,7 +97,7 @@ export function CampusMapExperience({
             }}
             onFocus={() => setResultsOpen(true)}
             onKeyDown={(e) => e.key === "Escape" && clearSearch()}
-            className="glass h-11 w-full rounded-xl pl-9 pr-9 text-[15px] text-fg placeholder:text-fg-disabled outline-none focus:ring-2 focus:ring-accent/30"
+            className="h-11 w-full rounded-[12px] border border-glass-border bg-input pl-9 pr-9 type-callout text-fg placeholder:text-fg-disabled outline-none focus:border-fg focus:ring-2 focus:ring-fg/15"
           />
           {query && (
             <button
@@ -130,8 +130,10 @@ export function CampusMapExperience({
         )}
       </div>
 
-      {/* Map + pins + detail card. */}
-      <div className="relative mt-3 min-h-0 flex-1">
+      {/* Map + pins + detail card. The gap above is larger than the one between
+          the title and the search field, so the map reads as its own zone
+          rather than as something attached to the input. */}
+      <div className="relative mt-7 min-h-0 flex-1">
         <CampusMapViewer
           className="absolute inset-0"
           places={CAMPUS_MAP_PLACES}
@@ -228,7 +230,7 @@ function PlaceDetailCard({
       <p className="mt-2 text-sm text-fg-muted">{place.description}</p>
 
       {plans.length > 0 && (
-        <div className="mt-3 border-t border-white/10 pt-3">
+        <div className="mt-3 border-t border-hairline pt-3">
           <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-fg-muted">
             <Trophy className="h-3.5 w-3.5" aria-hidden />
             {plans.length} active {plans.length === 1 ? "game" : "games"}

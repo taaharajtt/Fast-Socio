@@ -3,7 +3,13 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { UnreadBadge } from "@/components/ui/badges";
 import { cn } from "@/lib/utils";
+import {
+  tabListClass,
+  tabTriggerClass,
+  TAB_INDICATOR_CLASS,
+} from "@/components/ui/tab-style";
 
 export type RouteTab = {
   /** Stable identity for the tab, independent of its URL. */
@@ -43,8 +49,8 @@ export function RouteTabs({
   skeletons: Record<string, React.ReactNode>;
   children: React.ReactNode;
   className?: string;
-  /** "pill" = gradient segmented pills; "underline" = text tabs with a purple
-   *  active underline over a full-width hairline. */
+  /** "pill" = neutral segmented pills; "underline" = equal-width text tabs
+   *  with a purple active rule over a full-width hairline. */
   variant?: "pill" | "underline";
 }) {
   const router = useRouter();
@@ -71,7 +77,7 @@ export function RouteTabs({
     <>
       <div
         className={cn(
-          underline ? "flex border-b border-white/[0.08]" : "flex gap-2",
+          underline ? tabListClass() : "flex gap-2",
           className
         )}
       >
@@ -84,20 +90,11 @@ export function RouteTabs({
                 href={tab.href}
                 onClick={(e) => select(tab, e)}
                 aria-current={active ? "page" : undefined}
-                className={cn(
-                  "relative flex flex-1 basis-1/3 items-center justify-center gap-1.5 pb-3 text-center text-[16px] font-semibold transition-colors",
-                  active ? "text-fg" : "text-fg-muted hover:text-fg"
-                )}
+                className={tabTriggerClass(active)}
               >
                 {tab.label}
-                {tab.badge ? (
-                  <span className="gradient-brand rounded-full px-1.5 text-xs text-white">
-                    {tab.badge}
-                  </span>
-                ) : null}
-                {active && (
-                  <span className="absolute inset-x-0 -bottom-px h-[3px] rounded-full bg-accent" />
-                )}
+                <UnreadBadge count={tab.badge ?? 0} className="h-[18px] min-w-[18px] px-1" />
+                {active && <span className={TAB_INDICATOR_CLASS} />}
               </Link>
             );
           }
@@ -108,10 +105,11 @@ export function RouteTabs({
               onClick={(e) => select(tab, e)}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "inline-flex items-center justify-center gap-1.5 rounded-full px-5 py-2 text-center text-sm font-semibold transition-all active:scale-95",
+                "pressable focus-ring inline-flex items-center justify-center gap-1.5",
+                "rounded-full px-4 py-2 text-center text-sm font-semibold",
                 active
-                  ? "gradient-brand text-white shadow-[0_4px_16px_rgba(124,58,237,0.4)]"
-                  : "bg-card text-fg-muted hover:text-fg"
+                  ? "bg-surface-active text-fg"
+                  : "bg-transparent text-fg-subtle hover:text-fg-muted"
               )}
             >
               {tab.label}
@@ -119,7 +117,7 @@ export function RouteTabs({
                 <span
                   className={cn(
                     "rounded-full px-1.5 text-xs",
-                    active ? "bg-white/25" : "gradient-brand text-white"
+                    active ? "bg-fg/15 text-fg" : "bg-accent text-white"
                   )}
                 >
                   {tab.badge}

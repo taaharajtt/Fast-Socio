@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { MessageSquare, HandHeart, Check, Zap, VenetianMask } from "lucide-react";
-import { GlassCard, GlassChip } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/time";
@@ -32,72 +31,89 @@ export function HelpCard({ req }: { req: HelpRequestRow }) {
   });
 
   return (
-    <Link href={`/help/${req.id}`} className="block active:scale-[0.99]">
-      <GlassCard
-        radius="md"
-        className={cn("p-4", urgent && "ring-1 ring-error/40")}
-      >
-        {/* Top row: URGENT capsule (boosted) + category + status + age */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          {urgent && (
-            <span className="flex items-center gap-1 rounded-full bg-error px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
-              <Zap className="h-3 w-3" aria-hidden /> Urgent
+    /*
+      A list row, not a card.
+
+      Campus Help lists were a stack of bordered boxes - and on the ME tab those
+      boxes sat inside ANOTHER bordered section, so every ask was read through
+      two nested frames (apple.md 12: never stack surfaces; 6: simplicity is not
+      more containers). The frame is gone; hairlines between rows carry the
+      separation. Urgency, previously a red ring around the whole box, is now a
+      red capsule in the metadata row where the other status already lives.
+
+      The hairline that briefly replaced the frame is gone too: each ask is
+      three stacked lines of type, and generous vertical space groups them more
+      clearly than a rule between them ever did.
+    */
+    <Link
+      href={`/help/${req.id}`}
+      className="pressable-subtle focus-ring -mx-2 block rounded-[12px] px-2 py-5"
+    >
+      {/* Top row: URGENT capsule (boosted) + category + status + age */}
+      <div className="flex flex-wrap items-center gap-2">
+        {urgent && (
+          <span className="flex items-center gap-1 rounded-full bg-error px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
+            <Zap className="h-3 w-3" aria-hidden /> Urgent
+          </span>
+        )}
+        <span className="flex items-center gap-1.5 rounded-full bg-fill px-2.5 py-1 type-caption font-medium text-fg-muted">
+          <CatIcon className="h-3.5 w-3.5" aria-hidden />
+          {cat?.short ?? req.category}
+        </span>
+        {/* Status is a word, not a chip: "Open" in green and "Resolved" in grey
+            say everything a second pill outline would. */}
+        <span
+          className={cn(
+            "flex items-center gap-1 type-caption font-semibold",
+            req.status === "resolved" ? "text-fg-muted" : "text-success"
+          )}
+        >
+          {req.status === "resolved" ? (
+            <>
+              <Check className="h-3.5 w-3.5" aria-hidden /> Resolved
+            </>
+          ) : (
+            STATUS_META[req.status].label
+          )}
+        </span>
+        <span className="ml-auto type-caption text-fg-muted">
+          {timeAgo(req.created_at)}
+        </span>
+      </div>
+
+      {/* Title + preview */}
+      <div className="mt-2.5">
+        <h3 className="type-headline text-fg">{req.title}</h3>
+        <p className="type-callout mt-1 line-clamp-2 text-fg-muted">{req.body}</p>
+      </div>
+
+      {/* Author (or Anonymous) + counts */}
+      <div className="mt-3 flex items-center gap-2 type-caption text-fg-muted">
+        <span className="relative flex h-[22px] w-[22px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-bg-elevated">
+          {author.anonymous ? (
+            <VenetianMask className="h-3 w-3 text-fg-muted" aria-hidden />
+          ) : (
+            author.avatarUrl && (
+              <AppImage src={author.avatarUrl} alt="" sizes="22px" />
+            )
+          )}
+        </span>
+        <span className="min-w-0 truncate">
+          <span className="font-medium text-fg">{author.name}</span>
+          {author.meta && <span className="text-fg-muted"> · {author.meta}</span>}
+          {req.is_anonymous && !author.anonymous && (
+            <span className="ml-1.5 inline-block align-middle">
+              <HelpAnonBadge />
             </span>
           )}
-          <GlassChip tone="neutral" className="gap-1.5">
-            <CatIcon className="h-3.5 w-3.5" aria-hidden />
-            {cat?.short ?? req.category}
-          </GlassChip>
-          <GlassChip tone={STATUS_META[req.status].tone}>
-            {req.status === "resolved" ? (
-              <>
-                <Check className="h-3 w-3" aria-hidden /> Resolved
-              </>
-            ) : (
-              STATUS_META[req.status].label
-            )}
-          </GlassChip>
-          <span className="ml-auto text-xs text-fg-muted">
-            {timeAgo(req.created_at)}
+        </span>
+        {req.is_mine && (
+          <span className="ml-auto flex shrink-0 items-center gap-1">
+            <MessageSquare className="h-3.5 w-3.5" aria-hidden />
+            {req.response_count}
           </span>
-        </div>
-
-        {/* Title + preview */}
-        <div className="mt-2.5">
-          <h3 className="text-[15px] font-semibold leading-snug text-fg">
-            {req.title}
-          </h3>
-          <p className="mt-1 line-clamp-2 text-sm text-fg-muted">{req.body}</p>
-        </div>
-
-        {/* Author (or Anonymous) + counts */}
-        <div className="mt-3 flex items-center gap-2 text-xs text-fg-muted">
-          <span className="relative flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-bg-elevated">
-            {author.anonymous ? (
-              <VenetianMask className="h-3 w-3 text-fg-muted" aria-hidden />
-            ) : (
-              author.avatarUrl && (
-                <AppImage src={author.avatarUrl} alt="" sizes="20px" />
-              )
-            )}
-          </span>
-          <span className="min-w-0 truncate">
-            <span className="font-medium text-fg">{author.name}</span>
-            {author.meta && <span className="text-fg-muted"> · {author.meta}</span>}
-            {req.is_anonymous && !author.anonymous && (
-              <span className="ml-1.5 inline-block align-middle">
-                <HelpAnonBadge />
-              </span>
-            )}
-          </span>
-          {req.is_mine && (
-            <span className="ml-auto flex shrink-0 items-center gap-1">
-              <MessageSquare className="h-3.5 w-3.5" aria-hidden />
-              {req.response_count}
-            </span>
-          )}
-        </div>
-      </GlassCard>
+        )}
+      </div>
     </Link>
   );
 }

@@ -26,8 +26,11 @@ export function GlassChip({
   return (
     <span
       className={cn(
-        "glass inline-flex items-center gap-1 rounded-[var(--radius-pill)] " +
-          "px-3 py-1 text-xs font-medium leading-none",
+        // Overlay chips almost always sit ON a photo, where a solid card fill
+        // reads as a sticker. A dark translucent material with a blur belongs
+        // to the image underneath it instead (apple.md §12).
+        "material-bar inline-flex items-center gap-1 rounded-[var(--radius-pill)] " +
+          "border border-white/10 px-2.5 py-1 type-caption font-semibold leading-none",
         toneMap[tone],
         className
       )}

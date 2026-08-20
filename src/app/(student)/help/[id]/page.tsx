@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft, MessageSquare, Check, Zap, VenetianMask } from "lucide-react";
-import { GlassCard, GlassChip } from "@/components/ui";
+import { MessageSquare, Zap, VenetianMask } from "lucide-react";
+import { PageHeader } from "@/components/ui/page-header";
+import { cn } from "@/lib/utils";
 import { AppImage } from "@/components/ui/app-image";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
@@ -97,49 +98,55 @@ export default async function HelpDetailPage({
 
   return (
     <main className="mx-auto w-full max-w-md px-5 py-6">
-      <div className="mb-4 flex items-center gap-3">
-        <Link
-          href="/help"
-          aria-label="Back"
-          className="glass flex h-9 w-9 items-center justify-center rounded-full text-fg-muted"
-        >
-          <ChevronLeft className="h-5 w-5" aria-hidden />
-        </Link>
-        <h1 className="flex-1 truncate text-lg font-bold">Request</h1>
-        {!req.is_mine && <HelpRequestReportButton requestId={req.id} />}
-      </div>
+      <PageHeader
+        title="Campus Help"
+        backHref="/help"
+        trailing={!req.is_mine ? <HelpRequestReportButton requestId={req.id} /> : null}
+      />
 
-      <GlassCard radius="card" className="p-5">
-        <div className="flex flex-wrap items-center gap-1.5">
+      {/*
+        The request lives directly on the page.
+
+        It used to sit inside a `GlassCard`, with the response composer inside a
+        second card below it — a detail screen whose entire content was two
+        boxes. A card's job is to say "this is one thing, distinct from the
+        things around it", and on a page with exactly one subject there is
+        nothing to distinguish it from. Type and space carry it instead:
+        eyebrow, then a large title, then body, then the quiet metadata.
+      */}
+      <section className="mt-7">
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
           {req.status === "open" && isUrgentRequest(req.urgency) && (
-            <span className="flex items-center gap-1 rounded-full bg-error px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
+            <span className="type-footnote flex items-center gap-1 rounded-full bg-error px-2 py-0.5 font-bold uppercase tracking-wide text-white">
               <Zap className="h-3 w-3" aria-hidden /> Urgent
             </span>
           )}
-          <GlassChip tone="neutral" className="gap-1.5">
+          <span className="type-label flex items-center gap-1.5 text-fg-muted">
             {CatIcon && <CatIcon className="h-3.5 w-3.5" aria-hidden />}
             {cat?.label ?? req.category}
-          </GlassChip>
-          <GlassChip tone={STATUS_META[req.status].tone}>
-            {req.status === "resolved" ? (
-              <>
-                <Check className="h-3 w-3" aria-hidden /> Resolved
-              </>
-            ) : (
-              STATUS_META[req.status].label
+          </span>
+          <span aria-hidden className="type-label text-fg-disabled">
+            ·
+          </span>
+          <span
+            className={cn(
+              "type-label",
+              req.status === "resolved" ? "text-fg-muted" : "text-success"
             )}
-          </GlassChip>
+          >
+            {req.status === "resolved" ? "Resolved" : STATUS_META[req.status].label}
+          </span>
         </div>
 
-        <h2 className="mt-3 text-2xl font-bold leading-tight">{req.title}</h2>
-        <p className="mt-3 whitespace-pre-wrap text-[15px] text-fg">{req.body}</p>
+        <h2 className="type-display mt-3">{req.title}</h2>
+        <p className="type-body mt-4 whitespace-pre-wrap text-fg">{req.body}</p>
 
         {meta.length > 0 && (
-          <p className="mt-3 text-sm font-medium text-cyan">{meta.join(" · ")}</p>
+          <p className="type-callout mt-4 text-fg-muted">{meta.join(" · ")}</p>
         )}
 
         {/* Author + posted time */}
-        <div className="mt-4 flex items-center gap-2.5">
+        <div className="mt-5 flex items-center gap-2.5">
           <span className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-bg-elevated">
             {author.anonymous ? (
               <VenetianMask className="h-4 w-4 text-fg-muted" aria-hidden />
@@ -154,33 +161,33 @@ export default async function HelpDetailPage({
               {author.href ? (
                 <Link
                   href={author.href}
-                  className="block truncate text-sm font-semibold text-fg"
+                  className="type-callout block truncate font-semibold text-fg"
                 >
                   {author.name}
                 </Link>
               ) : (
-                <span className="block truncate text-sm font-semibold text-fg">
+                <span className="type-callout block truncate font-semibold text-fg">
                   {author.name}
                 </span>
               )}
               {req.is_anonymous && !author.anonymous && <HelpAnonBadge />}
             </span>
-            <span className="text-xs text-fg-muted" title={absoluteTime(req.created_at)}>
+            <span
+              className="type-caption text-fg-subtle"
+              title={absoluteTime(req.created_at)}
+            >
               {timeAgo(req.created_at)} ago
               {req.is_mine && req.is_anonymous && " · only you & admins see your name"}
             </span>
           </div>
-        </div>
-
-        {isSeekerOrModerator && (
-          <div className="mt-4 flex items-center gap-4 border-t border-white/[0.06] pt-3 text-sm text-fg-muted">
-            <span className="flex items-center gap-1.5">
+          {isSeekerOrModerator && (
+            <span className="type-caption flex shrink-0 items-center gap-1.5 text-fg-subtle">
               <MessageSquare className="h-4 w-4" aria-hidden />
-              {req.response_count} response{req.response_count === 1 ? "" : "s"}
+              {req.response_count}
             </span>
-          </div>
-        )}
-      </GlassCard>
+          )}
+        </div>
+      </section>
 
       {(req.is_mine || isHelpModerator) && (
         <HelpOwnerControls

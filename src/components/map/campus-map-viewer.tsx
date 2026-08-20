@@ -61,6 +61,7 @@ export function CampusMapViewer({
   activeCounts?: Record<string, number>;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
   const [container, setContainer] = useState<Size>({ w: 0, h: 0 });
   const [natural, setNatural] = useState<Size | null>(null);
   const [scale, setScale] = useState(0); // 0 until fit is known
@@ -85,6 +86,27 @@ export function CampusMapViewer({
     },
     [natural, container]
   );
+
+  /*
+    Seed `natural` when the map is served from cache.
+
+    `natural` was set ONLY by the <img onLoad> handler below. A cached image is
+    already `complete` before React attaches that handler, so onLoad never
+    fires, `natural` stays null — and the layer renders `visibility: hidden`.
+    The result: the map drew correctly on a cold cache and was BLANK on every
+    visit after it, which is every visit a real student makes.
+
+    Reading `complete`/`naturalWidth` once on mount covers the cached case;
+    onLoad still covers the cold one. The functional update bails when the
+    values already match, so the two paths can't fight over a re-render.
+  */
+  useEffect(() => {
+    const el = imgRef.current;
+    if (!el?.complete || !el.naturalWidth) return;
+    const w = el.naturalWidth;
+    const h = el.naturalHeight;
+    setNatural((prev) => (prev && prev.w === w && prev.h === h ? prev : { w, h }));
+  }, []);
 
   // Measure the container and keep it live across rotation / dock reflow.
   useEffect(() => {
@@ -286,15 +308,17 @@ export function CampusMapViewer({
               the optimizer downscales/compresses this map and softens it; we
               want exact source pixels to scale sharply under the transform. */}
           <img
+            ref={imgRef}
             src="/map.png"
             alt="FAST campus map"
             draggable={false}
-            onLoad={(e) =>
-              setNatural({
-                w: e.currentTarget.naturalWidth,
-                h: e.currentTarget.naturalHeight,
-              })
-            }
+            onLoad={(e) => {
+              const w = e.currentTarget.naturalWidth;
+              const h = e.currentTarget.naturalHeight;
+              setNatural((prev) =>
+                prev && prev.w === w && prev.h === h ? prev : { w, h }
+              );
+            }}
             style={{ display: "block", width: "100%", height: "100%", maxWidth: "none" }}
           />
 

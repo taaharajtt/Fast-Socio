@@ -4,13 +4,18 @@ import { useState, useTransition } from "react";
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import {
+  tabListClass,
+  tabTriggerClass,
+  TAB_INDICATOR_CLASS,
+} from "@/components/ui/tab-style";
 import { HELP_TABS, type HelpTab } from "@/lib/help/constants";
 import { HelpTabSkeleton } from "@/components/help/help-tab-skeleton";
 
 /**
- * SOCIO | ME switcher — full-width underlined text tabs with a purple active
- * underline over a hairline, matching the Leaderboard tab style (Leaderboard |
- * Department Rankings) instead of the earlier compact pill control.
+ * SOCIO | ME switcher — an exact 50/50 split with a purple active rule over a
+ * hairline, drawn from the shared tab primitive so it is the same control as
+ * Leaderboard | Department Rankings, Messages | Requests and Posts | Stats.
  *
  * Tapping a tab flips its active state INSTANTLY (local `optimistic` state) —
  * it doesn't wait for the server round-trip — while `children` (the previous
@@ -55,7 +60,7 @@ export function HelpTabs({
 
   return (
     <div>
-      <div role="tablist" className="mb-5 flex border-b border-white/[0.08]">
+      <div role="tablist" className={cn(tabListClass(), "mb-6")}>
         {HELP_TABS.map((t) => {
           const isActive = optimistic === t.key;
           return (
@@ -65,15 +70,10 @@ export function HelpTabs({
               role="tab"
               aria-selected={isActive}
               onClick={() => go(t.key, t.key === "socio" ? socioHref : meHref)}
-              className={cn(
-                "relative flex-1 pb-3 text-center text-[16px] font-semibold transition-colors",
-                isActive ? "text-fg" : "text-fg-muted hover:text-fg"
-              )}
+              className={tabTriggerClass(isActive)}
             >
               {t.label}
-              {isActive && (
-                <span className="absolute inset-x-0 -bottom-px h-[3px] rounded-full bg-accent" />
-              )}
+              {isActive && <span className={TAB_INDICATOR_CLASS} />}
             </button>
           );
         })}

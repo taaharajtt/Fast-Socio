@@ -14,6 +14,7 @@ import { AppImage } from "@/components/ui/app-image";
 import { resolveAvatarUrl } from "@/lib/avatar";
 import { CommentBody } from "@/components/feed/comment-body";
 import { cn } from "@/lib/utils";
+import { likeToneClass, likeGlyphClass } from "@/components/ui/like-style";
 import { timeAgo } from "@/lib/time";
 import {
   deleteComment,
@@ -438,10 +439,10 @@ function CommentRow({
         aria-label={liked ? "Unlike comment" : "Like comment"}
         className={cn(
           "flex shrink-0 flex-col items-center gap-0.5 pt-0.5 transition-all active:scale-90",
-          liked ? "text-error" : "text-fg-muted hover:text-fg"
+          likeToneClass(liked, "text-fg-muted hover:text-fg")
         )}
       >
-        <Heart className={cn("h-4 w-4", liked && "fill-current")} aria-hidden />
+        <Heart className={likeGlyphClass(liked, "h-4 w-4")} aria-hidden />
         {likes > 0 && <span className="text-[11px] leading-none">{likes}</span>}
       </button>
     </div>

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { ChevronLeft, Zap, EyeOff } from "lucide-react";
+import { ChevronLeft, Zap, VenetianMask } from "lucide-react";
 import { GlassButton, GlassCard, GlassInput } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { CATEGORY_ORDER, CATEGORY_META } from "@/lib/help/constants";
@@ -114,8 +114,11 @@ export function HelpComposer({ initial }: { initial?: ComposerInitial }) {
                     onClick={() => setCategory(c)}
                     className={cn(
                       "flex items-center gap-2 rounded-[12px] px-3 py-2.5 text-left text-sm font-medium transition-colors",
+                      // Selection is a neutral raised fill, not a purple
+                      // block. Six of twelve cells filled solid purple made
+                      // the form look like the brand had leaked into it.
                       active
-                        ? "bg-aura text-white"
+                        ? "bg-surface-active text-fg"
                         : "glass text-fg-muted hover:text-fg"
                     )}
                   >
@@ -150,12 +153,20 @@ export function HelpComposer({ initial }: { initial?: ComposerInitial }) {
               onChange={(e) => setBody(e.target.value.slice(0, 2000))}
               placeholder="Add the specifics — course, deadline, what you've tried…"
               rows={4}
-              className="glass w-full resize-none rounded-[var(--radius-md)] p-4 text-[15px] text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-aura/40"
+              className="glass w-full resize-none rounded-[var(--radius-md)] p-4 text-[15px] text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-fg/15"
             />
           </div>
 
           {/* Compact capsule toggles: urgent (boosts to top of SOCIO) and
-              anonymous (hides your name/photo; only school + semester show). */}
+              anonymous (hides your name/photo; only school + semester show).
+
+              Anonymous uses the masked-face glyph the home composer and the
+              Campus Help response composer use, and shows ON as a neutral
+              raised fill. It used to be a crossed-out eye that turned solid
+              purple — a different glyph AND a different state language for the
+              same switch, on the same product, two taps apart. Urgent keeps
+              red, because urgency is the one thing here with a colour of its
+              own. */}
           <div className="flex flex-wrap gap-2">
             <CapsuleToggle
               active={isUrgent}
@@ -167,9 +178,9 @@ export function HelpComposer({ initial }: { initial?: ComposerInitial }) {
             <CapsuleToggle
               active={anonymous}
               onClick={() => setAnonymous((v) => !v)}
-              icon={<EyeOff className="h-4 w-4" aria-hidden />}
+              icon={<VenetianMask className="h-4 w-4" aria-hidden />}
               label="Anonymous"
-              activeClass="bg-aura text-white"
+              activeClass="bg-surface-active text-fg"
             />
           </div>
           <p className="text-xs text-fg-muted">

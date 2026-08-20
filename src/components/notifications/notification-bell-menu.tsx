@@ -92,7 +92,7 @@ export function NotificationBellMenu({
         onClick={() => setOpen((o) => !o)}
         className={cn(
           "relative flex h-10 w-10 items-center justify-center rounded-full transition-all active:scale-90",
-          open ? "gradient-brand text-white" : "glass text-fg-muted hover:text-fg"
+          open ? "bg-surface-active text-fg" : "text-fg-muted hover:text-fg"
         )}
       >
         <Bell className="h-5 w-5" aria-hidden />
@@ -106,7 +106,7 @@ export function NotificationBellMenu({
           <div className="flex items-center justify-between border-b border-glass-border px-4 py-3">
             <h3 className="text-base font-bold">Activity</h3>
             {unread > 0 && (
-              <span className="gradient-brand rounded-full px-2 py-0.5 text-[11px] font-semibold text-white">
+              <span className="rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold text-white">
                 {unread} new
               </span>
             )}
@@ -127,23 +127,23 @@ export function NotificationBellMenu({
                     onClick={() => setOpen(false)}
                     className={cn(
                       "relative flex items-center gap-3 border-b border-glass-border/60 px-4 py-3 last:border-0",
-                      n.unread && "bg-accent/[0.06]"
+                      n.unread && "bg-fill"
                     )}
                   >
                     {n.unread && (
-                      <span className="absolute inset-y-3 left-0 w-0.5 rounded-full gradient-brand" />
+                      <span className="absolute inset-y-3 left-0 w-0.5 rounded-full bg-accent" />
                     )}
                     <div className="relative shrink-0">
                       <div className="glass relative h-9 w-9 overflow-hidden rounded-full">
                         {n.avatar ? (
                           <AppImage src={n.avatar} alt="" sizes="36px" />
                         ) : (
-                          <span className="flex h-full w-full items-center justify-center gradient-brand">
+                          <span className="flex h-full w-full items-center justify-center bg-fill-strong">
                             <Zap className="h-4 w-4 text-white" aria-hidden />
                           </span>
                         )}
                       </div>
-                      <span className="gradient-brand absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full">
+                      <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-surface-active">
                         <Icon className="h-2 w-2 text-white" aria-hidden />
                       </span>
                     </div>
@@ -164,7 +164,7 @@ export function NotificationBellMenu({
           <Link
             href="/activity"
             onClick={() => setOpen(false)}
-            className="block border-t border-glass-border py-3 text-center text-sm font-semibold text-accent"
+            className="block border-t border-glass-border py-3 text-center text-sm font-semibold text-fg"
           >
             See all activity
           </Link>

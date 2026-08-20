@@ -12,7 +12,7 @@ import { eventBadge } from "@/lib/events/format";
 import type { ChatRoomCardVM } from "@/components/communities/chat-room-card";
 import type { JoinState } from "@/app/(student)/communities/actions";
 import { onlineSinceIso } from "@/lib/time";
-import { SectionLogo } from "@/components/ui/section-logo";
+import { ScreenHeader } from "@/components/ui";
 
 type CommunityLite = {
   id: string;
@@ -58,18 +58,15 @@ const COMMUNITY_LITE = "id, name, avatar_url, cover_url, is_society, is_official
 export default function CommunitiesPage() {
   return (
     <main className="mx-auto w-full max-w-md px-4 py-6">
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-2.5">
-          <SectionLogo name="community" />
-          <div>
-            <h1 className="text-[22px] font-bold tracking-tight">Community</h1>
-            <Suspense fallback={<p className="mt-1 text-sm text-fg-muted">What do you want?</p>}>
-              <CommunitySubtext />
-            </Suspense>
-          </div>
-        </div>
-        <CreateSpaceButton />
-      </div>
+      <ScreenHeader
+        title="Community"
+        subtitle={
+          <Suspense fallback={<>What do you want?</>}>
+            <CommunitySubtext />
+          </Suspense>
+        }
+        action={<CreateSpaceButton />}
+      />
       <Suspense fallback={<SkeletonRows count={5} />}>
         <CommunitySections />
       </Suspense>
@@ -93,7 +90,10 @@ async function CommunitySubtext() {
   const full = trimmed.length > 18 ? trimmed.split(" ")[0] : trimmed;
   const text = full ? `What do you want, ${full}?` : "What do you want?";
 
-  return <p className="mt-1 truncate text-sm text-fg-muted">{text}</p>;
+  // A bare string, not a <p>: this now renders *inside* ScreenHeader's own
+  // subtitle paragraph, and a <p> nested in a <p> is invalid HTML the browser
+  // silently un-nests — which would have broken the header layout.
+  return <>{text}</>;
 }
 
 async function CommunitySections() {

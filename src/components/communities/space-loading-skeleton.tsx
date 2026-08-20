@@ -15,7 +15,7 @@ export function SpaceLoadingSkeleton({ tabs = 4 }: { tabs?: number }) {
         <Skeleton className="h-6 w-48" />
         <Skeleton className="mt-2 h-4 w-32" />
       </div>
-      <div className="flex gap-2 border-b border-white/[0.08] px-4 pb-3 pt-4">
+      <div className="flex gap-2 border-b border-hairline px-4 pb-3 pt-4">
         {Array.from({ length: tabs }, (_, i) => (
           <Skeleton key={i} className="h-5 flex-1" />
         ))}

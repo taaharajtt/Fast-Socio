@@ -16,9 +16,12 @@ export function PostIntentButton({ data }: { data?: MyDiscoverData }) {
   const pending = data?.incoming.length ?? 0;
 
   return (
+    // Purple: this is the one action on Discover besides swiping, and it is
+    // always actionable. The header around it stays neutral so the button is
+    // the only coloured thing up here.
     <Link
       href="/discover/post"
-      className="relative flex items-center gap-1.5 rounded-full bg-accent px-3.5 py-2 text-sm font-semibold text-white active:scale-95"
+      className="pressable focus-ring relative flex items-center gap-1.5 rounded-[10px] bg-accent px-3.5 py-2 text-sm font-semibold text-white"
     >
       <Plus className="h-4 w-4" aria-hidden /> Post
       {pending > 0 && (

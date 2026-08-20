@@ -41,13 +41,23 @@ export default function StudentLayout({
 }) {
   return (
     <div className="relative flex min-h-full flex-1 flex-col">
-      {/* Ambient brand glow shared across student screens */}
+      {/*
+        Ambient depth. This used to be two large purple/magenta radial blobs at
+        60% opacity, which tinted every pixel of every screen — photos, avatars
+        and post text all sat under the same purple wash, so the brand colour
+        stopped meaning anything and the content stopped being the hero.
+        What replaces it is a single near-black vertical gradient: the ground is
+        no longer perfectly flat (it lifts by ~4 points of luminance at the top,
+        which is what keeps a dark UI from reading as a void) but it carries no
+        hue of its own. Colour now comes from content and from the purple accent
+        where purple actually means something.
+      */}
       <div
         aria-hidden
-        className="pointer-events-none fixed inset-0 -z-10 opacity-60"
+        className="pointer-events-none fixed inset-0 -z-10"
         style={{
           background:
-            "radial-gradient(40rem 30rem at 15% -10%, rgba(124,92,255,0.22), transparent), radial-gradient(35rem 25rem at 95% 5%, rgba(200,80,192,0.18), transparent)",
+            "linear-gradient(180deg, #101018 0%, var(--bg) 38%, var(--bg) 100%)",
         }}
       />
       {/* Every student route is request-scoped, so the page segment always

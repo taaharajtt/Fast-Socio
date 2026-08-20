@@ -3,8 +3,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState, useSyncExternalStore } from "react";
+import { Mail, Lock, ArrowRight } from "lucide-react";
 import { GlassButton } from "@/components/ui/glass-button";
-import { GlassInput } from "@/components/ui/glass-input";
+import { Field } from "@/components/ui/field";
 import { createClient } from "@/lib/supabase/client";
 import { recallEmail, rememberEmail } from "@/lib/auth/last-email";
 import { isStandalone } from "@/lib/pwa/install";
@@ -94,7 +95,14 @@ export default function LoginPage() {
           height={135}
           priority
         />
-        <p className="mt-1 text-[13px] text-fg-muted">Your campus, alive.</p>
+        {/* One word of the tagline carries the brand colour, not the whole
+            line. "Your campus," is the setup and stays quiet; "alive." is the
+            claim, and it is the smallest possible place to spend purple — a
+            single word under the wordmark rather than a tint across the
+            sentence. */}
+        <p className="type-caption mt-2 text-fg-muted">
+          Your campus, <span className="font-semibold text-accent">alive.</span>
+        </p>
       </div>
 
       <div className="mt-8 text-center">
@@ -102,7 +110,7 @@ export default function LoginPage() {
           Welcome back
         </h2>
         <p className="mx-auto mt-2 max-w-[19rem] text-[15px] leading-relaxed text-fg-muted">
-          Sign in with your email and password.
+          Sign in to your FAST account
         </p>
       </div>
 
@@ -115,23 +123,29 @@ export default function LoginPage() {
           app, and only while signed out (this route redirects when signed in). */}
       <StandaloneNote />
 
-      <form onSubmit={submit} className="mt-8 flex flex-col gap-3">
-        <GlassInput
+      <form onSubmit={submit} className="mt-8 flex flex-col gap-4">
+        {/* Visible labels, not `aria-label` alone: the placeholder that used to
+            carry the field's purpose disappears the moment you start typing,
+            which is exactly when a half-filled form is easiest to misread. */}
+        <Field
           id="email"
+          label="Email"
+          icon={Mail}
           type="email"
           inputMode="email"
           autoComplete="email"
-          aria-label="Email"
           placeholder="you@isb.nu.edu.pk"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           disabled={loading}
         />
-        <GlassInput
+        <Field
           id="password"
+          label="Password"
+          icon={Lock}
           type="password"
+          revealable
           autoComplete="current-password"
-          aria-label="Password"
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
@@ -141,7 +155,7 @@ export default function LoginPage() {
         <div className="-mt-1 text-right">
           <Link
             href="/forgot-password"
-            className="text-[13px] font-semibold text-[#a78bfa] hover:underline"
+            className="pressable focus-ring type-caption inline-block rounded px-1 font-medium text-fg-muted hover:text-fg hover:underline"
           >
             Forgot password?
           </Link>
@@ -150,10 +164,11 @@ export default function LoginPage() {
         <GlassButton
           type="submit"
           size="lg"
-          className="mt-1 h-[52px] w-full rounded-[var(--radius-pill)] text-base font-bold"
+          className="mt-1 w-full text-base font-bold"
           disabled={loading}
         >
           {loading ? "Signing in…" : "Log in"}
+          {!loading && <ArrowRight className="h-5 w-5" aria-hidden />}
         </GlassButton>
 
         {error && (
@@ -163,18 +178,25 @@ export default function LoginPage() {
         )}
       </form>
 
-      <p className="mt-6 text-center text-[14px] text-fg-muted">
-        New to FAST SOCIO?{" "}
+      {/* Two lines: the question is quiet context and the action is the thing
+          you are meant to see. Purple, deliberately NOT white — that would put
+          it in competition with "Log in" directly above. The hierarchy on this
+          screen runs wordmark (brand) → "alive." (brand accent) → Log in
+          (highest-contrast primary) → Create an account (brand secondary), so
+          the two actions are told apart by colour rather than by size. */}
+      <div className="mt-8 text-center">
+        <p className="type-callout text-fg-muted">New to FAST SOCIO?</p>
         <Link
           href="/signup"
-          className="font-semibold text-[#a78bfa] hover:underline"
+          className="pressable focus-ring type-headline mt-1 inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-accent hover:underline"
         >
           Create an account
+          <ArrowRight className="h-[18px] w-[18px]" aria-hidden />
         </Link>
-      </p>
+      </div>
 
       <p className="mt-6 text-center text-[11px] text-fg-disabled">
-        Terms of Service · Privacy Policy
+        Terms of Service &nbsp;•&nbsp; Privacy Policy
       </p>
     </main>
   );

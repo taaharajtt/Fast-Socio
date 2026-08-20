@@ -1,4 +1,4 @@
-import { SectionLogo } from "@/components/ui/section-logo";
+import { ScreenHeader } from "@/components/ui";
 import { CampusHelpShell } from "@/components/help/campus-help-shell";
 import type { SocioFilters } from "@/components/help/help-filters";
 import { isHelpCategory } from "@/lib/help/logic";
@@ -29,17 +29,11 @@ export default async function HelpPage({
 
   return (
     <main className="mx-auto w-full max-w-md px-4 py-6">
-      <div className="mb-4 flex items-center gap-2.5">
-        <SectionLogo name="help" />
-        <div>
-          <h1 className="text-[22px] font-bold leading-tight tracking-tight">
-            Campus Help
-          </h1>
-          <p className="text-xs text-fg-muted">
-            Drop the Gatekeeping, <span className="text-aura">help your Campus.</span>
-          </p>
-        </div>
-      </div>
+      <ScreenHeader
+        title="Campus Help"
+        subtitle="Drop the Gatekeeping, help your Campus."
+        className="mb-4"
+      />
 
       {/* Standalone route: internal SOCIO|ME uses `?tab=`. SOCIO has no Filters
           control anymore, so `filters` only matters if a `?category=`-style

@@ -75,32 +75,84 @@
   /* Verified / info */
   --verified: #3b82f6;
 
-  /* Surfaces (V3 — solid, no glass) */
-  --bg: #0d0d12; /* App background (near-black, blue tint) */
-  --bg-elevated: #1e1e2c; /* Modals, dropdowns, elevated */
-  --card: #1a1a24; /* Post cards, list items */
-  --input-bg: #141420; /* Text inputs, search bars */
-  --fg: #ffffff; /* Primary text */
-  --fg-muted: #9ca3af; /* Secondary text (timestamps, subtitles) */
-  --fg-disabled: #4b5563; /* Disabled / placeholder */
+  /*
+    Surfaces. Apple's dark mode is built from a near-black ground with surfaces
+    that lift by a few points of luminance, never by hue. The previous values
+    lifted by hue as well (#1A1A24 over #0D0D12 reads as a blue-purple card on a
+    blue-purple ground), which is what made every screen feel washed in one
+    colour. These steps are neutral and small, so photos and avatars — the real
+    content — supply the colour.
+  */
+  --bg: #0a0a0b; /* App background — deepest neutral, not pure black */
+  --card: #141415; /* Post cards, list items */
+  --bg-elevated: #1c1c1e; /* Modals, dropdowns, sheets */
+  --surface-active: #232325; /* Pressed / selected neutral */
+  --input-bg: #131314; /* Text inputs, search bars */
+  --fg: #f5f5f7; /* Primary text — off-white, not #fff (less glare) */
+  --fg-muted: #9a9a9f; /* Secondary text (previews, subtitles) */
+  --fg-subtle: #6e6e73; /* Tertiary metadata (timestamps, counters) */
+  --fg-disabled: #48484a; /* Disabled / placeholder */
+
+  /*
+    Neutral emphasis, for the PRIMARY button.
+
+    In a near-black interface the highest-contrast surface available is a light
+    one — not a saturated one. Making the primary action off-white means the
+    single most important control on a screen is unmistakable without spending
+    the brand colour on it, which is what let purple retreat everywhere else.
+  */
+  --emphasis: #f5f5f7;
+  --emphasis-fg: #0a0a0b;
+
+  /*
+    Neutral fills (Apple's `fill` role). Secondary controls — icon buttons,
+    toggles, segmented tracks, avatars' fallbacks — use these instead of a
+    purple tint, so purple can mean "primary/active" and nothing else.
+  */
+  --fill: rgba(120, 120, 128, 0.16);
+  --fill-strong: rgba(120, 120, 128, 0.26);
+  /*
+    Separators. Used SPARINGLY — only where two areas need structural
+    distinction, never automatically between every row in a list (spacing does
+    that job). Kept dim so a divider never out-contrasts the text beside it.
+  */
+  --hairline: rgba(255, 255, 255, 0.07);
+
+  /*
+    Translucent chrome. Floating layers (the dock, sticky headers, sheets) are
+    a material that content scrolls *under* — not an opaque strip that eats a
+    band of the screen (apple.md §12). Both fall back to solid under
+    prefers-reduced-transparency, handled at the utility below.
+  */
+  --chrome: rgba(10, 10, 11, 0.78);
+  --chrome-solid: #0a0a0b;
+  --chrome-border: rgba(255, 255, 255, 0.06);
 
   /* "Glass" tokens repurposed as solid card surfaces (V3 drops blur) */
-  --glass-surface: #1a1a24;
-  --glass-surface-strong: #1e1e2c;
+  --glass-surface: #141415;
+  --glass-surface-strong: #1c1c1e;
   --glass-border: rgba(255, 255, 255, 0.06);
-  --glass-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+  --glass-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 
   /* Status */
   --success: #22c55e; /* online / positive change */
   --warning: #f97316; /* trending orange */
   --error: #ef4444; /* negative change / destructive */
 
-  /* Auth radial glow (V3 Screen 1 — purple halo from top-center) */
+  /*
+    Auth radial glow (V3 Screen 1 — purple halo from top-center).
+
+    The old halo was 55rem wide and resolved to the app background only at 72%,
+    so on a phone it tinted roughly the top half of the screen and the form sat
+    inside a purple field. Tightened to a contained glow behind the wordmark:
+    same identity, but it reads as light falling on the mark rather than as a
+    coloured backdrop, and the fields below sit on the real app ground.
+  */
   --auth-gradient: radial-gradient(
-    55rem 38rem at 50% -8%,
-    #2d1b69 0%,
-    #17123a 42%,
-    #0d0d12 72%
+    30rem 18rem at 50% -8%,
+    #241553 0%,
+    #120d26 40%,
+    var(--bg) 66%
   );
 }
 
@@ -117,28 +169,41 @@
   --gold-border: #d97706;
   --verified: #3b82f6;
 
-  --bg: #f4f5fb;
+  --bg: #f6f6f7;
   --bg-elevated: #ffffff;
   --card: #ffffff;
-  --input-bg: #f1f2f9;
-  --fg: #0a0b10;
-  --fg-muted: #6b7280;
-  --fg-disabled: #9ca3af;
+  --surface-active: #e8e8ea;
+  --input-bg: #eeeef0;
+  --fg: #1c1c1e;
+  --fg-muted: #6e6e73;
+  --fg-subtle: #8e8e93;
+  --fg-disabled: #b0b0b5;
+
+  --emphasis: #1c1c1e;
+  --emphasis-fg: #ffffff;
+
+  --fill: rgba(120, 120, 128, 0.12);
+  --fill-strong: rgba(120, 120, 128, 0.2);
+  --hairline: rgba(10, 11, 16, 0.09);
+
+  --chrome: rgba(246, 246, 248, 0.72);
+  --chrome-solid: #f6f6f8;
+  --chrome-border: rgba(10, 11, 16, 0.09);
 
   --glass-surface: #ffffff;
   --glass-surface-strong: #ffffff;
   --glass-border: rgba(10, 11, 16, 0.08);
-  --glass-shadow: 0 2px 12px rgba(31, 38, 80, 0.1);
+  --glass-shadow: 0 1px 2px rgba(31, 38, 80, 0.08);
 
   --success: #16a34a;
   --warning: #ea580c;
   --error: #dc2626;
 
   --auth-gradient: radial-gradient(
-    55rem 38rem at 50% -8%,
-    #e6ddff 0%,
-    #f1ecff 45%,
-    #f4f5fb 75%
+    34rem 22rem at 50% -6%,
+    #ded1ff 0%,
+    #efe9ff 40%,
+    var(--bg) 70%
   );
 }
 
@@ -158,7 +223,16 @@
   --color-input: var(--input-bg);
   --color-fg: var(--fg);
   --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
   --color-fg-disabled: var(--fg-disabled);
+  --color-fill: var(--fill);
+  --color-fill-strong: var(--fill-strong);
+  --color-surface-active: var(--surface-active);
+  --color-emphasis: var(--emphasis);
+  --color-emphasis-fg: var(--emphasis-fg);
+  --color-hairline: var(--hairline);
+  --color-chrome: var(--chrome);
+  --color-chrome-border: var(--chrome-border);
   --color-glass: var(--glass-surface);
   --color-glass-strong: var(--glass-surface-strong);
   --color-glass-border: var(--glass-border);
@@ -171,7 +245,7 @@
   --radius-sm: 10px;
   --radius-md: 14px; /* cards, list items */
   --radius-lg: 20px; /* large cards, modals */
-  --radius-xl: 28px; /* bottom-sheet handles, discovery cards */
+  --radius-xl: 24px; /* bottom-sheet handles, discovery cards */
   --radius-card: 14px;
   --radius-pill: 9999px;
 
@@ -191,6 +265,21 @@ body {
   font-family: var(--font-inter), Inter, -apple-system, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* Let the face pick its optical size where one is available, so small text
+     stays open and large text stays tight without hand-tuning each size. */
+  font-optical-sizing: auto;
+  /* Body copy sits at the neutral end of the tracking ramp (apple.md §15);
+     the display/title utilities tighten from here, captions loosen. */
+  letter-spacing: -0.006em;
+}
+
+/*
+  Headings carry negative tracking because they are, by definition, the large
+  end of the ramp. Scoped with :where() so it contributes zero specificity and
+  any utility class still wins.
+*/
+:where(h1, h2, h3) {
+  letter-spacing: -0.018em;
 }
 
 /*
@@ -225,15 +314,204 @@ body {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
 }
 
+/* ==========================================================================
+   Materials — translucent chrome (apple.md §12)
+
+   A floating layer is a material with content moving *underneath* it, not an
+   opaque strip. `blur + saturate` is what makes it read as glass rather than a
+   flat tint: saturation restores the colour the blur washes out, which is the
+   whole reason Apple's materials look alive over a photo.
+
+   Weight encodes hierarchy: `material-bar` for thin persistent chrome (dock,
+   headers), `material-panel` for larger surfaces (sheets, menus), which get a
+   stronger blur and a deeper shadow because a bigger surface should read as
+   thicker.
+   ========================================================================== */
+@utility material-bar {
+  background: var(--chrome);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+}
+
+@utility material-panel {
+  background: var(--chrome);
+  -webkit-backdrop-filter: blur(36px) saturate(180%);
+  backdrop-filter: blur(36px) saturate(180%);
+  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.55);
+}
+
+/*
+  Reduced transparency: make the material frosty→solid and drop the blur, per
+  apple.md §14. Declared once here so no call site has to remember it.
+*/
+@media (prefers-reduced-transparency: reduce) {
+  .material-bar,
+  .material-panel {
+    background: var(--chrome-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/*
+  Scroll edge effect — the soft fade where scrolling content meets floating
+  chrome, instead of a hard 1px divider (apple.md §12). Sits directly above the
+  bar and is purely decorative, so it never intercepts a touch.
+*/
+@utility scroll-edge {
+  pointer-events: none;
+  background: linear-gradient(to top, var(--chrome-solid), transparent);
+}
+
+/* ==========================================================================
+   Tactile states (apple.md §1, §10)
+
+   Feedback belongs on pointer-DOWN, not on release, and it has to be instant.
+   `.pressable` is the one place that contract lives, so every control in the
+   app depresses with the same weight and timing.
+
+   `touch-action: manipulation` removes the legacy ~300ms double-tap delay, and
+   killing the tap highlight stops mobile Safari/Chrome painting their own grey
+   flash on top of our own feedback.
+   ========================================================================== */
+@utility pressable {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 120ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 120ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 150ms cubic-bezier(0.22, 1, 0.36, 1);
+  &:active {
+    transform: scale(0.97);
+  }
+  &:disabled {
+    transform: none;
+  }
+}
+
+/* Large surfaces (cards, list rows) should barely move — a full 0.97 on a
+   full-width row reads as the whole screen lurching. */
+@utility pressable-subtle {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 120ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 150ms cubic-bezier(0.22, 1, 0.36, 1);
+  &:active {
+    transform: scale(0.985);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pressable:active,
+  .pressable-subtle:active {
+    transform: none;
+    opacity: 0.7;
+  }
+}
+
+/* One focus ring for the whole app: visible on keyboard, invisible on touch. */
+@utility focus-ring {
+  &:focus-visible {
+    outline: 2px solid var(--fg);
+    outline-offset: 2px;
+  }
+}
+
+/* ==========================================================================
+   Page rhythm
+
+   Page gutters and section gaps had drifted (px-4 here, px-5 there; mt-4, mt-5,
+   mt-6, mt-7 between sections), so screens that should have felt like one
+   product were a few pixels out of step with each other. These two utilities
+   are the single source for both, and whitespace — not a border or a card — is
+   what separates sections.
+   ========================================================================== */
+@utility page-x {
+  padding-inline: 1.25rem; /* 20px */
+}
+
+@utility stack-section {
+  margin-top: 2rem; /* 32px between top-level sections */
+}
+
+/* ==========================================================================
+   Type ramp (apple.md §15)
+
+   Tracking is size-specific: large text needs NEGATIVE tracking because letters
+   read as drifting apart the bigger they get, while small text needs a touch of
+   positive tracking to stay legible. Leading moves inversely to size — tight on
+   display, generous on body. A single global letter-spacing would be wrong at
+   one end of the ramp or the other, so the ramp is expressed as classes and
+   applied at the call site.
+   ========================================================================== */
+@utility type-display {
+  font-size: 2rem; /* 32px — the screen's one identity anchor */
+  line-height: 1.1;
+  letter-spacing: -0.026em;
+  font-weight: 700;
+}
+
+@utility type-title {
+  font-size: 1.375rem; /* 22px — section headers */
+  line-height: 1.2;
+  letter-spacing: -0.019em;
+  font-weight: 600;
+}
+
+@utility type-headline {
+  font-size: 1.0625rem; /* 17px — list-row names, emphasised body */
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  font-weight: 600;
+}
+
+@utility type-body {
+  font-size: 1.0625rem; /* 17px — post bodies, messages, paragraphs */
+  line-height: 1.47;
+  letter-spacing: -0.006em;
+}
+
+@utility type-callout {
+  font-size: 0.9375rem; /* 15px — secondary rows, supporting copy */
+  line-height: 1.4;
+  letter-spacing: -0.003em;
+}
+
+@utility type-caption {
+  font-size: 0.8125rem; /* 13px — timestamps, metadata, counters */
+  line-height: 1.35;
+  letter-spacing: 0.004em;
+}
+
+@utility type-label {
+  font-size: 0.8125rem; /* 13px — group eyebrow ("ACCOUNT", "APPEARANCE") */
+  line-height: 1.2;
+  letter-spacing: 0.055em;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+@utility type-footnote {
+  font-size: 0.6875rem; /* 11px — dock labels, badges */
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+}
+
 /*
   Signature brand gradient (UISpec V3 §2.5): purple → light purple. Used for
   primary CTAs, the logo mark, active pills, avatar rings, and own chat bubbles.
 */
 @utility gradient-brand {
+  /*
+    Kept as a near-flat vertical fill rather than the old 90deg purple→magenta
+    sweep. A saturated two-hue gradient on ~50 controls is what made the app
+    read as "purple everywhere"; a single hue with a small top-lift still gives
+    a filled control the sense of a lit surface without competing with content.
+    The utility name is unchanged because ~50 call sites depend on it.
+  */
   background-image: linear-gradient(
-    90deg,
-    var(--accent) 0%,
-    var(--accent-grad-end) 100%
+    180deg,
+    var(--accent-light) 0%,
+    var(--accent) 100%
   );
 }
 

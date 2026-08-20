@@ -20,13 +20,24 @@ export function Skeleton({
   );
 }
 
-/** A glass card wrapper of skeleton lines — matches the feed/list card shape. */
+/**
+ * A post-shaped shimmer.
+ *
+ * Posts and list rows are no longer bordered cards floating in a gap — they are
+ * full-width rows separated by hairlines. The skeleton has to be the same
+ * shape, or the content visibly jumps and re-flows the instant it arrives,
+ * which is the loading equivalent of a layout shift (apple.md §16 — craft; a
+ * placeholder that lies about the shape is worse than none).
+ */
 export function SkeletonCard({ className }: { className?: string }) {
   return (
-    <div className={cn("glass rounded-[var(--radius-md)] p-4", className)}>
-      <div className="flex items-center gap-3">
-        <Skeleton className="h-10 w-10 rounded-full" />
-        <Skeleton className="h-4 w-32" />
+    <div className={cn("border-b border-hairline py-4", className)}>
+      <div className="flex items-center gap-2.5">
+        <Skeleton className="h-11 w-11 shrink-0 rounded-full" />
+        <div className="min-w-0 flex-1">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="mt-1.5 h-3 w-24" />
+        </div>
       </div>
       <Skeleton className="mt-3 h-4 w-full" />
       <Skeleton className="mt-2 h-4 w-2/3" />
@@ -37,7 +48,7 @@ export function SkeletonCard({ className }: { className?: string }) {
 /** A compact list-row skeleton (avatar + two lines). */
 export function SkeletonRow() {
   return (
-    <div className="glass flex items-center gap-3 rounded-[var(--radius-md)] p-4">
+    <div className="flex items-center gap-3 py-3.5">
       <Skeleton className="h-11 w-11 shrink-0 rounded-full" />
       <div className="min-w-0 flex-1">
         <Skeleton className="h-4 w-28" />
@@ -50,7 +61,7 @@ export function SkeletonRow() {
 /** `count` stacked list rows — the shimmer for a tab that renders a list. */
 export function SkeletonRows({ count = 5 }: { count?: number }) {
   return (
-    <div className="mt-4 space-y-2">
+    <div className="mt-4">
       {Array.from({ length: count }).map((_, i) => (
         <SkeletonRow key={i} />
       ))}
@@ -58,12 +69,22 @@ export function SkeletonRows({ count = 5 }: { count?: number }) {
   );
 }
 
-/** `count` stacked feed cards — the shimmer for a tab that renders posts. */
-export function SkeletonCards({ count = 3 }: { count?: number }) {
+/**
+ * `count` stacked feed posts — the shimmer for a tab that renders posts.
+ * `className` is forwarded to each row so an edge-to-edge feed can supply its
+ * own gutter, the same way the real post list does.
+ */
+export function SkeletonCards({
+  count = 3,
+  className,
+}: {
+  count?: number;
+  className?: string;
+}) {
   return (
-    <div className="mt-4 space-y-4">
+    <div className="mt-2">
       {Array.from({ length: count }).map((_, i) => (
-        <SkeletonCard key={i} />
+        <SkeletonCard key={i} className={className} />
       ))}
     </div>
   );

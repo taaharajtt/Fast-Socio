@@ -90,7 +90,7 @@ export function HelpResponseCard({
   return (
     <div
       className={cn(
-        "border-b border-glass-border py-3.5 last:border-b-0",
+        "py-5",
         response.is_selected && "bg-success/5"
       )}
     >
@@ -165,7 +165,7 @@ export function HelpResponseCard({
             type="button"
             onClick={() => run(() => selectHelper(response.id, requestId))}
             disabled={pending}
-            className="flex items-center gap-1.5 rounded-full bg-success/15 px-3 py-1.5 text-xs font-semibold text-success transition-colors disabled:opacity-60"
+            className="pressable focus-ring flex items-center gap-1.5 rounded-[9px] bg-success/15 px-3 py-1.5 text-xs font-semibold text-success disabled:opacity-60"
           >
             <Award className="h-3.5 w-3.5" aria-hidden /> Select &amp; thank
           </button>
@@ -177,7 +177,7 @@ export function HelpResponseCard({
             type="button"
             onClick={() => setReplyOpen((v) => !v)}
             disabled={pending}
-            className="flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs font-medium text-fg-muted transition-colors hover:text-fg disabled:opacity-60"
+            className="pressable focus-ring flex items-center gap-1.5 rounded-[9px] bg-fill px-3 py-1.5 text-xs font-medium text-fg-muted hover:text-fg disabled:opacity-60"
           >
             <CornerDownRight className="h-3.5 w-3.5" aria-hidden />
             {response.seeker_reply ? "Edit reply" : "Reply"}
@@ -190,7 +190,7 @@ export function HelpResponseCard({
             type="button"
             onClick={() => run(() => deleteResponse(response.id, requestId))}
             disabled={pending}
-            className="flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs font-medium text-fg-muted transition-colors hover:text-error disabled:opacity-60"
+            className="pressable focus-ring flex items-center gap-1.5 rounded-[9px] bg-fill px-3 py-1.5 text-xs font-medium text-fg-muted hover:text-error disabled:opacity-60"
           >
             <Trash2 className="h-3.5 w-3.5" aria-hidden /> Delete
           </button>
@@ -222,7 +222,7 @@ export function HelpResponseCard({
             <button
               type="button"
               onClick={() => setReplyOpen(false)}
-              className="rounded-full px-3 py-1.5 text-xs font-medium text-fg-muted hover:text-fg"
+              className="pressable focus-ring rounded-[9px] px-3 py-1.5 text-xs font-medium text-fg-muted hover:text-fg"
             >
               Cancel
             </button>
@@ -230,7 +230,7 @@ export function HelpResponseCard({
               type="button"
               onClick={sendReply}
               disabled={pending}
-              className="gradient-brand ml-auto rounded-full px-4 py-1.5 text-xs font-semibold text-white active:scale-95 disabled:opacity-50"
+              className="pressable focus-ring ml-auto rounded-[9px] bg-emphasis px-4 py-1.5 text-xs font-semibold text-emphasis-fg disabled:bg-fill disabled:text-fg-disabled"
             >
               {pending ? "…" : "Send reply"}
             </button>

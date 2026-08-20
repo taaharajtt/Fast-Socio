@@ -4,6 +4,7 @@ import { Suspense, use, useState } from "react";
 import { Newspaper } from "lucide-react";
 import { PostComposer } from "@/components/feed/post-composer";
 import { FeedList } from "@/components/feed/feed-list";
+import { SectionHeader } from "@/components/ui";
 import { SkeletonCards } from "@/components/ui/skeleton";
 import type { FeedPost } from "@/lib/feed/types";
 
@@ -73,13 +74,10 @@ export function HomeFeed({
           above it — gives the feed its own identity instead of running straight
           on from the Campus Help card. */}
       <div className="mb-2 mt-4 px-4">
-        <h2 className="flex items-center gap-1.5 text-sm font-semibold text-accent">
-          <Newspaper className="h-4 w-4" aria-hidden />
-          Feed
-        </h2>
+        <SectionHeader title="Feed" icon={Newspaper} className="mb-0" />
       </div>
       <div>
-        <Suspense fallback={<SkeletonCards count={3} />}>
+        <Suspense fallback={<SkeletonCards count={3} className="px-4" />}>
           <StreamedFeedList feed={feed} refreshToken={refreshToken} />
         </Suspense>
       </div>

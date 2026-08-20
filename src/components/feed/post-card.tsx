@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { GlassSheet, VerifiedBadge } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { likeToneClass, likeGlyphClass } from "@/components/ui/like-style";
 import { renderLinkifiedText } from "@/lib/linkify";
 import {
   toggleLike,
@@ -175,7 +176,7 @@ function PostCardImpl({
   return (
     <article
       onClick={onCardTap}
-      className="relative touch-manipulation select-none border-b border-glass-border px-4 py-3.5"
+      className="relative touch-manipulation select-none border-b border-hairline px-4 py-4"
     >
       <div className="flex items-center gap-2.5">
         {(() => {
@@ -194,13 +195,13 @@ function PostCardImpl({
                 ) : null}
               </div>
               <span className="min-w-0">
-                <span className="flex items-center gap-1 text-base font-semibold text-fg">
+                <span className="type-headline flex items-center gap-1 text-fg">
                   <span className="truncate">
                     {anon ? "Anonymous" : (post.author_name ?? "Student")}
                   </span>
                   {!anon && post.author_verified && <VerifiedBadge />}
                 </span>
-                <span className="block text-[13px] text-fg-muted">
+                <span className="type-caption block text-fg-muted">
                   {!anon && post.author_department
                     ? `${post.author_department} · `
                     : ""}
@@ -232,9 +233,9 @@ function PostCardImpl({
             setConfirmDelete(false);
             setOptionsOpen(true);
           }}
-          className="-m-2 shrink-0 p-2 text-fg-muted hover:text-fg"
+          className="pressable focus-ring -m-2 shrink-0 rounded-lg p-2 text-fg-muted hover:text-fg"
         >
-          <MoreHorizontal className="h-6 w-6" aria-hidden />
+          <MoreHorizontal className="h-5 w-5" aria-hidden />
         </button>
       </div>
 
@@ -273,14 +274,14 @@ function PostCardImpl({
         </div>
       ) : (
         body && (
-          <p className="mt-2.5 whitespace-pre-wrap text-[15px] leading-[22px] text-fg">
+          <p className="type-body mt-2.5 whitespace-pre-wrap text-fg">
             {renderLinkifiedText(body)}
           </p>
         )
       )}
       {post.image_url && (
         <div
-          className="relative mt-2.5 w-full overflow-hidden rounded-xl"
+          className="relative mt-3 w-full overflow-hidden rounded-[14px]"
           style={{ aspectRatio: imageAspect }}
         >
           <AppImage
@@ -308,21 +309,18 @@ function PostCardImpl({
         </span>
       )}
 
-      <div className="mt-3 flex items-center gap-5 text-sm text-fg-muted">
+      <div className="mt-3.5 flex items-center gap-6 text-sm text-fg-muted">
         {/* -m-2 p-2 grows each hit area to ~44px without moving a pixel. */}
         <button
           type="button"
           onClick={onLike}
           className={cn(
-            "-m-2 flex items-center gap-1.5 p-2 transition-all active:scale-90",
-            liked ? "text-error" : "hover:text-fg"
+            "pressable focus-ring -m-2 flex items-center gap-1.5 rounded-lg p-2",
+            likeToneClass(liked)
           )}
           aria-pressed={liked}
         >
-          <Heart
-            className={cn("h-5 w-5", liked && "fill-current")}
-            aria-hidden
-          />
+          <Heart className={likeGlyphClass(liked)} aria-hidden />
           {likes}
         </button>
         {/* UAT-004: open the half-screen comment sheet instead of navigating. */}
@@ -330,7 +328,7 @@ function PostCardImpl({
           type="button"
           onClick={() => setCommenting(true)}
           aria-label="Comments"
-          className="-m-2 flex items-center gap-1.5 p-2 transition-all hover:text-fg active:scale-90"
+          className="pressable focus-ring -m-2 flex items-center gap-1.5 rounded-lg p-2 hover:text-fg"
         >
           <MessageCircle className="h-5 w-5" aria-hidden />
           {comments}
@@ -339,7 +337,7 @@ function PostCardImpl({
           type="button"
           onClick={() => setSharing(true)}
           aria-label="Share post"
-          className="-m-2 flex items-center gap-1.5 p-2 transition-all hover:text-fg active:scale-90"
+          className="pressable focus-ring -m-2 flex items-center gap-1.5 rounded-lg p-2 hover:text-fg"
         >
           <Share2 className="h-5 w-5" aria-hidden />
           Share

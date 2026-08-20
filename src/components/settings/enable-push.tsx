@@ -80,7 +80,7 @@ export function EnablePush() {
       <div className="flex items-center justify-between">
         <span className="text-sm">Push notifications</span>
         <GlassButton
-          variant={state === "on" ? "glass" : "primary"}
+          variant={state === "on" ? "secondary" : "primary"}
           size="sm"
           disabled={state === "working"}
           onClick={state === "on" ? disable : enable}

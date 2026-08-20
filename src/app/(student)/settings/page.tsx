@@ -1,6 +1,10 @@
 import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
 import { GlassCard } from "@/components/ui";
+import {
+  PageHeader,
+  SettingsGroup,
+  SettingsRow,
+} from "@/components/ui/page-header";
 import { glassButton } from "@/components/ui/glass-button";
 import { SignOutButton } from "@/components/sign-out-button";
 import { DeleteAccountButton } from "@/components/delete-account-button";
@@ -8,10 +12,22 @@ import { NotificationPrefs } from "@/components/settings/notification-prefs";
 import { EnablePush } from "@/components/settings/enable-push";
 import { AppearanceSettings } from "@/components/settings/appearance-settings";
 import { InstallApp } from "@/components/settings/install-app";
-import { ShieldCheck, UserCog, MonitorSmartphone, Ban, ChevronRight } from "lucide-react";
+import { ShieldCheck, UserCog, MonitorSmartphone, Ban } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthEmail, getAuthUserId } from "@/lib/auth/user";
 
+/**
+ * Settings.
+ *
+ * This screen used to be eight stacked `GlassCard`s — one per section — so a
+ * list of eleven controls read as eleven containers, and the borders carried
+ * more visual weight than the labels inside them. The cards are gone: an
+ * uppercase eyebrow introduces each group, space separates the groups, and the
+ * page itself is the container.
+ *
+ * The two surfaces that remain are the ones where containment says something.
+ * See the comments at their call sites.
+ */
 export default async function SettingsPage() {
   const supabase = await createClient();
   const [userId, email] = await Promise.all([getAuthUserId(), getAuthEmail()]);
@@ -25,64 +41,40 @@ export default async function SettingsPage() {
     .single();
 
   return (
-    <main className="mx-auto w-full max-w-md px-5 py-6">
-      <div className="flex items-center gap-3">
-        <Link
-          href="/profile"
-          aria-label="Back"
-          className="glass flex h-9 w-9 items-center justify-center rounded-full text-fg-muted"
-        >
-          <ChevronLeft className="h-5 w-5" aria-hidden />
-        </Link>
-        <h1 className="text-xl font-extrabold tracking-tight">Settings</h1>
-      </div>
+    <main className="page-x mx-auto w-full max-w-md py-6">
+      <PageHeader title="Settings" backHref="/profile" />
 
-      <section className="mt-6 space-y-2">
-        <h2 className="text-sm font-medium text-fg-muted">Account</h2>
-        <GlassCard className="space-y-1 p-5">
-          <p className="text-sm text-fg-muted">Signed in as</p>
-          <p className="break-all font-medium">{email ?? "—"}</p>
-        </GlassCard>
-      </section>
+      <SettingsGroup label="Account">
+        <p className="type-body break-all text-fg">{email ?? "—"}</p>
+        <p className="type-caption mt-1 text-fg-subtle">Signed in</p>
+      </SettingsGroup>
 
-      <section className="mt-5 space-y-2">
-        <h2 className="text-sm font-medium text-fg-muted">Manage</h2>
-        <GlassCard className="divide-y divide-glass-border p-0">
-          <SettingsLink href="/settings/privacy" icon={ShieldCheck} label="Privacy" />
-          <SettingsLink href="/settings/account" icon={UserCog} label="Account" />
-          <SettingsLink
-            href="/settings/devices"
-            icon={MonitorSmartphone}
-            label="Devices & security"
-          />
-          <SettingsLink href="/settings/blocked" icon={Ban} label="Blocked & muted" />
-        </GlassCard>
-      </section>
+      <SettingsGroup label="Privacy &amp; security">
+        <SettingsRow href="/settings/privacy" icon={ShieldCheck} label="Privacy" />
+        <SettingsRow href="/settings/account" icon={UserCog} label="Account" />
+        <SettingsRow
+          href="/settings/devices"
+          icon={MonitorSmartphone}
+          label="Devices &amp; security"
+        />
+        <SettingsRow href="/settings/blocked" icon={Ban} label="Blocked &amp; muted" />
+      </SettingsGroup>
 
-      <section className="mt-5 space-y-2">
-        <h2 className="text-sm font-medium text-fg-muted">App</h2>
+      <SettingsGroup label="FAST SOCIO">
         {/* The permanent, user-initiated install path. The banner is snoozeable
             and the onboarding step is one-shot, so without this a user who
             declined once had no way back. Renders an "Installed" confirmation
             rather than an ask once the app is on the home screen. */}
-        <GlassCard className="p-5">
-          <InstallApp />
-        </GlassCard>
-      </section>
+        <InstallApp />
+      </SettingsGroup>
 
-      <section className="mt-5 space-y-2">
-        <h2 className="text-sm font-medium text-fg-muted">Appearance</h2>
-        <GlassCard className="space-y-5 p-5">
-          <AppearanceSettings />
-        </GlassCard>
-      </section>
+      <SettingsGroup label="Appearance">
+        <AppearanceSettings />
+      </SettingsGroup>
 
-      <section className="mt-5 space-y-2">
-        <h2 className="text-sm font-medium text-fg-muted">Activity &amp; alerts</h2>
-        <GlassCard className="p-5">
-          <EnablePush />
-        </GlassCard>
-        <GlassCard className="px-5 py-1">
+      <SettingsGroup label="Activity &amp; alerts">
+        <EnablePush />
+        <div className="mt-2">
           <NotificationPrefs
             initial={{
               matches: prefs?.matches ?? true,
@@ -98,57 +90,39 @@ export default async function SettingsPage() {
               end: prefs?.quiet_end ?? 7,
             }}
           />
-        </GlassCard>
-      </section>
+        </div>
+      </SettingsGroup>
 
-      <section className="mt-5 space-y-2">
-        <h2 className="text-sm font-medium text-fg-muted">Your data</h2>
-        <GlassCard className="space-y-3 p-5">
-          <p className="text-sm text-fg-muted">
-            Download a copy of your FAST SOCIO data as JSON.
-          </p>
-          <Link
-            href="/settings/export"
-            prefetch={false}
-            download
-            className={glassButton({ variant: "glass", size: "md" })}
-          >
-            Export my data
-          </Link>
-        </GlassCard>
-      </section>
+      <SettingsGroup label="Your data">
+        <p className="type-callout text-fg-muted">
+          Download a copy of your FAST SOCIO data as JSON.
+        </p>
+        <Link
+          href="/settings/export"
+          prefetch={false}
+          download
+          className={glassButton({ variant: "secondary", size: "md" }) + " mt-3"}
+        >
+          Export my data
+        </Link>
+      </SettingsGroup>
 
-      <section className="mt-5 space-y-2">
-        <h2 className="text-sm font-medium text-fg-muted">Session</h2>
-        <GlassCard className="p-5">
-          <SignOutButton />
-        </GlassCard>
-      </section>
+      <SettingsGroup label="Session">
+        <SignOutButton />
+      </SettingsGroup>
 
-      <section className="mt-5 space-y-2">
-        <h2 className="text-sm font-medium text-error">Danger zone</h2>
-        <GlassCard className="p-5">
+      <SettingsGroup label="Danger zone" tone="danger">
+        {/*
+          The one card kept on this page. Deleting an account is irreversible,
+          and a bounded surface is the difference between "another row in a
+          list" and "a thing that is separate from the rest of this screen" —
+          containment communicating something, which is the only reason to draw
+          a box at all.
+        */}
+        <GlassCard className="p-4">
           <DeleteAccountButton />
         </GlassCard>
-      </section>
+      </SettingsGroup>
     </main>
-  );
-}
-
-function SettingsLink({
-  href,
-  icon: Icon,
-  label,
-}: {
-  href: string;
-  icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
-  label: string;
-}) {
-  return (
-    <Link href={href} className="flex items-center gap-3 px-5 py-3.5">
-      <Icon className="h-5 w-5 text-fg-muted" aria-hidden />
-      <span className="flex-1 text-sm font-medium">{label}</span>
-      <ChevronRight className="h-4 w-4 text-fg-disabled" aria-hidden />
-    </Link>
   );
 }

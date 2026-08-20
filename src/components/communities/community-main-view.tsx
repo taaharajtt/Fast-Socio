@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Calendar, Compass, MessageSquare, ShieldCheck } from "lucide-react";
 import { AppImage } from "@/components/ui/app-image";
-import { VerifiedBadge } from "@/components/ui";
+import { SectionHeader, VerifiedBadge } from "@/components/ui";
 import { communityIcon } from "@/lib/communities/icon";
 import { CreateSpaceButton } from "@/components/communities/create-space-button";
 import { ChatRoomCard, type ChatRoomCardVM } from "@/components/communities/chat-room-card";
@@ -33,10 +33,6 @@ export type TileVM = {
   /** Members seen in the last two minutes; > 0 lights the corner dot. */
   activeNow?: number;
 };
-
-function SectionHeader({ title }: { title: string }) {
-  return <h2 className="mb-3 text-[17px] font-bold">{title}</h2>;
-}
 
 /**
  * Edge-to-edge horizontal rail; tiles bleed into the page gutter as they

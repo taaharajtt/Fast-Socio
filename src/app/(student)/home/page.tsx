@@ -44,9 +44,13 @@ export default function HomePage() {
       {/* Header (UISpec V3 Screen 2) — brand logo + Activity (top-right).
           The in-app notification bell was removed; notifications now surface as
           PWA push on mobile/iOS (Settings → Enable push). */}
-      <header className="flex h-20 items-center justify-between px-4">
+      <header className="flex h-[76px] items-center justify-between px-4">
         {/* Brand logo (UAT-001). PNG lives at public/brand/logo.png; the h1 text
-            stays as the accessible name and renders if the asset is missing. */}
+            stays as the accessible name and renders if the asset is missing.
+            56px tall, up from 44px: at the smaller size the wordmark read as a
+            label on the feed rather than as the product's name, which is the
+            one job a masthead has. Deliberately not larger than that — this is
+            an identity anchor above a feed, not a banner. */}
         <h1 className="text-xl font-black tracking-tight">
           {/* App is dark-only; always render the dark-mode logo asset. */}
           <Image
@@ -55,19 +59,21 @@ export default function HomePage() {
             width={512}
             height={256}
             priority
-            className="h-[70px] w-auto"
+            className="h-14 w-auto"
           />
           <span className="sr-only">FAST SOCIO</span>
         </h1>
         {/* Top-right actions: quick jump to the Campus Map, then Activity. The
-            dp lives on the bottom nav's "Me" tab (UAT-005). */}
-        <div className="flex items-center gap-2">
+            dp lives on the bottom nav's "Me" tab (UAT-005). Bare glyphs, not
+            bordered wells — the icon IS the button, and each still carries a
+            40px tap target (apple.md §10). */}
+        <div className="flex items-center gap-1">
           <Link
             href="/map"
             aria-label="Campus Map"
-            className="glass flex h-9 w-9 items-center justify-center rounded-full text-fg-muted hover:text-fg"
+            className="pressable focus-ring flex h-10 w-10 items-center justify-center rounded-full text-fg hover:text-accent"
           >
-            <MapPin className="h-5 w-5" aria-hidden />
+            <MapPin className="h-[22px] w-[22px]" strokeWidth={1.9} aria-hidden />
           </Link>
           {/* The button itself is static; only its unread count is per-user, so
               the badge alone streams on top of an already-tappable control. */}
@@ -151,13 +157,21 @@ function ActivityLink({ unread = 0 }: { unread?: number }) {
       href="/activity"
       data-tour="activity"
       aria-label={unread ? `Activity, ${unread} unread` : "Activity"}
-      className="glass relative flex h-9 w-9 items-center justify-center rounded-full text-fg-muted hover:text-fg"
+      className="pressable focus-ring relative flex h-10 w-10 items-center justify-center rounded-full text-fg hover:text-accent"
     >
-      <Bell className="h-5 w-5" aria-hidden />
+      <Bell className="h-[22px] w-[22px]" strokeWidth={1.9} aria-hidden />
+      {/*
+        A dot, not a number. The exact count of unread activity does not change
+        what you do next — you either have some or you don't — and a two-digit
+        badge on a 22px glyph crowds the glyph it is meant to annotate. The
+        count still reaches screen readers through the link's accessible name
+        above (apple.md 16: feedback should be as loud as it is useful).
+      */}
       {unread > 0 && (
-        <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold leading-none text-white ring-2 ring-bg">
-          {unread > 99 ? "99+" : unread}
-        </span>
+        <span
+          className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-accent ring-2 ring-bg"
+          aria-hidden
+        />
       )}
     </Link>
   );

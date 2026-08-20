@@ -16,20 +16,31 @@ export function MyHelpPanel({ rows }: { rows: HelpRequestRow[] }) {
   const activeQuiet = active.filter((r) => !withResponseIds.has(r.id));
 
   return (
-    <div className="space-y-6">
-      <Link
-        href="/help/new"
-        className="gradient-brand flex items-center justify-center gap-2 rounded-full px-5 py-3.5 text-[15px] font-semibold text-white shadow-[0_8px_24px_rgba(124,92,255,0.35)] active:scale-[0.98]"
-      >
-        <Plus className="h-5 w-5" aria-hidden />
-        Ask for help
-      </Link>
+    <div>
+      {/*
+        "Ask for help" was a full-width purple pill roughly a sixth of the
+        viewport tall, sitting above content — on a tab whose actual subject is
+        the asks you have already made, the compose button WAS the screen. It is
+        now a compact action on the header line: still the first thing in the
+        reading order, still an obvious primary (it is the only light-filled
+        control here), but sized to what it is.
+      */}
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="type-title">Your asks</h2>
+        <Link
+          href="/help/new"
+          className="pressable focus-ring flex shrink-0 items-center gap-1.5 rounded-[10px] bg-emphasis px-3.5 py-2 text-sm font-semibold text-emphasis-fg"
+        >
+          <Plus className="h-4 w-4" aria-hidden />
+          Ask for help
+        </Link>
+      </div>
 
       {rows.length === 0 ? (
-        <div className="glass rounded-[14px] px-5 py-10 text-center">
-          <HandHeart className="mx-auto h-8 w-8 text-fg-muted" aria-hidden />
-          <p className="mt-3 font-semibold text-fg">You haven&apos;t asked yet</p>
-          <p className="mt-1 text-sm text-fg-muted">
+        <div className="py-14 text-center">
+          <HandHeart className="mx-auto h-8 w-8 text-fg-subtle" aria-hidden />
+          <p className="type-headline mt-3 text-fg">You haven&apos;t asked yet</p>
+          <p className="type-callout mt-1 text-fg-muted">
             Stuck on something? Post it and let campus help you out.
           </p>
         </div>
@@ -37,7 +48,7 @@ export function MyHelpPanel({ rows }: { rows: HelpRequestRow[] }) {
         <>
           {withResponses.length > 0 && (
             <Section
-              icon={<Inbox className="h-4 w-4 text-aura" aria-hidden />}
+              icon={<Inbox className="h-4 w-4 text-fg-subtle" aria-hidden />}
               title="Responses received"
               hint="Reply to a helper, or pick the one who solved it."
               rows={withResponses}
@@ -52,7 +63,7 @@ export function MyHelpPanel({ rows }: { rows: HelpRequestRow[] }) {
           )}
           {resolved.length > 0 && (
             <Section
-              icon={<CheckCircle2 className="h-4 w-4 text-fg-muted" aria-hidden />}
+              icon={<CheckCircle2 className="h-4 w-4 text-fg-subtle" aria-hidden />}
               title="Resolved & history"
               rows={resolved}
               muted
@@ -79,14 +90,14 @@ function Section({
   muted?: boolean;
 }) {
   return (
-    <section>
-      <div className="mb-2 flex items-center gap-2">
+    <section className="stack-section">
+      <div className="flex items-center gap-2">
         {icon}
-        <h2 className="text-sm font-semibold text-fg">{title}</h2>
-        <span className="text-xs text-fg-muted">{rows.length}</span>
+        <h3 className="type-label text-fg-subtle">{title}</h3>
+        <span className="type-label text-fg-disabled">{rows.length}</span>
       </div>
-      {hint && <p className="mb-2.5 text-xs text-fg-muted">{hint}</p>}
-      <div className={cn("space-y-3", muted && "opacity-50 grayscale")}>
+      {hint && <p className="type-caption mt-1 text-fg-subtle">{hint}</p>}
+      <div className={cn(muted && "opacity-80")}>
         {rows.map((req) => (
           <HelpCard key={req.id} req={req} />
         ))}

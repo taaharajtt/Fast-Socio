@@ -15,6 +15,7 @@ import {
   Image as ImageIcon,
   type LucideIcon,
 } from "lucide-react";
+import { AuraIcon } from "@/components/ui/aura-icon";
 import { AppImage } from "@/components/ui/app-image";
 
 /** Serializable, pre-rendered activity row handed down from the server. */
@@ -94,7 +95,7 @@ export function ActivityList({ items }: { items: ActivityItem[] }) {
         if (section.items.length === 0 && !isEarlier) return null;
         return (
           <section key={section.label}>
-            <p className="mb-1 mt-5 px-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-fg-disabled">
+            <p className="type-label mb-2 mt-8 px-1 text-fg-subtle">
               {section.label}
             </p>
             {section.items.length === 0 && isEarlier ? (
@@ -102,7 +103,7 @@ export function ActivityList({ items }: { items: ActivityItem[] }) {
                 You&apos;re all caught up! 🎉
               </p>
             ) : (
-              <div className="divide-y divide-white/[0.06]">
+              <div>
                 {section.items.map((item) => (
                   <ActivityRow key={item.key} item={item} />
                 ))}
@@ -131,15 +132,23 @@ function ActivityRow({ item }: { item: ActivityItem }) {
   return (
     <Link
       href={item.href}
-      className="flex items-center gap-3 py-3.5 transition-transform active:scale-[0.99]"
+      className="pressable-subtle focus-ring -mx-2 flex items-center gap-3 rounded-[10px] px-2 py-3.5"
     >
+      {/*
+        The notification's kind is a quiet annotation on the actor's face, not a
+        second coloured object. Every row used to carry a filled purple disc —
+        a full 44px one when there was no actor — so a screenful of notices was
+        a column of purple dots and the avatars, which are the actual content,
+        came second. The glyph now sits on a neutral fill; Aura keeps gold
+        because that colour IS the Aura identity, not decoration.
+      */}
       <div className="relative shrink-0">
         {noActor ? (
-          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-accent">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-fill">
             {isAura ? (
-              <Zap className="h-5 w-5 text-white" aria-hidden />
+              <AuraIcon className="h-5 w-5" />
             ) : (
-              <Icon className="h-5 w-5 text-white" aria-hidden />
+              <Icon className="h-5 w-5 text-fg-muted" aria-hidden />
             )}
           </div>
         ) : (
@@ -147,14 +156,21 @@ function ActivityRow({ item }: { item: ActivityItem }) {
             <div className="relative h-11 w-11 overflow-hidden rounded-full bg-card">
               {item.avatar && <AppImage src={item.avatar} alt="" sizes="44px" />}
             </div>
-            <span className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-accent ring-2 ring-bg">
-              <Icon className="h-2.5 w-2.5 text-white" aria-hidden />
+            <span className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-surface-active ring-2 ring-bg">
+              <Icon className="h-2.5 w-2.5 text-fg-muted" aria-hidden />
             </span>
           </>
         )}
       </div>
+      {/*
+        The timestamp moved from under the sentence to the end of the row.
+        Stacked, it doubled every row's height and put a second baseline under
+        text the eye had already finished; right-aligned, all the times form one
+        scannable column and the sentence gets the full width it needs
+        (apple.md 16: hierarchy through order and alignment).
+      */}
       <div className="min-w-0 flex-1">
-        <p className="text-[15px] leading-snug">
+        <p className="type-callout leading-snug">
           {rest !== null ? (
             <>
               <span className="font-semibold text-fg">{item.actorName}</span>
@@ -164,14 +180,16 @@ function ActivityRow({ item }: { item: ActivityItem }) {
             <span className="text-fg">{item.text}</span>
           )}
         </p>
-        <p className="mt-1 text-xs text-fg-disabled">{item.timeAgo}</p>
       </div>
-      {item.unread && (
-        <span
-          className="h-2 w-2 shrink-0 rounded-full bg-accent"
-          aria-label="Unread"
-        />
-      )}
+      <div className="flex shrink-0 items-center gap-2">
+        {item.unread && (
+          <span
+            className="h-2 w-2 rounded-full bg-accent"
+            aria-label="Unread"
+          />
+        )}
+        <span className="type-caption text-fg-muted">{item.timeAgo}</span>
+      </div>
     </Link>
   );
 }

@@ -37,7 +37,7 @@ export function OfficerRow({
           )}
         </span>
       </Link>
-      <span className="flex shrink-0 items-center gap-1 rounded-full bg-accent/12 px-2.5 py-1 text-[12px] font-semibold text-accent">
+      <span className="type-footnote flex shrink-0 items-center gap-1 rounded-full bg-fill px-2.5 py-1 font-semibold text-fg-muted">
         {officer.role === "owner" && <ShieldCheck className="h-3.5 w-3.5" aria-hidden />}
         {officer.title?.trim() || roleLabel(officer.role)}
       </span>

@@ -30,9 +30,7 @@ export function SegmentedPills({
   className,
 }: SegmentedPillsProps) {
   const activeFill =
-    accent === "aura"
-      ? "gradient-brand text-white shadow-[0_4px_16px_rgba(124,58,237,0.4)]"
-      : "bg-verified text-white shadow-[0_4px_16px_rgba(59,130,246,0.35)]";
+    accent === "aura" ? "bg-accent text-white" : "bg-verified text-white";
 
   return (
     <div
@@ -53,11 +51,11 @@ export function SegmentedPills({
             aria-selected={active}
             onClick={() => onChange(opt.value)}
             className={cn(
-              "h-9 shrink-0 rounded-[var(--radius-pill)] px-4 text-sm font-semibold " +
-                "transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]",
+              "pressable focus-ring h-9 shrink-0 rounded-[var(--radius-pill)] px-4",
+              "text-sm font-semibold",
               active
                 ? activeFill
-                : "glass font-medium text-fg-muted hover:text-fg"
+                : "bg-fill font-medium text-fg-muted hover:text-fg"
             )}
           >
             {opt.label}

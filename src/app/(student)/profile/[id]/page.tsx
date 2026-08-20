@@ -1,10 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, Zap, Heart, Check } from "lucide-react";
+import { ChevronLeft, Check } from "lucide-react";
 import { OpenChatButton } from "@/components/chat/open-chat-button";
 import { ProfileTabs } from "@/components/profile/profile-tabs";
 import { ProfileActionsMenu } from "@/components/profile/profile-actions-menu";
 import { BadgeStrip } from "@/components/profile/badge-strip";
+import {
+  CoverFallback,
+  ProfileStats,
+  ProfileVerifiedTick,
+} from "@/components/profile/hero";
 import { getEarnedBadges } from "@/lib/badges";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
@@ -173,13 +178,15 @@ export default async function PublicProfilePage({
             priority
           />
         ) : (
-          <div className="h-full w-full gradient-brand opacity-80" />
+          <CoverFallback />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/20 to-transparent" />
+        {/* Floating over a photo, so it carries its own material to stay
+            legible whatever the cover happens to be (apple.md §12). */}
         <Link
           href="/home"
           aria-label="Back"
-          className="absolute left-4 top-[max(1rem,calc(var(--safe-top)+0.5rem))] flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white"
+          className="material-bar pressable focus-ring absolute left-4 top-[max(1rem,calc(var(--safe-top)+0.5rem))] flex h-10 w-10 items-center justify-center rounded-full border border-white/15 text-white"
         >
           <ChevronLeft className="h-5 w-5" aria-hidden />
         </Link>
@@ -202,6 +209,7 @@ export default async function PublicProfilePage({
             {showOnline && isOnline(lastSeenAt) && (
               <OnlineDot className="bottom-1 right-1 h-3.5 w-3.5" />
             )}
+            {profile.verified && <ProfileVerifiedTick />}
           </div>
         </div>
       </div>
@@ -211,22 +219,14 @@ export default async function PublicProfilePage({
             double as the spacer that clears the avatar overhang. */}
         <BadgeStrip badges={badges} />
 
-        {profile.verified && (
-          <span
-            aria-label="Verified"
-            className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-white"
-          >
-            <Check className="h-3 w-3" strokeWidth={3} aria-hidden />
-          </span>
-        )}
         <div className="mt-1 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="truncate text-[22px] font-bold tracking-tight">
+            <h1 className="type-display truncate">
               {profile.full_name ?? "Student"}
             </h1>
-            <p className="truncate text-sm text-fg-muted">{deptLabel}</p>
+            <p className="type-callout truncate text-fg-muted">{deptLabel}</p>
             {showOnline && (
-              <p className="truncate text-xs text-fg-disabled">
+              <p className="type-caption truncate text-fg-disabled">
                 {presenceLabel(lastSeenAt)}
               </p>
             )}
@@ -235,14 +235,14 @@ export default async function PublicProfilePage({
             {isSelf ? (
               <Link
                 href="/profile/edit"
-                className="gradient-brand flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold text-white"
+                className="pressable focus-ring flex shrink-0 items-center gap-1.5 rounded-[10px] bg-fill px-4 py-2 text-sm font-semibold text-fg"
               >
                 Edit
               </Link>
             ) : matched ? (
               <OpenChatButton otherId={profile.id} />
             ) : (
-              <span className="flex items-center gap-1.5 rounded-full bg-card px-4 py-2 text-sm font-medium text-fg-muted">
+              <span className="flex items-center gap-1.5 rounded-full bg-fill px-4 py-2.5 text-sm font-medium text-fg-muted">
                 <Check className="h-4 w-4" aria-hidden />
                 Match to chat
               </span>
@@ -257,27 +257,15 @@ export default async function PublicProfilePage({
           </div>
         </div>
 
-        <div className="mb-5 mt-4 flex gap-3">
-          {showAura && (
-            <div className="flex-1 rounded-xl bg-card p-3 text-center">
-              <div className="flex items-center justify-center gap-1.5">
-                <Zap className="h-4 w-4 text-gold" aria-hidden />
-                <p className="text-xl font-bold">{profile.aura_score ?? 0}</p>
-              </div>
-              <p className="mt-1 text-xs text-fg-muted">Aura</p>
-            </div>
-          )}
-          <div className="flex-1 rounded-xl bg-card p-3 text-center">
-            <div className="flex items-center justify-center gap-1.5">
-              <Heart className="h-4 w-4 fill-error text-error" aria-hidden />
-              <p className="text-xl font-bold">{matchCount ?? 0}</p>
-            </div>
-            <p className="mt-1 text-xs text-fg-muted">Matches</p>
-          </div>
-        </div>
+        <ProfileStats
+          aura={profile.aura_score ?? 0}
+          matches={matchCount ?? 0}
+          showAura={showAura}
+          className="mb-5 mt-5"
+        />
 
         {profile.bio && (
-          <p className="mb-5 text-sm leading-relaxed text-fg">{profile.bio}</p>
+          <p className="type-callout mb-5 leading-relaxed text-fg">{profile.bio}</p>
         )}
 
         {/* Public profile is Posts-only — no Stats data is passed, so there's a

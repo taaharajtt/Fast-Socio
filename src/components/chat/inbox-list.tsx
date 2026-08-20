@@ -6,7 +6,7 @@ import { RequestRow } from "@/components/chat/request-row";
 import { OpenChatButton } from "@/components/chat/open-chat-button";
 import { AppImage } from "@/components/ui/app-image";
 import { resolveAvatarUrl } from "@/lib/avatar";
-import { OnlineDot, VerifiedBadge } from "@/components/ui/badges";
+import { OnlineDot, UnreadBadge, VerifiedBadge } from "@/components/ui/badges";
 import { communityIcon } from "@/lib/communities/icon";
 import { discoverGroupLabel } from "@/lib/discover/group-label";
 import { DiscoverGroupAvatar } from "@/components/discover/discover-group-avatar";
@@ -132,14 +132,13 @@ export function InboxList({
           No conversations yet. Match in Discover to start chatting.
         </p>
       ) : (
-        // Flat rows separated by a thin hairline (chat refresh).
-        <div className="divide-y divide-white/[0.05]">
+        <div>
           {/* Fresh matches (no conversation yet) sit at the TOP so a new match
               is the first thing seen, not buried under older threads. */}
           {newMatches.map((otherId) => {
             const p = profiles[otherId];
             return (
-              <div key={`nm:${otherId}`} className="flex items-center gap-3 py-3.5">
+              <div key={`nm:${otherId}`} className="-mx-2 flex items-center gap-3 px-2 py-3.5">
                 <Link
                   href={`/profile/${otherId}`}
                   className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full bg-card"
@@ -153,10 +152,10 @@ export function InboxList({
                   )}
                 </Link>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[15px] font-semibold text-fg">
+                  <p className="type-headline truncate text-fg">
                     {p?.full_name ?? "Student"}
                   </p>
-                  <p className="truncate text-sm text-accent">New match ✨</p>
+                  <p className="type-callout truncate text-fg-muted">New match ✨</p>
                 </div>
                 <OpenChatButton otherId={otherId} />
               </div>
@@ -170,7 +169,7 @@ export function InboxList({
                 <Link
                   key={`sp:${t.space.id}`}
                   href={`/chat/c/${t.space.id}`}
-                  className="flex items-center gap-3 py-3.5 transition-transform active:scale-[0.99]"
+                  className="pressable-subtle focus-ring -mx-2 flex items-center gap-3 rounded-[10px] px-2 py-3.5"
                 >
                   <div className="relative h-11 w-11 shrink-0 rounded-full">
                     <div className="glass relative flex h-full w-full items-center justify-center overflow-hidden rounded-full">
@@ -193,29 +192,28 @@ export function InboxList({
                           it reads as its own thing at a glance. The capsule
                           always sits to the right of the name, pinned and
                           non-shrinking, so a long name truncates first. */}
-                      <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-fg">
+                      <span className="type-headline min-w-0 flex-1 truncate text-fg">
                         {t.space.name}
                       </span>
                       {t.space.is_society && t.space.is_official && (
                         <VerifiedBadge size={14} className="shrink-0" />
                       )}
-                      {t.space.is_discover_group ? (
-                        <span className="gradient-brand shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold text-white">
-                          {discoverGroupLabel(t.space.discover_mode)}
-                        </span>
-                      ) : (
-                        <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold text-white">
-                          Community
-                        </span>
-                      )}
+                      {/* A type label, not a state: it says what KIND of thread
+                          this is, which never changes. Filled purple made every
+                          room in the list look permanently notable. */}
+                      <span className="type-footnote shrink-0 rounded-full bg-fill px-2 py-0.5 font-semibold text-fg-muted">
+                        {t.space.is_discover_group
+                          ? discoverGroupLabel(t.space.discover_mode)
+                          : "Community"}
+                      </span>
                     </p>
-                    <p className="truncate text-sm text-fg-muted">
+                    <p className="type-callout truncate text-fg-muted">
                       {t.preview ?? "No messages yet"}
                     </p>
                   </div>
                   <span className="flex shrink-0 flex-col items-end gap-1 self-start">
                     {t.ts !== EPOCH && (
-                      <span className="text-xs text-fg-muted">{timeAgo(t.ts)}</span>
+                      <span className="type-caption text-fg-muted">{timeAgo(t.ts)}</span>
                     )}
                   </span>
                 </Link>
@@ -229,11 +227,13 @@ export function InboxList({
                 key={t.convId}
                 href={`/chat/${t.convId}`}
                 className={cn(
-                  "flex items-center gap-3 py-3.5 transition-transform active:scale-[0.99]",
-                  // A thread with unread messages gets a faint tint (plus the
-                  // bold preview + count badge below) so it reads apart from
-                  // already-seen conversations at a glance.
-                  hasUnread && "-mx-2 rounded-[12px] bg-accent/[0.06] px-2"
+                  "pressable-subtle focus-ring -mx-2 flex items-center gap-3",
+                  "rounded-[10px] px-2 py-3.5"
+                  // Unread is NOT a tinted row. A purple wash across a whole
+                  // conversation coloured the person, not the state, and on a
+                  // busy inbox it turned the list into stripes. The bold
+                  // preview text and the small count badge below already say
+                  // it, and both survive the grayscale test.
                 )}
               >
                 <div className="relative h-11 w-11 shrink-0 rounded-full">
@@ -249,7 +249,7 @@ export function InboxList({
                   {isOnline(p?.last_seen_at) && <OnlineDot />}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[15px] font-semibold text-fg">
+                  <p className="type-headline truncate text-fg">
                     {p?.full_name ?? "Student"}
                   </p>
                   <p
@@ -264,17 +264,15 @@ export function InboxList({
                 <span className="flex shrink-0 flex-col items-end gap-1 self-start">
                   <span
                     className={cn(
-                      "text-xs",
-                      hasUnread ? "font-semibold text-accent" : "text-fg-muted"
+                      "type-caption",
+                      hasUnread ? "font-semibold text-fg" : "text-fg-subtle"
                     )}
                   >
                     {timeAgo(t.ts)}
                   </span>
-                  {hasUnread && (
-                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-[11px] font-bold text-white">
-                      {t.unread > 99 ? "99+" : t.unread}
-                    </span>
-                  )}
+                  {/* The shared badge, not a local copy of it — the row stays
+                      neutral and the count is the only purple thing on it. */}
+                  <UnreadBadge count={t.unread} />
                 </span>
               </Link>
             );

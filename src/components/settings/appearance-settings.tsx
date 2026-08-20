@@ -52,10 +52,14 @@ export function AppearanceSettings() {
   }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <p className="mb-2 text-sm">Text size</p>
-        <div className="flex gap-2">
+    <div className="space-y-5">
+      {/* A real segmented control: one recessed track, the selection raised out
+          of it. It was three separate buttons where the chosen one turned solid
+          purple, so "small / normal / large" read as three options plus one
+          brand moment rather than as one control with three positions. */}
+      <div className="flex items-center justify-between gap-4">
+        <p className="type-body">Text size</p>
+        <div className="flex shrink-0 gap-1 rounded-[10px] bg-input p-1">
           {(["small", "normal", "large"] as const).map((f) => (
             <button
               key={f}
@@ -63,8 +67,10 @@ export function AppearanceSettings() {
               aria-pressed={font === f}
               onClick={() => pickFont(f)}
               className={cn(
-                "flex-1 rounded-[var(--radius-md)] px-3 py-2 text-sm font-medium capitalize transition-all",
-                font === f ? "gradient-brand text-white" : "bg-card text-fg-muted"
+                "pressable focus-ring rounded-[7px] px-3 py-1.5 text-sm font-medium capitalize",
+                font === f
+                  ? "bg-surface-active text-fg"
+                  : "text-fg-muted hover:text-fg"
               )}
             >
               {f}
@@ -98,8 +104,8 @@ function Row({
   return (
     <div className="flex items-center justify-between">
       <div>
-        <span className="text-sm">{label}</span>
-        <p className="text-xs text-fg-muted">{hint}</p>
+        <span className="type-body">{label}</span>
+        <p className="type-caption text-fg-subtle">{hint}</p>
       </div>
       <button
         type="button"
@@ -108,14 +114,14 @@ function Row({
         aria-label={label}
         onClick={onClick}
         className={cn(
-          "relative h-6 w-11 shrink-0 rounded-full transition-colors",
-          on ? "bg-aura" : "bg-glass-strong"
+          "pressable focus-ring relative h-[31px] w-[51px] shrink-0 rounded-full transition-colors",
+          on ? "bg-success" : "bg-fill-strong"
         )}
       >
         <span
           className={cn(
-            "absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all",
-            on ? "left-[22px]" : "left-0.5"
+            "absolute top-[2px] h-[27px] w-[27px] rounded-full bg-white transition-all",
+            on ? "left-[22px]" : "left-[2px]"
           )}
         />
       </button>

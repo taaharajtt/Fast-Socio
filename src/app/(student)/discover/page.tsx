@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { SwipeDeck } from "@/components/discover/swipe-deck";
 import { PostIntentButton } from "@/components/discover/post-intent-button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SectionLogo } from "@/components/ui/section-logo";
+import { ScreenHeader } from "@/components/ui";
 import { timed } from "@/lib/perf";
 import {
   getDiscoverSwipeDeck,
@@ -34,15 +34,15 @@ export default function DiscoverPage() {
        stack below shrink on short phones instead of shoving the action row
        off. */
     <main className="mx-auto flex h-[var(--shell-content-h)] w-full min-h-0 max-w-md flex-col px-4 py-3">
-      <header className="mb-3 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <SectionLogo name="discover" />
-          <h1 className="text-lg font-bold tracking-tight">Discover</h1>
-        </div>
-        <Suspense fallback={<PostIntentButton />}>
-          <PostButtonSlot />
-        </Suspense>
-      </header>
+      <ScreenHeader
+        title="Discover"
+        className="mb-3"
+        action={
+          <Suspense fallback={<PostIntentButton />}>
+            <PostButtonSlot />
+          </Suspense>
+        }
+      />
 
       <Suspense fallback={<DeckSkeleton />}>
         <DeckSlot />

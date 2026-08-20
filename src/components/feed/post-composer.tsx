@@ -2,12 +2,16 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { BarChart3, ImagePlus, Loader2, Plus, VenetianMask, X } from "lucide-react";
-import { GlassButton, GlassCard } from "@/components/ui";
+import { BarChart3, ImagePlus, Loader2, Plus, X } from "lucide-react";
+import {
+  AnonymousToggle,
+  ComposerAction,
+  GlassButton,
+  GlassCard,
+} from "@/components/ui";
 import { ImageCropper, type CropResult } from "@/components/ui/image-cropper";
 import { UploadProgressBar } from "@/components/ui/upload-progress";
 import { uploadWithProgress, publicStorageUrl } from "@/lib/storage-upload";
-import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { createPost } from "@/app/(student)/home/actions";
 
@@ -143,7 +147,7 @@ export function PostComposer({
           server action runs, so the submit feels responsive and intentional. */}
       {pending && (
         <div className="glass-strong absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-[inherit]">
-          <Loader2 className="h-7 w-7 animate-spin text-aura" aria-hidden />
+          <Loader2 className="h-7 w-7 animate-spin text-fg-muted" aria-hidden />
           <p className="text-sm font-medium text-fg">Posting…</p>
         </div>
       )}
@@ -181,7 +185,7 @@ export function PostComposer({
             <button
               type="button"
               onClick={addOption}
-              className="flex items-center gap-1.5 px-1 text-sm font-medium text-aura"
+              className="pressable focus-ring flex items-center gap-1.5 rounded-lg px-1 py-1 text-sm font-medium text-fg-muted hover:text-fg"
             >
               <Plus className="h-4 w-4" aria-hidden />
               Add option
@@ -235,7 +239,16 @@ export function PostComposer({
         />
       )}
 
-      <div className="mt-3 flex items-center gap-2">
+      {/*
+        Action row. These were three bordered pills competing with the Post CTA
+        for attention; here they are labelled glyph buttons with no chrome at
+        rest, so the only filled control in the composer is the one that
+        actually publishes (apple.md §16 — hierarchy through contrast, and
+        §12 — don't stack surfaces). Toggles show their ON state by turning
+        a neutral raised fill — the same "selected" language the segmented
+        controls and tabs use.
+      */}
+      <div className="mt-3 flex items-center justify-between">
         <input
           ref={fileRef}
           type="file"
@@ -244,49 +257,35 @@ export function PostComposer({
           onChange={onPickImage}
         />
         {!pollOptions && (
-          <button
-            type="button"
-            aria-label="Add image"
+          <ComposerAction
+            icon={ImagePlus}
+            label="Image"
             onClick={() => fileRef.current?.click()}
             disabled={uploading}
-            className="glass flex h-9 w-9 items-center justify-center rounded-full text-fg-muted disabled:opacity-40"
-          >
-            <ImagePlus className="h-5 w-5" aria-hidden />
-          </button>
+          />
         )}
-        <button
-          type="button"
-          aria-label={pollOptions ? "Remove poll" : "Add poll"}
-          aria-pressed={!!pollOptions}
+        <ComposerAction
+          icon={BarChart3}
+          label="Poll"
           onClick={togglePoll}
           disabled={uploading}
-          className={cn(
-            "flex h-9 w-9 items-center justify-center rounded-full transition-colors disabled:opacity-40",
-            pollOptions ? "bg-aura text-white" : "glass text-fg-muted"
-          )}
-        >
-          <BarChart3 className="h-5 w-5" aria-hidden />
-        </button>
+          pressed={!!pollOptions}
+        />
         {/* UAT-005: anonymity moved out of the community Main panel — posts there
             are moderated and attributed. It lives in the community chat room
             instead. The main campus feed keeps it. */}
         {!communityId && (
-          <button
-            type="button"
-            onClick={() => setAnon((a) => !a)}
-            aria-pressed={anon}
-            className={cn(
-              "flex h-9 items-center gap-1.5 rounded-full px-3 text-sm transition-colors",
-              anon ? "bg-aura text-white" : "glass text-fg-muted"
-            )}
-          >
-            <VenetianMask className="h-4 w-4" aria-hidden />
-            Anonymous
-          </button>
+          <AnonymousToggle pressed={anon} onToggle={() => setAnon((a) => !a)} />
         )}
+        {/* The one coloured control in the composer, and only once it can
+            actually publish. Disabled it drops to an inert neutral fill (see
+            the `brand` variant) rather than a dimmed purple, so "there is
+            nothing to post yet" is legible at a glance instead of reading as
+            the same button, slightly darker. */}
         <GlassButton
           size="sm"
-          className="ml-auto"
+          variant="brand"
+          className="shrink-0"
           onClick={submit}
           disabled={disabled}
         >
@@ -299,7 +298,7 @@ export function PostComposer({
         </p>
       )}
       {notice && (
-        <p role="status" className="mt-2 text-sm text-aura">
+        <p role="status" className="type-callout mt-2 text-success">
           {notice}
         </p>
       )}

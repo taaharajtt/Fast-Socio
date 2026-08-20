@@ -43,7 +43,7 @@ export function MemberRow({ member }: { member: CommunityMemberVM }) {
         )}
       </span>
       {member.role !== "member" && (
-        <span className="flex shrink-0 items-center gap-1 rounded-full bg-accent/12 px-2.5 py-1 text-[12px] font-semibold text-accent">
+        <span className="type-footnote flex shrink-0 items-center gap-1 rounded-full bg-fill px-2.5 py-1 font-semibold text-fg-muted">
           {member.role === "owner" && (
             <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
           )}
