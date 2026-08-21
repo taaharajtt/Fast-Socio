@@ -49,7 +49,7 @@ export async function loadInbox(): Promise<InboxData> {
   ] = await Promise.all([
     supabase
       .from("conversations")
-      .select("id, user_low, user_high, last_message_at")
+      .select("id, user_low, user_high, created_at, last_message_at")
       .or(`user_low.eq.${me},user_high.eq.${me}`)
       .order("last_message_at", { ascending: false }),
     supabase
@@ -69,10 +69,17 @@ export async function loadInbox(): Promise<InboxData> {
       .from("message_requests")
       .select("recipient_id")
       .eq("sender_id", me),
-    // Community rooms you've been approved into are conversations too, so they
-    // belong in this inbox rather than behind the Community tab. Owned spaces
-    // are unioned in because an owner participates without necessarily holding
-    // a community_members row.
+    // DISCOVER TEAM ROOMS ONLY. A Discover room has no profile page of its own
+    // — the conversation is the entire product — so /chat is where it lives.
+    // Every other space (community chat room, society/verified community) hosts
+    // its conversation on the room itself and is excluded here.
+    //
+    // The membership read cannot narrow on the embedded flag without an inner-
+    // join filter on the embed, which fails the WHOLE query (returning an empty
+    // inbox) if PostgREST ever disagrees about the alias. `is_discover_group` is
+    // therefore selected and matched immediately below instead — the real
+    // column, still in the data layer, and impossible to fail silently. The
+    // owned read has no embed, so it narrows in SQL.
     supabase
       .from("community_members")
       .select(
@@ -84,17 +91,20 @@ export async function loadInbox(): Promise<InboxData> {
       .select(
         "id, name, avatar_url, cover_url, is_society, is_official, status, is_discover_group, discover_mode, discover_title"
       )
-      .eq("owner_id", me),
+      .eq("owner_id", me)
+      .eq("is_discover_group", true),
   ]);
 
   const spaces = new Map<string, InboxSpace>();
+  const keepRoom = (c: InboxSpace | null | undefined): c is InboxSpace =>
+    Boolean(c) && c!.status === "approved" && c!.is_discover_group === true;
   for (const r of (joinedRows ?? []) as unknown as {
     community: InboxSpace | null;
   }[]) {
-    if (r.community?.status === "approved") spaces.set(r.community.id, r.community);
+    if (keepRoom(r.community)) spaces.set(r.community.id, r.community);
   }
   for (const c of (ownedRows ?? []) as unknown as InboxSpace[]) {
-    if (c.status === "approved") spaces.set(c.id, c);
+    if (keepRoom(c)) spaces.set(c.id, c);
   }
   const spaceIds = [...spaces.keys()];
 
@@ -106,8 +116,9 @@ export async function loadInbox(): Promise<InboxData> {
   // The three follow-up reads depend only on the ids gathered above, so they go
   // out together rather than one after another.
   const [spacePreviewRows, lastMsgRows, unreadRows] = await Promise.all([
-    // Newest message per room, for the row preview and the recency sort. Read
-    // through community_chat_view so an anonymous sender stays masked here too.
+    // Newest message per Discover room, for the row preview and the recency
+    // sort. Read through community_chat_view so an anonymous sender stays
+    // masked here too.
     spaceIds.length > 0
       ? supabase
           .from("community_chat_view")
@@ -229,21 +240,48 @@ export async function loadInbox(): Promise<InboxData> {
     };
   });
 
-  // One recency-sorted inbox holding both kinds of conversation. Community
-  // rooms sit inline with direct messages — same row shape, distinguished by a
-  // small capsule — because Chat now owns every live conversation in the app.
+  // A conversation belongs in Messages only once it has actually started.
+  // `last_message_at` defaults to the row's creation time and is bumped by the
+  // mig-0006 trigger to the newest message's timestamp, so `> created_at` means
+  // "at least one message has ever been sent here" — independent of the 300-row
+  // preview window above, and independent of hiding/deleting individual
+  // messages. The preview map is OR-ed in so a thread we can visibly quote is
+  // never demoted, whatever the timestamps say.
+  const started = new Set(
+    conversations
+      .filter(
+        (c) =>
+          lastMsg.has(c.id as string) ||
+          new Date(c.last_message_at as string).getTime() >
+            new Date(c.created_at as string).getTime()
+      )
+      .map((c) => c.id as string)
+  );
+
+  // One recency-sorted list of started conversations: direct threads, and
+  // Discover team rooms inline beside them. Community chat rooms and verified
+  // communities used to be unioned in here too — their conversation now lives
+  // inside the room (Community -> Room -> Chat), and `keepRoom` above is what
+  // keeps them out.
+  //
+  // A Discover room is always a Messages row, never a Requests one: Requests is
+  // for things that are not conversations yet (pending message requests, new
+  // matches), and a room you are in is a conversation whether or not anyone has
+  // spoken in it.
   const threads: InboxThread[] = [
-    ...conversations.map((c): InboxThread => {
-      const convId = c.id as string;
-      return {
-        kind: "dm",
-        ts: c.last_message_at ?? EPOCH,
-        convId,
-        otherId: c.user_low === me ? c.user_high : c.user_low,
-        preview: lastMsg.get(convId) ?? null,
-        unread: unread.get(convId) ?? 0,
-      };
-    }),
+    ...conversations
+      .filter((c) => started.has(c.id as string))
+      .map((c): InboxThread => {
+        const convId = c.id as string;
+        return {
+          kind: "dm",
+          ts: c.last_message_at as string,
+          convId,
+          otherId: c.user_low === me ? c.user_high : c.user_low,
+          preview: lastMsg.get(convId) ?? null,
+          unread: unread.get(convId) ?? 0,
+        };
+      }),
     ...[...spaces.values()].map((space): InboxThread => {
       const p = spacePreview.get(space.id);
       return {
@@ -255,18 +293,22 @@ export async function loadInbox(): Promise<InboxData> {
     }),
   ].sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
 
-  // Matches that don't yet have a conversation AND that we haven't already
-  // reached out to — surfaced so a chat can start. A match we've messaged (open
-  // conversation or a pending outgoing request) is removed here (UAT-018).
-  const convOtherIds = new Set(
-    conversations.map((c) => (c.user_low === me ? c.user_high : c.user_low))
+  // Matches with no STARTED conversation. These are the Requests panel's "new
+  // match" rows: a match whose conversation row exists but holds no message is
+  // still a new match, not a thread, so it is counted here rather than being
+  // lost between the two panels. A match we have already reached out to via a
+  // pending message request stays hidden (UAT-018).
+  const startedOtherIds = new Set(
+    conversations
+      .filter((c) => started.has(c.id as string))
+      .map((c) => (c.user_low === me ? c.user_high : c.user_low))
   );
   const initiatedIds = new Set(
     (outgoingReqRows ?? []).map((r) => r.recipient_id as string)
   );
   const newMatches = matches
     .map((m) => (m.user_low === me ? m.user_high : m.user_low))
-    .filter((id) => !convOtherIds.has(id) && !initiatedIds.has(id));
+    .filter((id) => !startedOtherIds.has(id) && !initiatedIds.has(id));
 
   return { me, threads, newMatches, profiles, incoming };
 }

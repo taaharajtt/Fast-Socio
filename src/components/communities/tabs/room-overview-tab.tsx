@@ -1,31 +1,42 @@
-import Link from "next/link";
-import { MessageCircle, Users } from "lucide-react";
-import { RequestJoinButton } from "@/components/communities/request-join-button";
-import type { JoinState } from "@/app/(student)/communities/actions";
+"use client";
+
+import { useState } from "react";
+import { MemberRow, type CommunityMemberVM } from "@/components/communities/member-row";
+
+/** How many faces the roster preview shows before "See all members". */
+const PREVIEW_COUNT = 5;
 
 /**
- * A chat room's front page. It describes the room and hands you the one action
- * your current standing allows — open the conversation over in Chat, or ask to
- * be let in. The conversation itself is never embedded here; rooms are threads
- * in the Chat area now, next to direct messages.
+ * A chat room's front page: what the room is, then who is in it.
  *
- * State is communicated by the button, not by a paragraph explaining the rules.
+ * There is no "Open chat" button any more, and no floating replacement for it.
+ * The conversation is the tab immediately to the right of this one, so a CTA
+ * here would be a second control pointing at a destination already on screen.
+ *
+ * Members used to be their own tab. It is folded in below the description
+ * instead — a roster is information about the room, not a separate place — and
+ * "See all members" expands the SAME `MemberRow` list the tab rendered rather
+ * than pushing a new screen.
+ *
+ * Sections are plain, not cards. The join gate is not repeated here either —
+ * it lives on the Chat tab, which is where someone outside the room actually
+ * runs into the wall.
  */
 export function RoomOverviewTab({
-  communityId,
   description,
   memberCount,
-  isMember,
-  joinStatus,
+  members,
 }: {
-  communityId: string;
   description: string | null;
   memberCount: number;
-  isMember: boolean;
-  joinStatus: JoinState;
+  members: CommunityMemberVM[];
 }) {
+  const [showAll, setShowAll] = useState(false);
+  const shown = showAll ? members : members.slice(0, PREVIEW_COUNT);
+  const hasMore = members.length > PREVIEW_COUNT;
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <section>
         <h2 className="mb-1 text-sm font-semibold text-fg">Description</h2>
         <p className="whitespace-pre-wrap text-[14px] text-fg-muted">
@@ -33,30 +44,33 @@ export function RoomOverviewTab({
         </p>
       </section>
 
-      <p className="flex items-center gap-1.5 text-[13px] text-fg-muted">
-        <Users className="h-4 w-4 shrink-0" aria-hidden />
-        {memberCount.toLocaleString()} member{memberCount === 1 ? "" : "s"} can chat here
-      </p>
-
-      {isMember ? (
-        <Link
-          href={`/chat/c/${communityId}`}
-          className="flex items-center justify-center gap-2 rounded-full bg-accent px-4 py-3 text-sm font-semibold text-white active:scale-95"
-        >
-          <MessageCircle className="h-4 w-4" aria-hidden />
-          Open chat
-        </Link>
-      ) : (
-        <div className="flex flex-col items-center gap-2 rounded-[14px] bg-card px-5 py-8 text-center">
-          <MessageCircle className="h-7 w-7 text-fg-muted" aria-hidden />
-          <p className="text-sm text-fg-muted">
-            {joinStatus === "pending"
-              ? "Waiting on the owner to approve you."
-              : "Joining unlocks the conversation in Chat."}
-          </p>
-          <RequestJoinButton communityId={communityId} joinStatus={joinStatus} />
-        </div>
-      )}
+      <section>
+        <h2 className="mb-2 text-sm font-semibold text-fg">
+          Members · {memberCount.toLocaleString()}
+        </h2>
+        {members.length === 0 ? (
+          <p className="text-[14px] text-fg-muted">No members yet.</p>
+        ) : (
+          <>
+            <div className="-mx-2">
+              {shown.map((m) => (
+                <MemberRow key={m.user_id} member={m} />
+              ))}
+            </div>
+            {hasMore && (
+              <button
+                type="button"
+                onClick={() => setShowAll((v) => !v)}
+                className="focus-ring mt-1 rounded-[10px] px-2 py-1 text-[13px] font-semibold text-accent"
+              >
+                {showAll
+                  ? "Show fewer"
+                  : `See all ${members.length.toLocaleString()} members`}
+              </button>
+            )}
+          </>
+        )}
+      </section>
     </div>
   );
 }

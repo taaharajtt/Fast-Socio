@@ -18,6 +18,19 @@ export type InboxProfile = {
   last_seen_at: string | null;
 };
 
+/**
+ * A DISCOVER TEAM ROOM in the inbox.
+ *
+ * Discover team rooms (mig 0129) are `communities` rows carrying
+ * `is_discover_group = true`. They are the ONE kind of group conversation still
+ * in the global inbox: unlike a chat room or a society, a Discover room has no
+ * profile page to host its own Chat tab — the conversation IS the whole thing —
+ * so /chat is where it lives. Ordinary community rooms and verified communities
+ * are excluded at the query layer on that same column.
+ *
+ * `is_society` / `is_official` are carried because the row shape is shared with
+ * the rest of the space rendering; a Discover room is neither.
+ */
 export type InboxSpace = {
   id: string;
   name: string;
@@ -27,11 +40,9 @@ export type InboxSpace = {
   is_official: boolean;
   status: string;
   /**
-   * Discover team rooms (mig 0129) are communities carrying a flag, so they
-   * arrive as spaces and reuse the whole group-chat stack. These three fields
-   * are what makes one render as a Discover thread instead of a community:
-   * the row shows a gradient "Discover · <Mode>" capsule and the name the
-   * author chose, and it is never browsable under /communities.
+   * Always true for anything that reaches the inbox now. These three fields are
+   * what makes the row render as a Discover thread: a gradient
+   * "Discover · <Mode>" capsule and the title the author chose.
    */
   is_discover_group: boolean;
   discover_mode: string | null;
@@ -51,8 +62,17 @@ export type InboxThread =
 
 export type InboxData = {
   me: string;
+  /**
+   * Started direct conversations, plus Discover team rooms — one recency-sorted
+   * list. Community chat rooms and verified communities are NOT here: their
+   * chat lives inside the room itself (/communities/[id] -> Chat).
+   */
   threads: InboxThread[];
-  /** Matched people with no conversation yet — surfaced above the threads. */
+  /**
+   * Matched people this viewer has not exchanged a message with yet. These are
+   * NOT conversations, so they render on the Requests panel rather than in
+   * Messages.
+   */
   newMatches: string[];
   /** Every profile referenced by a thread, match or request, keyed by id. */
   profiles: Record<string, InboxProfile>;

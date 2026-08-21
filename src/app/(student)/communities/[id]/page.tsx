@@ -1,8 +1,9 @@
 import { notFound, redirect } from "next/navigation";
 import { ChatRoomShell, type ChatRoomShellTab } from "@/components/communities/chat-room-shell";
 import { RoomOverviewTab } from "@/components/communities/tabs/room-overview-tab";
-import { RoomMembersTab } from "@/components/communities/tabs/room-members-tab";
 import { RoomManageTab } from "@/components/communities/tabs/room-manage-tab";
+import { CommunityThread } from "@/components/chat/community-thread";
+import { loadCommunityChat } from "@/lib/communities/chat-data";
 import type { CommunityMemberVM } from "@/components/communities/member-row";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
@@ -19,13 +20,18 @@ const ROLE_RANK: Record<CommunityMemberVM["role"], number> = {
 };
 
 /**
- * A casual chat room's PROFILE page (is_society = false) — Overview / Members,
- * plus Manage for the owner. Society/Event OS-registered communities have their
- * own richer shell at /societies/[id] — this page redirects there so a society
- * is never rendered as a plain room.
+ * A chat room — Overview / Chat, plus Manage for the owner. Society/Event
+ * OS-registered communities have their own richer shell at /societies/[id];
+ * this page redirects there so a society is never rendered as a plain room.
  *
- * The conversation is not here. Room chats are threads in the Chat area
- * (/chat/c/[id]) beside direct messages; Overview links across to them.
+ * THE CONVERSATION LIVES HERE. It used to be a thread in the global Chat inbox
+ * (/chat/c/[id]) next to direct messages; global Chat is person-to-person now,
+ * and a room's chat is a tab on the room. It is the same conversation — same
+ * `community_chat_messages` rows keyed on this community id, read through the
+ * same `loadCommunityChat` loader and rendered by the same `CommunityThread` /
+ * `CommunityChat` components the old route used.
+ *
+ * Members is not a tab: the roster is folded into Overview.
  *
  * Every tab's data is fetched here in parallel and handed to the client shell
  * as ready content, so switching tabs never touches the network.
@@ -48,8 +54,11 @@ export default async function CommunityPage({
     .single();
   if (!community) notFound();
   if (community.is_society) redirect(`/societies/${id}`);
-  // A Discover team room has no community profile — it lives only in /chat.
-  if (community.is_discover_group) notFound();
+  // A Discover team room has no community profile of its own — its whole
+  // surface IS the conversation, which stays at /chat/c/[id]. Redirecting
+  // (rather than 404ing) means one deep link, `/communities/<id>?tab=chat`,
+  // resolves correctly for every kind of space.
+  if (community.is_discover_group) redirect(`/chat/c/${id}`);
 
   const pending = community.status !== "approved";
   // is_society is false here by construction (societies redirect above), so
@@ -68,6 +77,15 @@ export default async function CommunityPage({
     : { data: [] };
 
   const joinRequests = !pending && canManage ? await getJoinRequests(id) : [];
+
+  // The room's thread, fetched up front like every other tab's content so
+  // switching to Chat costs no round trip. Skipped for a non-member — and it
+  // would return nothing for them anyway: community_chat_view is
+  // SECURITY INVOKER and filters on a live community_members row, so read
+  // access is revoked the moment membership is (leave / remove / ban).
+  const chat = !pending && rel.isMember
+    ? await loadCommunityChat(id, true)
+    : { messages: [], polls: {} };
 
   type Row = {
     user_id: string;
@@ -98,20 +116,41 @@ export default async function CommunityPage({
       label: "Overview",
       content: (
         <RoomOverviewTab
-          communityId={id}
           description={community.description}
           memberCount={community.member_count}
-          isMember={rel.isMember}
-          joinStatus={rel.joinStatus}
+          members={members}
         />
       ),
     },
-    {
-      key: "members",
-      label: "Members",
-      content: <RoomMembersTab members={members} />,
-    },
   ];
+
+  // Chat is members-only. A non-member still gets the TAB — it renders
+  // CommunityThread's locked state (a line of copy and the join button, no
+  // message previews) rather than vanishing, so the room reads the same to
+  // everyone. The gate is presentation, not protection: the read view, the send
+  // RPC, the poll RPCs, the attachment signer and realtime delivery each
+  // re-check `community_members` server-side on every call, so leaving, being
+  // removed or being banned revokes all five immediately.
+  if (!pending) {
+    tabs.push({
+      key: "chat",
+      label: "Chat",
+      // Only the real thread needs the viewport locked; the locked state is a
+      // short card and should sit on a normally scrolling page.
+      fill: rel.isMember,
+      content: (
+        <CommunityThread
+          communityId={id}
+          meId={me}
+          isMember={rel.isMember}
+          joinStatus={rel.joinStatus}
+          initialMessages={chat.messages}
+          initialPolls={chat.polls}
+          canModerate={rel.canModerateChat}
+        />
+      ),
+    });
+  }
 
   if (canManage) {
     tabs.push({

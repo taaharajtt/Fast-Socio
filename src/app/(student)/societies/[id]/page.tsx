@@ -19,8 +19,9 @@ import type { PendingPost } from "@/components/communities/review-post-row";
 
 /**
  * A society's single page — Broadcast / Events / Members, plus Manage for
- * officers. Conversation deliberately does NOT live here: the general chat is a
- * thread in the Chat area (/chat/c/[id]) alongside direct messages, and this
+ * officers. Conversation does NOT live here at all: a verified community
+ * broadcasts to its followers and has no chat surface — chat belongs to chat
+ * rooms, inside the room. This
  * surface is for broadcasts, events, the roster and management.
  *
  * Every subtab's data is fetched here, up front, in parallel, and handed to the
@@ -111,7 +112,6 @@ export default async function SocietyPage({
           announcements={announcements}
           canPost={canPost}
           canManage={canManage}
-          isMember={viewer.isMember}
         />
       ),
     },

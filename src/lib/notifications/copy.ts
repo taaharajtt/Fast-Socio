@@ -308,11 +308,16 @@ export function notificationHref(
     case "match":
     case "matching_accepted":
       return "/chat";
-    // A community/society conversation is a thread in Chat, not on the profile.
+    // A chat room's conversation lives ON the room now, not in the global Chat
+    // inbox: Community -> Room -> Chat. `/communities/<id>?tab=chat` is the one
+    // link that resolves for every kind of space — the room page opens its Chat
+    // tab, a society redirects to /societies/<id> (verified communities have no
+    // chat), and a Discover team room redirects to /chat/c/<id>. Membership is
+    // re-checked server-side on arrival either way.
     case "community_message":
       return str(data, "community_id")
-        ? `/chat/c/${str(data, "community_id")}`
-        : "/chat";
+        ? `/communities/${str(data, "community_id")}?tab=chat`
+        : "/communities";
 
     // Discover.
     case "matching_request":

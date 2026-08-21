@@ -13,6 +13,15 @@ export type SpaceShellTab = {
   label: string;
   badge?: number;
   content: React.ReactNode;
+  /**
+   * This tab's content wants the rest of the viewport and scrolls internally
+   * (the Chat tab). While it is active the shell stops being a scrolling page
+   * and becomes a fixed-height column: hero and tab bar hold their size, the
+   * panel below takes what is left, and only the message list inside it moves.
+   * Without this the page itself would scroll AND the thread would scroll —
+   * the double-scroll trap — and the composer would sit below the fold.
+   */
+  fill?: boolean;
 };
 
 /** Above this many tabs the row scrolls instead of squeezing. */
@@ -31,8 +40,8 @@ const EQUAL_WIDTH_MAX = 4;
  * space today (Broadcast/Events/Members/Manage at most). A fifth would clip
  * them, so the row becomes horizontally scrollable instead.
  *
- * No tab hosts a conversation any more — chat lives in /chat — so the shell
- * scrolls normally with the page rather than locking to the viewport.
+ * A tab may opt into `fill` (Chat does): the shell then locks to the viewport
+ * for that tab only. Every other tab keeps scrolling with the page.
  */
 export function SpaceShell({
   hero,
@@ -60,12 +69,35 @@ export function SpaceShell({
     if (want && keys.split(",").includes(want)) setActive(want);
   }, [keys]);
   const scrolls = tabs.length > EQUAL_WIDTH_MAX;
+  const fills = Boolean(activeTab?.fill);
 
   return (
-    <main className="mx-auto flex w-full max-w-md flex-1 flex-col">
-      {hero}
+    <main
+      className={cn(
+        "mx-auto flex w-full max-w-md flex-1 flex-col",
+        // `--shell-content-h` is the app's existing "viewport minus the
+        // student shell's chrome" token (globals.css) — the same DEFINITE
+        // height Discover's deck uses, which is what lets the flex chain below
+        // shrink at all. `--kb` is the iOS keyboard overlap
+        // (use-keyboard-inset.ts), so the column shrinks with the keyboard
+        // instead of pushing the composer off-screen.
+        fills &&
+          "h-[calc(var(--shell-content-h)-var(--kb,0px))] overflow-hidden"
+      )}
+    >
+      {/* Layout-neutral wrapper (the hero is block content either way). It
+          exists so the hero cannot be squeezed when the column is height-
+          bounded for a filling tab. */}
+      <div className="shrink-0">{hero}</div>
 
-      <div className="flex flex-1 flex-col px-4 pb-4 pt-4">
+      <div
+        className={cn(
+          "flex flex-1 flex-col px-4 pt-4",
+          // A filling tab owns its own bottom edge — the composer sits flush
+          // against it — so the page's bottom padding is dropped there.
+          fills ? "min-h-0 pb-0" : "pb-4"
+        )}
+      >
         <div
           role="tablist"
           className={cn(
@@ -102,7 +134,14 @@ export function SpaceShell({
           })}
         </div>
 
-        <div className="min-h-[300px] pt-4">{activeTab?.content}</div>
+        <div
+          className={cn(
+            "pt-4",
+            fills ? "flex min-h-0 flex-1 flex-col" : "min-h-[300px]"
+          )}
+        >
+          {activeTab?.content}
+        </div>
       </div>
     </main>
   );

@@ -76,7 +76,10 @@ function ShareSheetContent({
     <div className="flex min-h-0 flex-1 flex-col">
       <h3 className="mb-3 shrink-0 text-lg font-bold">Share to a friend</h3>
       {/* Keeps finger-scrolling while the sheet panel claims the drag gesture. */}
-      <div data-sheet-scroll className="min-h-0 flex-1 overflow-y-auto">
+      <div
+        data-sheet-scroll
+        className="no-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain"
+      >
         {friends === null ? (
           <p className="py-6 text-center text-sm text-fg-muted">
             Loading your matches…
@@ -86,16 +89,13 @@ function ShareSheetContent({
             No matches yet — match with someone in Discover to share posts.
           </p>
         ) : (
-          <ul className="space-y-1">
+          <ul className="divide-y divide-glass-border">
             {friends.map((f) => {
               const sent = sentIds.has(f.id);
               const sending = busyId === f.id;
               return (
-                <li
-                  key={f.id}
-                  className="glass flex items-center gap-3 rounded-[var(--radius-sm)] p-3"
-                >
-                  <div className="glass relative h-10 w-10 shrink-0 overflow-hidden rounded-full">
+                <li key={f.id} className="flex items-center gap-3 py-2.5">
+                  <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-card">
                     {resolveAvatarUrl(f.avatar_url, f.gender) ? (
                       <AppImage
                         src={resolveAvatarUrl(f.avatar_url, f.gender)!}
@@ -113,22 +113,22 @@ function ShareSheetContent({
                     disabled={sent || sending}
                     aria-label={sent ? "Sent" : `Send to ${f.full_name ?? "friend"}`}
                     className={cn(
-                      "flex h-9 min-w-[76px] items-center justify-center gap-1.5 rounded-full px-3 text-sm font-semibold transition-colors",
+                      "flex h-7 shrink-0 items-center justify-center gap-1 rounded-full px-2.5 text-xs font-medium transition-colors",
                       sent
-                        ? "bg-aura/15 text-aura"
-                        : "bg-aura text-white active:scale-95 disabled:opacity-60"
+                        ? "text-fg-muted"
+                        : "text-aura active:scale-95 disabled:opacity-60"
                     )}
                   >
                     {sent ? (
                       <>
-                        <Check className="h-4 w-4" aria-hidden />
+                        <Check className="h-3.5 w-3.5" aria-hidden />
                         Sent
                       </>
                     ) : sending ? (
                       "Sending…"
                     ) : (
                       <>
-                        <Send className="h-4 w-4" aria-hidden />
+                        <Send className="h-3.5 w-3.5" aria-hidden />
                         Send
                       </>
                     )}
@@ -143,7 +143,7 @@ function ShareSheetContent({
       <button
         type="button"
         onClick={onClose}
-        className="glass mt-3 w-full shrink-0 rounded-[var(--radius-sm)] px-4 py-3 text-sm font-medium text-fg"
+        className="mt-3 w-full shrink-0 py-2.5 text-center text-sm font-medium text-fg-muted"
       >
         Done
       </button>

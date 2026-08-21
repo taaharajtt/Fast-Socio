@@ -27,7 +27,7 @@ export type ChatRoomCardVM = {
  * are pure navigation and stay square.
  *
  * This is a directory entry, not a conversation: it opens the room's profile,
- * and the profile's Overview is where "Open chat" hands off to the Chat area.
+ * where the conversation itself is the Chat tab (members only).
  *
  * The card is the cover photo edge to edge, with a bottom scrim carrying the
  * name/member-count on the left and the Follow/Join pair on the right — the

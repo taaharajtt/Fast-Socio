@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { MessageCircle, Radio } from "lucide-react";
+import { Radio } from "lucide-react";
 import { AnnouncementCard } from "@/components/societies/announcement-card";
 import { ChatComposer } from "@/components/chat/chat-composer";
 import { PollComposer } from "@/components/communities/community-chat";
@@ -22,21 +21,21 @@ const FEED_COLUMNS =
  * Broadcast announcements presented as a chat thread — newest at the bottom,
  * scrolled there on mount, consecutive messages from the same author grouped
  * the way `community-thread`/`community-chat` group theirs. The composer
- * lives below the thread and only renders for who-can-post, unchanged.
+ * lives below the thread and only renders for who-can-post, unchanged. There is
+ * no chat entry point here: a verified community broadcasts, it does not
+ * converse.
  */
 export function AnnouncementThread({
   societyId,
   announcements,
   canPost,
   canManage,
-  isMember,
 }: {
   societyId: string;
   /** Newest-first, as loaded from the server. */
   announcements: AnnouncementRow[];
   canPost: boolean;
   canManage: boolean;
-  isMember: boolean;
 }) {
   // Display oldest -> newest, like a chat thread.
   const [messages, setMessages] = useState<AnnouncementRow[]>(
@@ -162,16 +161,9 @@ export function AnnouncementThread({
 
   return (
     <div className="flex flex-col gap-3">
-      {isMember && (
-        <Link
-          href={`/chat/c/${societyId}`}
-          className="flex items-center justify-center gap-2 rounded-full bg-white/10 px-4 py-2.5 text-sm font-semibold text-fg active:scale-95"
-        >
-          <MessageCircle className="h-4 w-4" aria-hidden />
-          Open chat
-        </Link>
-      )}
-
+      {/* No "Open chat" here. A verified community BROADCASTS — announcements
+          out to followers — and does not host a conversation; chat is a chat
+          room's feature. The link used to open /chat/c/<societyId>. */}
       {messages.length === 0 ? (
         <div className="flex flex-col items-center gap-1 rounded-[14px] bg-card px-5 py-10 text-center">
           <Radio className="mx-auto h-8 w-8 text-fg-muted" aria-hidden />

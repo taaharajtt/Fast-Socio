@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { CommunityThread } from "@/components/chat/community-thread";
 import { createClient } from "@/lib/supabase/server";
@@ -10,10 +10,7 @@ import { discoverGroupLabel } from "@/lib/discover/group-label";
 import { DiscoverGroupAvatar } from "@/components/discover/discover-group-avatar";
 import { DiscoverGroupMenu } from "@/components/discover/discover-group-menu";
 import { getCommunityRelationship } from "@/lib/communities/relationship";
-import { fetchPollResults, type PollOptionResult } from "@/app/(student)/communities/actions";
-import type { CommunityMessage } from "@/components/communities/community-chat";
-
-const CHAT_PAGE_SIZE = 100;
+import { loadCommunityChat } from "@/lib/communities/chat-data";
 
 /** The identity block: a link to the space's profile, unless there isn't one. */
 function HeaderShell({
@@ -34,12 +31,19 @@ function HeaderShell({
 }
 
 /**
- * A community's conversation — the same screen as a DM (/chat/[id]): the same
+ * A DISCOVER TEAM ROOM's conversation — the same screen as a DM (/chat/[id]):
+ * the same
  * fixed full-height shell, the same header shape, the same back arrow to the
  * inbox. Only two things differ, and both are real: the header identifies a
  * space rather than a person (so it carries the "Community" capsule the inbox
  * row carries, and links to the space's profile), and the composer offers
  * anonymity.
+ *
+ * Ordinary chat rooms and societies no longer render here. Their conversation
+ * belongs to the room itself (Community -> Room -> Chat), so this route
+ * redirects them there rather than keeping a second entrance to the same
+ * thread. A Discover team room has no community profile page at all, so it
+ * stays on this screen.
  */
 export default async function CommunityConversationPage({
   params,
@@ -60,6 +64,16 @@ export default async function CommunityConversationPage({
     .single();
   if (!community || community.status !== "approved") notFound();
 
+  // Only Discover team rooms live at this URL now. Everything else is a space
+  // with a profile page, and its chat is a tab on that page — one conversation,
+  // one place. Old links and notifications land on the right screen instead of
+  // 404ing.
+  if (!community.is_discover_group) {
+    redirect(
+      community.is_society ? `/societies/${id}` : `/communities/${id}?tab=chat`
+    );
+  }
+
   const rel = await getCommunityRelationship(
     id,
     me,
@@ -74,24 +88,8 @@ export default async function CommunityConversationPage({
 
   // Only a joined member can read the room, so the fetch is skipped entirely
   // for a follower — they get the join gate below instead of an empty thread.
-  const { data: chatRows } = rel.isMember
-    ? await supabase
-        .from("community_chat_view")
-        .select(
-          // deleted_at/attachment_* are required on the FIRST paint too — the
-          // cast below is `as CommunityMessage[]`, so omitting them here is
-          // silently undefined rather than a type error (mig 0142).
-          "id, sender_id, sender_name, sender_avatar, sender_gender, body, poll_id, is_anonymous, created_at, deleted_at, attachment_url, attachment_type"
-        )
-        .eq("community_id", id)
-        .order("created_at", { ascending: true })
-        .limit(CHAT_PAGE_SIZE)
-    : { data: [] as CommunityMessage[] };
-
-  const messages = (chatRows as CommunityMessage[] | null) ?? [];
-  const polls: Record<string, PollOptionResult[]> = await fetchPollResults([
-    ...new Set(messages.map((m) => m.poll_id).filter(Boolean) as string[]),
-  ]);
+  // The SAME loader the room page uses, so both surfaces show one history.
+  const { messages, polls } = await loadCommunityChat(id, rel.isMember);
 
   const image = community.avatar_url ?? community.cover_url;
   const isDiscoverGroup = Boolean(community.is_discover_group);

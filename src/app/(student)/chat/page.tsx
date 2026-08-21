@@ -53,7 +53,10 @@ async function Inbox({
   return (
     <ChatCommunityTabs
       active={showRequests ? "requests" : "messages"}
-      requestCount={data.incoming.length}
+      // The Requests panel now holds new matches as well as pending message
+      // requests, so the pill counts both — otherwise a fresh match would
+      // arrive with nothing on screen pointing at it.
+      requestCount={data.incoming.length + data.newMatches.length}
     >
       <InboxList initial={data} showRequests={showRequests} />
     </ChatCommunityTabs>

@@ -5,8 +5,7 @@ import Link from "next/link";
 import { RequestRow } from "@/components/chat/request-row";
 import { AppImage } from "@/components/ui/app-image";
 import { resolveAvatarUrl } from "@/lib/avatar";
-import { OnlineDot, UnreadBadge, VerifiedBadge } from "@/components/ui/badges";
-import { communityIcon } from "@/lib/communities/icon";
+import { OnlineDot, UnreadBadge } from "@/components/ui/badges";
 import { discoverGroupLabel } from "@/lib/discover/group-label";
 import { DiscoverGroupAvatar } from "@/components/discover/discover-group-avatar";
 import { createClient } from "@/lib/supabase/client";
@@ -16,8 +15,15 @@ import { cn } from "@/lib/utils";
 import { isOnline, timeAgo } from "@/lib/time";
 
 /**
- * The inbox itself: new matches, then one recency-sorted list of direct threads
- * and community rooms — plus the pending-requests panel.
+ * The inbox itself. Two panels, and the split between them is about whether a
+ * conversation EXISTS:
+ *
+ *  - Messages holds started direct conversations, plus Discover team rooms —
+ *    the one group conversation with no room page of its own to live on.
+ *    Community chat rooms and verified communities are gone from here; their
+ *    chat lives inside the room.
+ *  - Requests holds everything waiting to become a conversation: pending
+ *    incoming message requests, and matches nobody has written to yet.
  *
  * It owns its data. The page hands it a server-rendered snapshot; from then on
  * realtime events cause it to re-read JUST the inbox (the `refreshInbox` server
@@ -90,6 +96,14 @@ export function InboxList({
           { event: "*", schema: "public", table: "message_requests" },
           scheduleRefresh
         )
+        // Kept BROAD rather than filtered to this viewer's Discover rooms.
+        // postgres_changes filters are a single `column=eq.value`, so scoping
+        // would mean one `.on()` per room and re-subscribing the channel every
+        // time the room set changed — and it would go deaf to being ADDED to a
+        // new room, which is exactly when the inbox must update. RLS already
+        // limits delivery to rooms this user is a member of, and a message in a
+        // community room the inbox no longer lists costs one wasted re-read
+        // that recomputes to the same list.
         .on(
           "postgres_changes",
           { event: "INSERT", schema: "public", table: "community_chat_messages" },
@@ -111,14 +125,35 @@ export function InboxList({
   }, [me]);
 
   if (showRequests) {
+    // Everything that is not yet a conversation. Pending message requests need
+    // a decision, so they come first; new matches sit under them as plain
+    // tappable rows.
+    if (incoming.length === 0 && newMatches.length === 0) {
+      return (
+        <p className="py-16 text-center text-sm text-fg-muted">
+          No pending requests.
+        </p>
+      );
+    }
     return (
-      <div className="mt-5 space-y-3">
-        {incoming.length === 0 ? (
-          <p className="py-16 text-center text-sm text-fg-muted">
-            No pending requests.
-          </p>
-        ) : (
-          incoming.map((r) => <RequestRow key={r.id} request={r} />)
+      <div className="mt-5">
+        {incoming.length > 0 && (
+          <div className="space-y-3">
+            {incoming.map((r) => (
+              <RequestRow key={r.id} request={r} />
+            ))}
+          </div>
+        )}
+        {newMatches.length > 0 && (
+          <div className={incoming.length > 0 ? "mt-5" : undefined}>
+            {newMatches.map((otherId) => (
+              <NewMatchRow
+                key={`nm:${otherId}`}
+                otherId={otherId}
+                profile={profiles[otherId]}
+              />
+            ))}
+          </div>
         )}
       </div>
     );
@@ -126,18 +161,12 @@ export function InboxList({
 
   return (
     <div className="mt-5">
-      {threads.length === 0 && newMatches.length === 0 ? (
+      {threads.length === 0 ? (
         <p className="py-16 text-center text-sm text-fg-muted">
           No conversations yet. Match in Discover to start chatting.
         </p>
       ) : (
         <div>
-          {/* Fresh matches (no conversation yet) sit at the TOP so a new match
-              is the first thing seen, not buried under older threads. */}
-          {newMatches.map((otherId) => (
-            <NewMatchRow key={`nm:${otherId}`} otherId={otherId} profile={profiles[otherId]} />
-          ))}
-
           {threads.map((t) => {
             if (t.kind === "space") {
               const image = t.space.avatar_url ?? t.space.cover_url;
@@ -148,39 +177,28 @@ export function InboxList({
                   className="pressable-subtle focus-ring -mx-2 flex items-center gap-3.5 rounded-[10px] px-2 py-3.5"
                 >
                   <div className="relative h-12 w-12 shrink-0 rounded-full">
+                    {/* The brand gradient is what separates a Discover team
+                        room from a person at a glance — it sits on the AVATAR,
+                        not on a coloured capsule. */}
                     <div className="glass relative flex h-full w-full items-center justify-center overflow-hidden rounded-full">
-                      {t.space.is_discover_group ? (
-                        <DiscoverGroupAvatar sizes="48px" />
-                      ) : image ? (
-                        <AppImage src={image} alt="" sizes="48px" />
-                      ) : (
-                        <span className="text-lg" aria-hidden>
-                          {communityIcon(t.space.name)}
-                        </span>
-                      )}
+                      <DiscoverGroupAvatar sizes="48px" />
                     </div>
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="flex min-w-0 items-center gap-1.5">
-                      {/* The capsule is what separates a room from a person;
-                          everything else about the row is identical. A Discover
-                          team room takes the brand gradient instead of glass so
-                          it reads as its own thing at a glance. The capsule
-                          always sits to the right of the name, pinned and
+                      {/* `name` is the title the author chose when the team
+                          formed (mig 0129 falls back to the post's title).
+                          The capsule always sits to its right, pinned and
                           non-shrinking, so a long name truncates first. */}
                       <span className="type-headline min-w-0 flex-1 truncate text-fg">
                         {t.space.name}
                       </span>
-                      {t.space.is_society && t.space.is_official && (
-                        <VerifiedBadge size={14} className="shrink-0" />
-                      )}
                       {/* A type label, not a state: it says what KIND of thread
-                          this is, which never changes. Filled purple made every
-                          room in the list look permanently notable. */}
+                          this is, which never changes. Deliberately neutral —
+                          filled purple made every room in the list look
+                          permanently notable. */}
                       <span className="type-footnote shrink-0 rounded-full bg-fill px-2 py-0.5 font-semibold text-fg-muted">
-                        {t.space.is_discover_group
-                          ? discoverGroupLabel(t.space.discover_mode)
-                          : "Community"}
+                        {discoverGroupLabel(t.space.discover_mode)}
                       </span>
                     </p>
                     <p className="type-callout truncate text-fg-muted">
@@ -260,10 +278,10 @@ export function InboxList({
 }
 
 /**
- * A fresh match with no conversation yet. The row itself opens (or creates)
- * the conversation — there is no separate "Message" button, so the person and
+ * A fresh match with no conversation yet — a Requests row. The row itself opens
+ * (or creates) the conversation — there is no separate "Message" button, so the person and
  * their name are the only things competing for attention, matching every
- * other row in this list (a DM/space row is likewise one big tap target).
+ * other row in this list (a DM row is likewise one big tap target).
  *
  * This has to be a `<button>`, not a `<Link>`: opening a match's first
  * conversation calls a server action that creates the row before redirecting,

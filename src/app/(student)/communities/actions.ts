@@ -447,9 +447,9 @@ export async function leaveCommunity(communityId: string) {
 }
 
 /**
- * Membership drives four surfaces: the two community profiles that render the
- * same row, the Chat inbox (a joined room appears there as a thread), and the
- * room's own conversation screen, whose composer is gated on membership.
+ * Membership drives the community profile (whose Chat tab appears/disappears
+ * with it), the societies profile, the discovery list, and — for Discover team
+ * rooms only — the standalone /chat/c/<id> screen.
  */
 function revalidateCommunity(communityId: string) {
   revalidatePath(`/communities/${communityId}`);

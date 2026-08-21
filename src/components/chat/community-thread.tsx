@@ -41,12 +41,12 @@ export function CommunityThread({
         <p className="font-semibold text-fg">
           {joinStatus === "pending"
             ? "Your request is with the moderators"
-            : "Join to chat here"}
+            : "Join this room to access chat"}
         </p>
         <p className="-mt-1 text-sm text-fg-muted">
           {joinStatus === "pending"
             ? "You'll be able to send messages as soon as it's approved."
-            : "Following shows you broadcasts. Chatting needs approval."}
+            : "Only members can read and send messages here."}
         </p>
         <RequestJoinButton communityId={communityId} joinStatus={joinStatus} />
       </div>
