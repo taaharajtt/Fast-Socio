@@ -44,7 +44,7 @@ export async function HomeHelpStrip() {
   const rows = pickHelpPreview((data ?? []) as HelpRequestRow[], 6);
 
   return (
-    <section className="mt-4">
+    <section className="mt-6">
       <SectionHeader
         title="Campus Help"
         action={{ label: "See all", href: "/help" }}

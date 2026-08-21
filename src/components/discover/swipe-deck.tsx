@@ -552,12 +552,12 @@ function ProfileCardBody({
           {profile.full_name ?? "Student"}
           {profile.verified && <VerifiedBadge size={16} />}
         </h2>
-        <p className="mt-1 text-sm text-fg-muted">
+        <p className="type-caption mt-1 text-fg-muted">
           {profile.department ?? ""}
           {profile.semester ? ` · ${semesterLabel(profile.semester)}` : ""}
         </p>
         {profile.bio && (
-          <p className="mt-1.5 line-clamp-2 text-sm text-white">{profile.bio}</p>
+          <p className="type-callout mt-1.5 line-clamp-2 text-white">{profile.bio}</p>
         )}
         {/*
           Interests were four saturated purple pills stacked over the
@@ -630,10 +630,10 @@ function MessageRequestSheet({
     <GlassSheet open={Boolean(profile)} onClose={onClose}>
       {profile && (
         <div className="space-y-3">
-          <h3 className="text-lg font-bold">
+          <h3 className="type-title">
             Message {profile.full_name ?? "them"}
           </h3>
-          <p className="text-sm text-fg-muted">
+          <p className="type-callout text-fg-muted">
             Send an opening message to start a conversation.
           </p>
           <GlassInput
@@ -694,11 +694,11 @@ function ProfileDetail({
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="flex items-center gap-1.5 text-2xl font-bold">
+        <h3 className="type-title flex items-center gap-1.5">
           {profile.full_name ?? "Student"}
           {profile.verified && <VerifiedBadge size={18} />}
         </h3>
-        <p className="text-fg-muted">
+        <p className="type-caption mt-1 text-fg-muted">
           {profile.department ?? ""}
           {profile.semester ? ` · ${semesterLabel(profile.semester)}` : ""}
         </p>
@@ -712,7 +712,7 @@ function ProfileDetail({
       {profile.bio && (
         <div>
           <h4 className="mb-1 text-sm font-medium text-fg-muted">About</h4>
-          <p className="text-[15px]">{profile.bio}</p>
+          <p className="type-callout">{profile.bio}</p>
         </div>
       )}
       {profile.interests?.length > 0 && (
@@ -748,17 +748,17 @@ function IntentDetail({ card }: { card: IntentCard }) {
         <span className="text-[11px] font-bold uppercase tracking-wide text-accent-light">
           {KIND_CAPSULE[card.kind]}
         </span>
-        <h3 className="mt-1 text-2xl font-bold">{post.title}</h3>
-        <p className="text-fg-muted">
+        <h3 className="type-title mt-1">{post.title}</h3>
+        <p className="type-caption mt-1 text-fg-muted">
           {post.authorName ?? "Student"}
           {post.authorDepartment ? ` · ${post.authorDepartment}` : ""}
         </p>
       </div>
 
-      {post.description && <p className="text-[15px]">{post.description}</p>}
+      {post.description && <p className="type-callout">{post.description}</p>}
 
       {rows.length > 0 && (
-        <ul className="space-y-1 text-[15px] text-fg-muted">
+        <ul className="type-callout space-y-1 text-fg-muted">
           {rows.map((r) => (
             <li key={r.key}>{r.label}</li>
           ))}

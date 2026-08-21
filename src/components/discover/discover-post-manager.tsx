@@ -279,7 +279,7 @@ function IncomingRequests({
 
   return (
     <section className="space-y-2">
-      <h2 className="type-title text-fg">Requests to you</h2>
+      <h2 className="type-headline text-fg">Requests to you</h2>
       {data.incoming.map((a) => (
         <div key={a.id} className="flex items-center gap-2.5 rounded-[14px] bg-card p-3">
           <Link
@@ -291,10 +291,10 @@ function IncomingRequests({
             )}
           </Link>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">
+            <p className="type-headline truncate text-fg">
               {a.applicantName ?? "Student"}
             </p>
-            <p className="truncate text-[11px] text-fg-muted">
+            <p className="type-callout truncate text-fg-muted">
               {a.message ? a.message : `wants in · ${a.postTitle}`}
             </p>
           </div>
@@ -464,7 +464,7 @@ function MyPosts({
 
   return (
     <section className="space-y-2">
-      <h2 className="type-title text-fg">Your posts</h2>
+      <h2 className="type-headline text-fg">Your posts</h2>
       {posts.length === 0 && (
         <p className="type-callout rounded-[14px] bg-card px-4 py-5 text-fg-muted">
           You haven&apos;t posted to Discover yet. Go back and pick a type — your
@@ -478,8 +478,8 @@ function MyPosts({
           <div key={p.id} className="rounded-[16px] bg-card px-3.5 py-3">
             <div className="flex items-center gap-2">
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{p.title}</p>
-                <p className="text-[11px] text-fg-muted">
+                <p className="type-headline truncate text-fg">{p.title}</p>
+                <p className="type-callout text-fg-muted">
                   {KIND_CAPSULE[p.mode as IntentKind] ?? MODE_META[p.mode].label}
                   {" · "}
                   {STATUS_LABEL[p.status]}

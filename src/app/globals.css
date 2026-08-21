@@ -61,10 +61,10 @@
   --deck-chrome: 9.5rem;
 
   /* Brand — Purple Primary (UISpec V3 §1.1) */
-  --accent: #7c3aed; /* Purple Primary — active tabs, CTAs, badges */
+  --accent: #8438f5; /* Purple Primary — active tabs, CTAs, badges (violet-black experiment) */
   --accent-light: #8b5cf6; /* Purple Light — hover / secondary accents */
   --accent-grad-end: #a855f7; /* gradient end (buttons, own messages) */
-  --aura: #7c3aed; /* legacy brand token → primary purple */
+  --aura: #8438f5; /* legacy brand token → primary purple */
   --cyan: #3b82f6; /* legacy tertiary → repointed to verified blue */
 
   /* Gold / Aura score */
@@ -83,13 +83,13 @@
     colour. These steps are neutral and small, so photos and avatars — the real
     content — supply the colour.
   */
-  --bg: #0a0a0b; /* App background — deepest neutral, not pure black */
-  --card: #141415; /* Post cards, list items */
-  --bg-elevated: #1c1c1e; /* Modals, dropdowns, sheets */
-  --surface-active: #232325; /* Pressed / selected neutral */
-  --input-bg: #131314; /* Text inputs, search bars */
-  --fg: #f5f5f7; /* Primary text — off-white, not #fff (less glare) */
-  --fg-muted: #9a9a9f; /* Secondary text (previews, subtitles) */
+  --bg: #0b0912; /* App background — extremely dark violet-black (colour experiment) */
+  --card: #100e16; /* Post cards, list items */
+  --bg-elevated: #15121c; /* Modals, dropdowns, sheets */
+  --surface-active: #15121c; /* Pressed / selected neutral — shares the elevated tier */
+  --input-bg: #100e16; /* Text inputs, search bars */
+  --fg: #f5f3f7; /* Primary text — off-white, not #fff (less glare) */
+  --fg-muted: #96919d; /* Secondary text (previews, subtitles) */
   --fg-subtle: #6e6e73; /* Tertiary metadata (timestamps, counters) */
   --fg-disabled: #48484a; /* Disabled / placeholder */
 
@@ -101,8 +101,8 @@
     single most important control on a screen is unmistakable without spending
     the brand colour on it, which is what let purple retreat everywhere else.
   */
-  --emphasis: #f5f5f7;
-  --emphasis-fg: #0a0a0b;
+  --emphasis: #f5f3f7;
+  --emphasis-fg: #0b0912;
 
   /*
     Neutral fills (Apple's `fill` role). Secondary controls — icon buttons,
@@ -116,7 +116,7 @@
     distinction, never automatically between every row in a list (spacing does
     that job). Kept dim so a divider never out-contrasts the text beside it.
   */
-  --hairline: rgba(255, 255, 255, 0.07);
+  --hairline: #24202b;
 
   /*
     Translucent chrome. Floating layers (the dock, sticky headers, sheets) are
@@ -124,14 +124,14 @@
     band of the screen (apple.md §12). Both fall back to solid under
     prefers-reduced-transparency, handled at the utility below.
   */
-  --chrome: rgba(10, 10, 11, 0.78);
-  --chrome-solid: #0a0a0b;
-  --chrome-border: rgba(255, 255, 255, 0.06);
+  --chrome: rgba(11, 9, 18, 0.78);
+  --chrome-solid: #0b0912;
+  --chrome-border: #24202b;
 
   /* "Glass" tokens repurposed as solid card surfaces (V3 drops blur) */
-  --glass-surface: #141415;
-  --glass-surface-strong: #1c1c1e;
-  --glass-border: rgba(255, 255, 255, 0.06);
+  --glass-surface: #100e16;
+  --glass-surface-strong: #15121c;
+  --glass-border: #24202b;
   --glass-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 
   /* Status */

@@ -26,7 +26,7 @@ export function MyHelpPanel({ rows }: { rows: HelpRequestRow[] }) {
         control here), but sized to what it is.
       */}
       <div className="flex items-center justify-between gap-3">
-        <h2 className="type-title">Your asks</h2>
+        <h2 className="type-headline text-fg">Your asks</h2>
         <Link
           href="/help/new"
           className="pressable focus-ring flex shrink-0 items-center gap-1.5 rounded-[10px] bg-emphasis px-3.5 py-2 text-sm font-semibold text-emphasis-fg"

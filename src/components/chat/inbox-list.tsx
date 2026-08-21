@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { RequestRow } from "@/components/chat/request-row";
-import { OpenChatButton } from "@/components/chat/open-chat-button";
 import { AppImage } from "@/components/ui/app-image";
 import { resolveAvatarUrl } from "@/lib/avatar";
 import { OnlineDot, UnreadBadge, VerifiedBadge } from "@/components/ui/badges";
@@ -11,8 +10,8 @@ import { communityIcon } from "@/lib/communities/icon";
 import { discoverGroupLabel } from "@/lib/discover/group-label";
 import { DiscoverGroupAvatar } from "@/components/discover/discover-group-avatar";
 import { createClient } from "@/lib/supabase/client";
-import { refreshInbox } from "@/app/(student)/chat/actions";
-import { EPOCH, type InboxData } from "@/lib/chat/inbox-types";
+import { refreshInbox, openConversation } from "@/app/(student)/chat/actions";
+import { EPOCH, type InboxData, type InboxProfile } from "@/lib/chat/inbox-types";
 import { cn } from "@/lib/utils";
 import { isOnline, timeAgo } from "@/lib/time";
 
@@ -135,32 +134,9 @@ export function InboxList({
         <div>
           {/* Fresh matches (no conversation yet) sit at the TOP so a new match
               is the first thing seen, not buried under older threads. */}
-          {newMatches.map((otherId) => {
-            const p = profiles[otherId];
-            return (
-              <div key={`nm:${otherId}`} className="-mx-2 flex items-center gap-3 px-2 py-3.5">
-                <Link
-                  href={`/profile/${otherId}`}
-                  className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full bg-card"
-                >
-                  {resolveAvatarUrl(p?.avatar_url, p?.gender) && (
-                    <AppImage
-                      src={resolveAvatarUrl(p?.avatar_url, p?.gender)!}
-                      alt={p?.full_name ?? "Match"}
-                      sizes="44px"
-                    />
-                  )}
-                </Link>
-                <div className="min-w-0 flex-1">
-                  <p className="type-headline truncate text-fg">
-                    {p?.full_name ?? "Student"}
-                  </p>
-                  <p className="type-callout truncate text-fg-muted">New match ✨</p>
-                </div>
-                <OpenChatButton otherId={otherId} />
-              </div>
-            );
-          })}
+          {newMatches.map((otherId) => (
+            <NewMatchRow key={`nm:${otherId}`} otherId={otherId} profile={profiles[otherId]} />
+          ))}
 
           {threads.map((t) => {
             if (t.kind === "space") {
@@ -169,14 +145,14 @@ export function InboxList({
                 <Link
                   key={`sp:${t.space.id}`}
                   href={`/chat/c/${t.space.id}`}
-                  className="pressable-subtle focus-ring -mx-2 flex items-center gap-3 rounded-[10px] px-2 py-3.5"
+                  className="pressable-subtle focus-ring -mx-2 flex items-center gap-3.5 rounded-[10px] px-2 py-3.5"
                 >
-                  <div className="relative h-11 w-11 shrink-0 rounded-full">
+                  <div className="relative h-12 w-12 shrink-0 rounded-full">
                     <div className="glass relative flex h-full w-full items-center justify-center overflow-hidden rounded-full">
                       {t.space.is_discover_group ? (
-                        <DiscoverGroupAvatar sizes="44px" />
+                        <DiscoverGroupAvatar sizes="48px" />
                       ) : image ? (
-                        <AppImage src={image} alt="" sizes="44px" />
+                        <AppImage src={image} alt="" sizes="48px" />
                       ) : (
                         <span className="text-lg" aria-hidden>
                           {communityIcon(t.space.name)}
@@ -227,7 +203,7 @@ export function InboxList({
                 key={t.convId}
                 href={`/chat/${t.convId}`}
                 className={cn(
-                  "pressable-subtle focus-ring -mx-2 flex items-center gap-3",
+                  "pressable-subtle focus-ring -mx-2 flex items-center gap-3.5",
                   "rounded-[10px] px-2 py-3.5"
                   // Unread is NOT a tinted row. A purple wash across a whole
                   // conversation coloured the person, not the state, and on a
@@ -236,13 +212,13 @@ export function InboxList({
                   // it, and both survive the grayscale test.
                 )}
               >
-                <div className="relative h-11 w-11 shrink-0 rounded-full">
+                <div className="relative h-12 w-12 shrink-0 rounded-full">
                   <div className="relative h-full w-full overflow-hidden rounded-full bg-card">
                     {resolveAvatarUrl(p?.avatar_url, p?.gender) && (
                       <AppImage
                         src={resolveAvatarUrl(p?.avatar_url, p?.gender)!}
                         alt={p?.full_name ?? "Match"}
-                        sizes="44px"
+                        sizes="48px"
                       />
                     )}
                   </div>
@@ -280,5 +256,55 @@ export function InboxList({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * A fresh match with no conversation yet. The row itself opens (or creates)
+ * the conversation — there is no separate "Message" button, so the person and
+ * their name are the only things competing for attention, matching every
+ * other row in this list (a DM/space row is likewise one big tap target).
+ *
+ * This has to be a `<button>`, not a `<Link>`: opening a match's first
+ * conversation calls a server action that creates the row before redirecting,
+ * so there is no URL to point a plain link at. The avatar is a bare `<span>`
+ * rather than its own nested link, since a link inside a button is invalid
+ * HTML and would give the row two competing tap targets.
+ */
+function NewMatchRow({
+  otherId,
+  profile,
+}: {
+  otherId: string;
+  profile: InboxProfile | undefined;
+}) {
+  const [pending, start] = useTransition();
+  const avatarSrc = resolveAvatarUrl(profile?.avatar_url, profile?.gender);
+
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      onClick={() =>
+        start(async () => {
+          await openConversation(otherId);
+        })
+      }
+      className="pressable-subtle focus-ring -mx-2 flex w-full items-center gap-3.5 rounded-[10px] px-2 py-3.5 text-left disabled:opacity-60"
+    >
+      <span className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full bg-card">
+        {avatarSrc && (
+          <AppImage src={avatarSrc} alt={profile?.full_name ?? "Match"} sizes="48px" />
+        )}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="type-headline block truncate text-fg">
+          {profile?.full_name ?? "Student"}
+        </span>
+        <span className="type-callout block truncate text-fg-muted">
+          {pending ? "Opening…" : "New match"}
+        </span>
+      </span>
+    </button>
   );
 }

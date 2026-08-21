@@ -65,7 +65,7 @@ export function IntentCardBody({
   const link = hackathonLink ?? displayableUrl(post.portfolioUrl);
 
   const titleLine = (
-    <h2 className="text-[21px] font-bold leading-tight">{post.title}</h2>
+    <h2 className="text-[22px] font-bold leading-tight">{post.title}</h2>
   );
 
   // Recruitment leads with the author (who's recruiting) before the title, so
@@ -89,7 +89,7 @@ export function IntentCardBody({
             {post.authorName ?? "Student"}
             {post.authorVerified && <VerifiedBadge size={13} />}
           </p>
-          <p className="truncate text-[11px] text-fg-muted">
+          <p className="type-caption truncate text-fg-muted">
             {[
               post.authorDepartment,
               post.authorSemester ? `Sem ${post.authorSemester}` : null,

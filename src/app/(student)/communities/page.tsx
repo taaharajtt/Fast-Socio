@@ -66,6 +66,7 @@ export default function CommunitiesPage() {
           </Suspense>
         }
         action={<CreateSpaceButton />}
+        className="mb-5"
       />
       <Suspense fallback={<SkeletonRows count={5} />}>
         <CommunitySections />

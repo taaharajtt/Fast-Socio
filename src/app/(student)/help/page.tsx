@@ -32,7 +32,7 @@ export default async function HelpPage({
       <ScreenHeader
         title="Campus Help"
         subtitle="Drop the Gatekeeping, help your Campus."
-        className="mb-4"
+        className="mb-5"
       />
 
       {/* Standalone route: internal SOCIO|ME uses `?tab=`. SOCIO has no Filters

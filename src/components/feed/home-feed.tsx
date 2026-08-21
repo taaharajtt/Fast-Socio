@@ -73,7 +73,7 @@ export function HomeFeed({
       {/* Section label for the campus feed, mirroring the Campus Help header
           above it — gives the feed its own identity instead of running straight
           on from the Campus Help card. */}
-      <div className="mb-2 mt-4 px-4">
+      <div className="mb-2 mt-6 px-4">
         <SectionHeader title="Feed" icon={Newspaper} className="mb-0" />
       </div>
       <div>

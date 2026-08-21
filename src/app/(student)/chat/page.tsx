@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { ChatCommunityTabs } from "@/components/chat/chat-community-tabs";
 import { InboxList } from "@/components/chat/inbox-list";
 import { SkeletonRows } from "@/components/ui/skeleton";
+import { ScreenHeader } from "@/components/ui";
 import { loadInbox } from "@/app/(student)/chat/inbox-data";
 import { timed } from "@/lib/perf";
 
@@ -30,7 +31,7 @@ export default function ChatPage({
 }) {
   return (
     <main className="mx-auto w-full max-w-md px-4 py-6">
-      <h1 className="text-[22px] font-bold tracking-tight">Messages</h1>
+      <ScreenHeader title="Messages" className="mb-5" />
       <Suspense fallback={<InboxSkeleton />}>
         <Inbox searchParams={searchParams} />
       </Suspense>
