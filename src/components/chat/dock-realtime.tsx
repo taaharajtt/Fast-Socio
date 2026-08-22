@@ -3,7 +3,6 @@
 import { useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { setChatBadge } from "@/lib/chat/badge-store";
-import { fetchChatBadge } from "@/lib/chat/badge-count";
 
 /**
  * Keeps the dock's chat badge (unread DMs + pending requests) live on every
@@ -11,16 +10,9 @@ import { fetchChatBadge } from "@/lib/chat/badge-count";
  *
  * This used to call `router.refresh()` on every message/request event, which
  * re-rendered the whole server tree for the current route to update one number.
- * Now it re-runs just the count itself and pushes the result into the badge
- * store, so a burst of messages costs ONE scoped RPC and a single dock
- * re-render instead of a full RSC round trip per event.
- *
- * That recount used to be two `head: true` count queries, and the unread half
- * had no predicate scoping it to the caller — it scanned `messages` and let RLS
- * filter afterwards, on a path that fires on every message event for every
- * connected client. It now shares `fetchChatBadge` with the server layout
- * (audit F6b, migration 0155), so the two can no longer disagree about what the
- * badge counts.
+ * Now it re-runs just the two count queries itself and pushes the result into
+ * the badge store, so a burst of messages costs two `head: true` counts and a
+ * single dock re-render instead of a full RSC round trip per event.
  *
  * RLS scopes both counts to the caller exactly as it did server-side, so the
  * number can't differ from what the server would have computed.
@@ -50,8 +42,19 @@ export function DockRealtime({
     const supabase = createClient();
 
     async function recount() {
-      const badge = await fetchChatBadge(supabase);
-      setChatBadge(badge.total);
+      const [{ count: unread }, { count: pending }] = await Promise.all([
+        supabase
+          .from("messages")
+          .select("id", { count: "exact", head: true })
+          .neq("sender_id", userId)
+          .is("read_at", null),
+        supabase
+          .from("message_requests")
+          .select("id", { count: "exact", head: true })
+          .eq("recipient_id", userId)
+          .eq("status", "pending"),
+      ]);
+      setChatBadge((unread ?? 0) + (pending ?? 0));
     }
 
     // Coalesce a burst of events (a message insert plus the conversations

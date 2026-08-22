@@ -25,15 +25,9 @@ type Point = { x: number; y: number };
 
 /**
  * Campus Map viewer (v2) — a CSS-transform image inspector (deliberately not a
- * GIS/map library). It renders `public/map.webp` at its **natural pixel size**
+ * GIS/map library). It renders `public/map.png` at its **natural pixel size**
  * via a plain <img> so zooming reveals real detail instead of an upscaled,
  * already-compressed render. Scaling is done purely with a CSS transform.
- *
- * The asset is LOSSLESS WebP, not PNG (perf audit F2b). Same 2738x1536 pixels,
- * bit-for-bit identical output — verified with a raw-buffer comparison: mean
- * absolute error 0, max channel delta 0 — for 4.08 MB instead of 6.33 MB. The
- * sharpness requirement below is therefore fully intact; only the container
- * changed. Do NOT swap this for lossy WebP without re-reading that note.
  *
  * Fit model: the initial view is a *cover* fit — the larger of the width- and
  * height-fit ratios — so the map fills the viewer with no letterboxing. That
@@ -312,11 +306,10 @@ export function CampusMapViewer({
         >
           {/* eslint-disable-next-line @next/next/no-img-element -- deliberate:
               the optimizer downscales/compresses this map and softens it; we
-              want exact source pixels to scale sharply under the transform.
-              The lossless WebP encoding preserves that exactly (see header). */}
+              want exact source pixels to scale sharply under the transform. */}
           <img
             ref={imgRef}
-            src="/map.webp"
+            src="/map.png"
             alt="FAST campus map"
             draggable={false}
             onLoad={(e) => {

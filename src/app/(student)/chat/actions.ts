@@ -30,42 +30,6 @@ export async function fetchOlderMessages(
 }
 
 /**
- * Fetch every message in a conversation NEWER than `since` — the catch-up read
- * for a thread that may have missed realtime events.
- *
- * `postgres_changes` has no replay: anything published while the socket was
- * down (a backgrounded PWA, an expired JWT, a tunnel) is simply gone, and
- * nothing in the thread ever went looking for it. `fetchOlderMessages` above
- * only pages backwards, so there was no way to close a forward gap short of a
- * full reload.
- *
- * Called on mount, on focus/visibility resume, and on every (re)subscribe.
- * `since` is the newest server-backed row already on screen, so a normal call
- * returns zero rows and costs one indexed range scan.
- *
- * RLS scopes rows to conversation participants exactly as the initial page read
- * does; `hidden` moderated messages stay excluded to match it.
- */
-export async function fetchNewerMessages(
-  conversationId: string,
-  since: string
-) {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("messages")
-    .select("*")
-    .eq("conversation_id", conversationId)
-    .eq("hidden", false)
-    .gt("created_at", since)
-    .order("created_at", { ascending: true })
-    // Generous but bounded: a thread that missed more than this while away is
-    // better served by the page's own read on the next navigation than by
-    // streaming an unbounded backlog into client state.
-    .limit(MESSAGE_PAGE_SIZE * 2);
-  return (data ?? []) as unknown[];
-}
-
-/**
  * Accept or decline an incoming message request. RLS restricts updates to the
  * recipient, so we additionally scope by recipient_id = auth.uid(). An accepted
  * request becomes a conversation in Phase 3 (Chat).
@@ -141,9 +105,7 @@ export async function sendMessage(
   conversationId: string,
   body: string,
   attachment?: Attachment
-): Promise<
-  { ok: true; message: { id: string; created_at: string } } | { ok: false; error: string }
-> {
+): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
   // Local JWT verification — no Auth API round trip on this hot path.
   const userId = await getAuthUserId();
@@ -165,40 +127,15 @@ export async function sendMessage(
   );
   if (!allowed) return { ok: false, error: "You're sending too fast." };
 
-  // `.select()` so the caller gets the row's real id back. That id is what
-  // reconciles the optimistic bubble: the thread used to match a pending bubble
-  // to its authoritative row by comparing body text, which mis-paired the two
-  // rows whenever someone sent the same short message twice in a row. Returning
-  // the id makes the match exact and costs nothing — the row is already there.
-  const { data, error } = await supabase
-    .from("messages")
-    .insert({
-      conversation_id: conversationId,
-      sender_id: userId,
-      body: text || null,
-      attachment_url: attachment?.url ?? null,
-      attachment_type: attachment?.type ?? null,
-    })
-    .select("id, created_at")
-    .single();
-  if (error || !data) return { ok: false, error: error?.message ?? "Send failed." };
-
-  // NOTE ON CACHE INVALIDATION — there is deliberately no `refresh()` or
-  // `revalidatePath("/chat")` here, and that is a considered choice rather than
-  // an omission.
-  //
-  // Both would re-render a server tree on the SEND path, which is the hottest
-  // path in the app, and `refresh()` refreshes the route the sender is actually
-  // on — the conversation page, whose render re-runs five queries and re-signs
-  // every attachment URL. Paying that per message to keep a list on a different
-  // route current is the wrong trade.
-  //
-  // It is also unnecessary now: the sender's own INSERT is delivered to
-  // <InboxRealtime/> in the layout (it is subscribed from every screen,
-  // including inside this thread), which re-reads just the inbox and publishes
-  // it to the shared store. That fixes the RECIPIENT's inbox too, which no
-  // amount of cache invalidation on the sender's request could ever do.
-  return { ok: true, message: { id: data.id as string, created_at: data.created_at as string } };
+  const { error } = await supabase.from("messages").insert({
+    conversation_id: conversationId,
+    sender_id: userId,
+    body: text || null,
+    attachment_url: attachment?.url ?? null,
+    attachment_type: attachment?.type ?? null,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
 }
 
 export type MatchedFriend = {

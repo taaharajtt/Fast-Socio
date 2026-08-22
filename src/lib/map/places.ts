@@ -13,7 +13,7 @@ import {
 
 /**
  * Campus Map places (v2). Coordinates are **percentages of the source
- * `public/map.webp`**: x=0 left → x=100 right, y=0 top → y=100 bottom. Pins are
+ * `public/map.png`**: x=0 left → x=100 right, y=0 top → y=100 bottom. Pins are
  * rendered inside the transformed image layer using these percentages, so they
  * stay anchored to the map through any zoom/pan.
  *

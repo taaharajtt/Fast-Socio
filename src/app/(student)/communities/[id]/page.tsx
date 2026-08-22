@@ -1,5 +1,4 @@
 import { notFound, redirect } from "next/navigation";
-import { RefreshOnResume } from "@/components/ui/refresh-on-resume";
 import { ChatRoomShell, type ChatRoomShellTab } from "@/components/communities/chat-room-shell";
 import { RoomOverviewTab } from "@/components/communities/tabs/room-overview-tab";
 import { RoomManageTab } from "@/components/communities/tabs/room-manage-tab";
@@ -171,8 +170,7 @@ export default async function CommunityPage({
   }
 
   return (
-    <>
-      <ChatRoomShell
+    <ChatRoomShell
       community={{
         id: community.id,
         name: community.name,
@@ -186,12 +184,6 @@ export default async function CommunityPage({
       isOwner={rel.isOwner}
       pending={pending}
       tabs={tabs}
-      />
-      {/* Member count, join/follow state and the pending-request list are
-          server data with no client fetch path of their own. Re-read them when
-          the student returns to the app rather than subscribing this page to
-          every membership change on campus. */}
-      <RefreshOnResume />
-    </>
+    />
   );
 }

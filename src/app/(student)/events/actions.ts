@@ -16,7 +16,7 @@ export async function createEvent(input: {
   location: string;
   /** Known campus place id from LocationPicker; null when no pin is set. */
   placeId?: string | null;
-  /** Percentage coordinates (0-100) of public/map.webp; must accompany placeId. */
+  /** Percentage coordinates (0-100) of public/map.png; must accompany placeId. */
   placeX?: number | null;
   placeY?: number | null;
   startsAt: string; // ISO datetime-local value

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 import { authorizeUpload } from "@/lib/s3/authorize";
 import { presignUpload, s3Configured } from "@/lib/s3/sign";
 import {
@@ -6,7 +7,6 @@ import {
   isWellFormedObjectPath,
   validateUploadShape,
 } from "@/lib/s3/buckets";
-import { getAuthUserId } from "@/lib/auth/user";
 
 /**
  * Mint a short-lived presigned PUT so the browser can upload one object
@@ -32,11 +32,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Storage is not configured." }, { status: 503 });
   }
 
-  // Locally-verified from the session JWT rather than `auth.getUser()`, which
-  // costs an Auth API round trip on a path the user is actively waiting on —
-  // this runs before every single upload. See lib/auth/user.ts (audit F7).
-  const userId = await getAuthUserId();
-  if (!userId) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
     return NextResponse.json({ error: "You are not signed in." }, { status: 401 });
   }
 
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: shape.reason }, { status: 400 });
   }
 
-  const authz = await authorizeUpload(prefix, path, userId);
+  const authz = await authorizeUpload(prefix, path, user.id);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.reason }, { status: authz.status });
   }

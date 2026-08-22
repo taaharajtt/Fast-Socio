@@ -35,20 +35,11 @@ import {
   SharedPostCard,
   type SharedPostPreview,
 } from "@/components/chat/shared-post-preview";
-import { useRealtimeChannel, useVisibilityRefresh } from "@/lib/realtime/use-realtime-channel";
-import {
-  mergeMessage,
-  mergeMessages,
-  newestServerTimestamp,
-  resolveOptimistic,
-  dropOptimistic,
-} from "@/lib/chat/message-merge";
 import {
   sendMessage,
   markConversationRead,
   reportMessage,
   fetchOlderMessages,
-  fetchNewerMessages,
   editMessage,
   deleteMessage,
   toggleMessageReaction,
@@ -64,13 +55,6 @@ const QUICK_EMOJIS = ["❤️", "😂", "🔥", "👍", "😮", "😢", "🙏"];
 // caps at ~5-6 lines before it scrolls internally.
 const MIN_TEXTAREA_HEIGHT = 40;
 const MAX_TEXTAREA_HEIGHT = 144;
-/**
- * At most one `mark_conversation_read` RPC per this many ms. The RPC marks the
- * whole conversation, so calling it once per inbound message (as this component
- * used to) bought nothing and cost a round trip plus an UPDATE broadcast each
- * time.
- */
-const MARK_READ_THROTTLE_MS = 3_000;
 
 function formatRecordingTime(totalSeconds: number): string {
   const m = Math.floor(totalSeconds / 60);
@@ -298,6 +282,9 @@ export function ChatThread({
   const listRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const channelRef = useRef<ReturnType<
+    ReturnType<typeof createClient>["channel"]
+  > | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   // Set when the user discards a take, so onstop skips the upload/send.
@@ -320,110 +307,19 @@ export function ChatThread({
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPress = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  /**
-   * Newest server-backed timestamp on screen, kept in a ref so the catch-up
-   * callback can read it without being re-created (and therefore re-subscribing
-   * the channel) on every incoming message.
-   */
-  const newestServerTimestampRef = useRef<string | null>(
-    newestServerTimestamp(initialMessages)
-  );
-  useEffect(() => {
-    newestServerTimestampRef.current = newestServerTimestamp(messages);
-  }, [messages]);
-
-  /**
-   * Read receipts, throttled.
-   *
-   * `markConversationRead` used to fire once per inbound INSERT, so receiving a
-   * burst of ten messages meant ten server actions, each one an RPC round trip
-   * — and each one publishing UPDATEs that came straight back down the socket.
-   * The RPC is idempotent and marks the WHOLE conversation, so one call per
-   * window is exactly as correct and an order of magnitude cheaper.
-   */
-  const lastMarkReadAt = useRef(0);
-  const markReadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scheduleMarkRead = useCallback(() => {
-    if (markReadTimer.current) return;
-    const elapsed = Date.now() - lastMarkReadAt.current;
-    const wait = Math.max(0, MARK_READ_THROTTLE_MS - elapsed);
-    markReadTimer.current = setTimeout(() => {
-      markReadTimer.current = null;
-      lastMarkReadAt.current = Date.now();
-      markConversationRead(conversationId);
-    }, wait);
-  }, [conversationId]);
-
-  useEffect(() => {
-    return () => {
-      if (markReadTimer.current) clearTimeout(markReadTimer.current);
-    };
-  }, []);
-
-  /** Mirrors `messages` for callbacks that must not re-subscribe the channel.
-   *  Written in an effect: React Compiler rejects a ref write during render. */
-  const messagesRef = useRef(messages);
-  useEffect(() => {
-    messagesRef.current = messages;
-  }, [messages]);
-
-  /** Re-read reactions for every message on screen. Only used when a DELETE
-   *  event arrives without a `message_id` (see the handler below). */
-  const refreshVisibleReactions = useCallback(async () => {
-    const supabase = createClient();
-    const ids = messagesRef.current
-      .map((m) => m.id)
-      .filter((id) => !id.startsWith("temp-"));
-    if (ids.length === 0) return;
-    const { data } = await supabase
-      .from("message_reactions")
-      .select("message_id, emoji, user_id")
-      .in("message_id", ids);
-    const next: Record<string, Reaction[]> = {};
-    for (const id of ids) next[id] = [];
-    for (const r of data ?? []) {
-      (next[r.message_id] ??= []).push({ emoji: r.emoji, user_id: r.user_id });
-    }
-    setReactions(next);
-  }, []);
-
-  /**
-   * Catch-up read. `postgres_changes` cannot replay, so anything published
-   * while this socket was down — a backgrounded PWA, an expired JWT, a tunnel —
-   * is only recoverable by asking for it. Runs on mount, on every (re)subscribe
-   * and on focus/visibility resume, and normally returns zero rows.
-   *
-   * The cursor is the newest SERVER-BACKED row on screen; optimistic bubbles
-   * are skipped because their timestamp is this device's clock.
-   */
-  const catchUp = useCallback(async () => {
-    const since = newestServerTimestampRef.current;
-    if (!since) return;
-    try {
-      const rows = (await fetchNewerMessages(conversationId, since)) as ChatMessage[];
-      if (rows.length === 0) return;
-      setMessages((prev) => mergeMessages(prev, rows));
-      for (const m of rows) if (m.attachment_url) signAttachment(m);
-      if (rows.some((m) => m.sender_id !== meId)) scheduleMarkRead();
-    } catch {
-      // Next resume or event tries again.
-    }
-    // scheduleMarkRead is a stable useCallback declared above.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversationId, meId, signAttachment]);
-
   // Realtime: new messages, edits/deletes/read updates, and typing broadcasts.
-  //
-  // The subscription itself now goes through `useRealtimeChannel`, which owns
-  // the token refresh, the race-free teardown and the reconnect/focus catch-up
-  // that this effect used to lack entirely.
-  const channelRef = useRealtimeChannel({
-    name: `conv:${conversationId}`,
-    label: `chat thread ${conversationId}`,
-    channelOptions: { config: { broadcast: { self: false } } },
-    onCatchUp: () => void catchUp(),
-    build: (channel) =>
-      channel
+  useEffect(() => {
+    const supabase = createClient();
+    (async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session) supabase.realtime.setAuth(session.access_token);
+
+      const channel = supabase
+        .channel(`conv:${conversationId}`, {
+          config: { broadcast: { self: false } },
+        })
         .on(
           "postgres_changes",
           {
@@ -434,13 +330,32 @@ export function ChatThread({
           },
           (payload) => {
             const m = payload.new as ChatMessage;
-            // Dedupe by id and keep the list in `created_at` order. Reconciling
-            // my own optimistic bubble is NOT done here any more — it happens
-            // off `sendMessage`'s returned id, which cannot mis-pair two
-            // identical messages the way body-text matching did.
-            setMessages((prev) => mergeMessage(prev, m));
+            setMessages((prev) => {
+              if (prev.some((x) => x.id === m.id)) return prev;
+              // Reconcile my optimistic bubble: the authoritative row replaces
+              // the first matching temp message instead of duplicating it.
+              if (m.sender_id === meId) {
+                const tempIdx = prev.findIndex((x) =>
+                  x.id.startsWith("temp-")
+                    ? m.attachment_type
+                      ? // Image temp: match by kind (body is empty on both).
+                        x.attachment_type === m.attachment_type &&
+                        x._localSrc != null
+                      : x.body === m.body
+                    : false
+                );
+                if (tempIdx >= 0) {
+                  const next = [...prev];
+                  // Carry the local preview onto the real row so the bubble
+                  // doesn't flash to a placeholder while its signed URL resolves.
+                  next[tempIdx] = { ...m, _localSrc: prev[tempIdx]._localSrc };
+                  return next;
+                }
+              }
+              return [...prev, m];
+            });
             if (m.attachment_url) signAttachment(m);
-            if (m.sender_id !== meId) scheduleMarkRead();
+            if (m.sender_id !== meId) markConversationRead(conversationId);
           }
         )
         .on(
@@ -467,38 +382,33 @@ export function ChatThread({
             // Reactions carry no conversation_id, so we can't filter server-side.
             // RLS already limits delivery to our conversations; re-read the one
             // affected message's reactions (works for INSERT/UPDATE/DELETE alike).
-            //
-            // On DELETE, `payload.old` carries only the primary key unless the
-            // table is REPLICA IDENTITY FULL (it is not), so `message_id` can be
-            // absent — in that case fall back to refreshing the reactions of
-            // every message currently on screen, which is bounded by the page
-            // size and still cheaper than being wrong.
             const row = (payload.new ?? payload.old) as { message_id?: string };
-            if (row?.message_id) {
-              refreshReactions(row.message_id);
-            } else if (payload.eventType === "DELETE") {
-              refreshVisibleReactions();
-            }
+            if (row?.message_id) refreshReactions(row.message_id);
           }
         )
         .on("broadcast", { event: "typing" }, () => {
           setOtherTyping(true);
           if (typingTimeout.current) clearTimeout(typingTimeout.current);
           typingTimeout.current = setTimeout(() => setOtherTyping(false), 2500);
-        }),
-  });
+        })
+        .subscribe((status, err) => {
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || err) {
+            console.error(
+              `[chat] thread realtime subscription failed for conversation ${conversationId}`,
+              status,
+              err
+            );
+          }
+        });
 
-  // Opening the thread is a read. Subsequent marks are throttled — see
-  // `scheduleMarkRead`.
-  useEffect(() => {
+      channelRef.current = channel;
+    })();
+
     markConversationRead(conversationId);
-    lastMarkReadAt.current = Date.now();
-  }, [conversationId]);
-
-  // Belt-and-braces alongside the channel's own catch-up: a resume that does
-  // NOT re-subscribe (the socket survived) still has to check for messages that
-  // arrived while the tab was hidden.
-  useVisibilityRefresh(() => void catchUp(), { onMount: false });
+    return () => {
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
+    };
+  }, [conversationId, meId, signAttachment, refreshReactions]);
 
   // Scroll the MESSAGE LIST container directly instead of scrollIntoView —
   // scrollIntoView walks every scrollable ancestor (including the page behind
@@ -528,7 +438,7 @@ export function ChatThread({
       event: "typing",
       payload: { userId: meId },
     });
-  }, [meId, channelRef]);
+  }, [meId]);
 
   // Returns the storage PATH (not a URL): chat-media is private, so messages
   // store the path and the app resolves a signed URL at read time (P5-01).
@@ -604,22 +514,15 @@ export function ChatThread({
 
     const res = await sendMessage(conversationId, "", { url: path, type: "image" });
     if (!res.ok) {
-      setMessages((prev) => dropOptimistic(prev, tempId));
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
       URL.revokeObjectURL(localSrc);
       setError(res.error);
       return;
     }
-    // Reconcile by the id the insert actually got, keeping the local preview so
-    // the bubble doesn't flash to a placeholder while its signed URL resolves.
-    // If the realtime INSERT beat this round trip, the bubble is dropped
-    // instead of duplicated — see `resolveOptimistic`.
+    // Mark sent; the realtime INSERT then swaps in the authoritative row (which
+    // carries the local preview forward until its signed URL resolves).
     setMessages((prev) =>
-      resolveOptimistic(prev, tempId, {
-        id: res.message.id,
-        created_at: res.message.created_at,
-        attachment_url: path,
-        _uploadStatus: "sent",
-      })
+      prev.map((m) => (m.id === tempId ? { ...m, _uploadStatus: "sent" } : m))
     );
   }
 
@@ -647,19 +550,10 @@ export function ChatThread({
     setDraft("");
     const res = await sendMessage(conversationId, text);
     if (!res.ok) {
-      setMessages((prev) => dropOptimistic(prev, temp.id));
+      setMessages((prev) => prev.filter((m) => m.id !== temp.id));
       setDraft(text);
       setError(res.error);
-      return;
     }
-    // Reconciled by id, not by body text: sending the same short message twice
-    // used to pair the second row with the first bubble and leave a duplicate.
-    setMessages((prev) =>
-      resolveOptimistic(prev, temp.id, {
-        id: res.message.id,
-        created_at: res.message.created_at,
-      })
-    );
   }
 
   /** Discard the take: stop the recorder but skip the upload in onstop. */

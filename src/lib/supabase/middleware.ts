@@ -1,6 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { measure, serverTimingHeader, type Timing } from "@/lib/perf";
 
 /**
  * Refreshes the Supabase auth session on every request and keeps the auth
@@ -42,23 +41,12 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // Every phase of this function is timed and reported as `Server-Timing` on
-  // the way out (audit F14). The proxy is the one place that runs before ANY
-  // cached or prerendered output can be served, so its cost is unavoidably
-  // serial with everything else — and until now nothing measured it. The header
-  // carries only our own labels and aggregate durations; no user data.
-  const timings: Timing[] = [];
-
   // Verify the JWT locally and refresh the session cookie when needed. This
   // project signs tokens with an asymmetric ES256 key, so getClaims() validates
   // the signature in-process — no Auth API round-trip on this per-request hot
   // path (getUser() would call the network on every navigation).
-  const { value: claims, timing: claimsTiming } = await measure(
-    "proxy_claims",
-    () => supabase.auth.getClaims()
-  );
-  timings.push(claimsTiming);
-  const userId = claims.data?.claims?.sub ?? null;
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const userId = claimsData?.claims?.sub ?? null;
 
   const { pathname } = request.nextUrl;
   // Logged-out auth screens: an authenticated user has no reason to be on these,
@@ -85,11 +73,6 @@ export async function updateSession(request: NextRequest) {
     // session or the container healthcheck sees the /login redirect and starts
     // killing healthy containers. Exposes nothing (see the route).
     pathname === "/api/health" ||
-    // Core Web Vitals beacon (audit F14). Public on purpose: /login is the
-    // app's worst-performing page and the first one every new student sees, so
-    // gating this behind a session would blind us to the load that matters
-    // most. It accepts no identity and stores none — see the route.
-    pathname === "/api/vitals" ||
     pathname.startsWith("/styleguide") ||
     // Public informational pages — must render for signed-out visitors, not
     // bounce them to /login. See src/app/(public)/.
@@ -125,13 +108,7 @@ export async function updateSession(request: NextRequest) {
   // once. Banned users are blocked from the entire app (CR-014); non-admins are
   // kept out of /admin (defense-in-depth behind the /admin layout gate).
   if (userId && !isPublicRoute) {
-    // THE number the audit could not get from outside the box: how long one
-    // Supabase round trip costs from this container. Everything in the app is
-    // built out of these, so `proxy_profile` is the unit to watch.
-    const { value: profileResult, timing: profileTiming } = await measure(
-      "proxy_profile",
-      () =>
-        supabase
+    const { data: profile } = await supabase
       .from("profiles")
       // onboarding_completed rides along on a row we were already reading. The
       // student layout used to do this gate itself, which forced it to await a
@@ -139,10 +116,7 @@ export async function updateSession(request: NextRequest) {
       // here costs nothing extra and lets that layout become a static shell.
       .select("is_admin, is_banned, onboarding_completed")
       .eq("id", userId)
-      .single()
-    );
-    timings.push(profileTiming);
-    const profile = profileResult.data;
+      .single();
 
     if (profile?.is_banned) {
       const url = request.nextUrl.clone();
@@ -183,6 +157,5 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
-  supabaseResponse.headers.set("Server-Timing", serverTimingHeader(timings));
   return supabaseResponse;
 }
