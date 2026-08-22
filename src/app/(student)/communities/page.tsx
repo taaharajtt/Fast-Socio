@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { RefreshOnResume } from "@/components/ui/refresh-on-resume";
 import { SkeletonRows } from "@/components/ui/skeleton";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
@@ -71,6 +72,11 @@ export default function CommunitiesPage() {
       <Suspense fallback={<SkeletonRows count={5} />}>
         <CommunitySections />
       </Suspense>
+      {/* Member counts, join/follow state and pending join requests are all
+          plain server reads with no client fetch path. Rather than subscribe
+          this list to a campus-wide firehose, it re-reads when the student
+          comes back to the app. */}
+      <RefreshOnResume />
     </main>
   );
 }

@@ -1,8 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
-import { Analytics } from "@vercel/analytics/next";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { APPEARANCE_INIT_SCRIPT } from "@/lib/appearance";
@@ -10,6 +8,7 @@ import { MigrationWelcome } from "@/components/pwa/migration-welcome";
 import { InstallFunnel } from "@/components/pwa/install-funnel";
 import { INSTALL_CAPTURE_SCRIPT } from "@/lib/pwa/install-store";
 import { AppleSplashScreens } from "./apple-splash-screens";
+import { WebVitalsReporter } from "@/components/perf/web-vitals-reporter";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -113,8 +112,25 @@ export default function RootLayout({
             <InstallFunnel />
           </Suspense>
         </ThemeProvider>
-        <Analytics />
-        <SpeedInsights />
+        {/*
+          NO analytics scripts here. @vercel/analytics and @vercel/speed-insights
+          were mounted at this spot and were removed in the Phase 1 perf pass.
+          They only work on Vercel: both fetch /_vercel/{insights,speed-insights}
+          /script.js, which on this self-hosted origin is not a platform route —
+          it matches the proxy's auth gate, 307s to /login, and returns 30 KB of
+          HTML that the browser then refuses to execute ("MIME type ('text/html')
+          is not executable"). Measured 2026-08-22 on production: those two dead
+          requests started at t≈5050ms and held loadEventEnd out to 6043ms on a
+          page that was interactive at 1666ms.
+
+          So they cost ~60 KB and ~4s of load time while collecting NOTHING —
+          the beacons 307 as well, which is why there is no RUM data to lose.
+          Do not re-add them unless this app moves back to Vercel. What replaced
+          them is <WebVitalsReporter/> below: same job, same origin, ~0 bytes of
+          extra script (next/web-vitals is already part of Next's client
+          runtime), and it actually reports.
+        */}
+        <WebVitalsReporter />
       </body>
     </html>
   );

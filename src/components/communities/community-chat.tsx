@@ -18,6 +18,10 @@ import { uploadWithProgress } from "@/lib/storage-upload";
 import { signChatMediaMany } from "@/lib/chat-media-sign";
 import { PollCard } from "@/components/communities/poll-card";
 import {
+  useRealtimeChannel,
+  useVisibilityRefresh,
+} from "@/lib/realtime/use-realtime-channel";
+import {
   createCommunityPoll,
   deleteCommunityMessage,
   markCommunityChatRead,
@@ -97,9 +101,13 @@ export function CommunityChat({
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const channelRef = useRef<ReturnType<
-    ReturnType<typeof createClient>["channel"]
-  > | null>(null);
+
+  /** Mirrors `messages` so the catch-up read can find its cursor without being
+   *  re-created — and therefore re-subscribing the channel — on every message. */
+  const messagesRef = useRef(messages);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   /** Re-read one poll's tallies (after our vote, or a broadcast that someone voted). */
   const refreshPoll = useCallback(async (pollId: string) => {
@@ -122,16 +130,40 @@ export function CommunityChat({
     }));
   }, []);
 
-  useEffect(() => {
+  /**
+   * Catch-up read for a room that may have missed realtime events (a
+   * backgrounded PWA, a dropped socket). Asks only for messages newer than the
+   * newest one on screen, through the masking view — never the raw table, which
+   * would leak an anonymous sender's id.
+   */
+  const catchUp = useCallback(async () => {
     const supabase = createClient();
-    (async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (session) supabase.realtime.setAuth(session.access_token);
+    const newest = messagesRef.current[messagesRef.current.length - 1]?.created_at;
+    if (!newest) return;
+    const { data } = await supabase
+      .from("community_chat_view")
+      .select(VIEW_COLUMNS)
+      .eq("community_id", communityId)
+      .gt("created_at", newest)
+      .order("created_at", { ascending: true })
+      .limit(100);
+    const rows = (data ?? []) as CommunityMessage[];
+    if (rows.length === 0) return;
+    setMessages((prev) => {
+      const seen = new Set(prev.map((m) => m.id));
+      const added = rows.filter((m) => !seen.has(m.id));
+      return added.length === 0 ? prev : [...prev, ...added];
+    });
+    for (const m of rows) if (m.poll_id) refreshPoll(m.poll_id);
+    markCommunityChatRead(communityId);
+  }, [communityId, refreshPoll]);
 
-      const channel = supabase
-        .channel(`community-chat:${communityId}`)
+  const channelRef = useRealtimeChannel({
+    name: `community-chat:${communityId}`,
+    label: `community chat ${communityId}`,
+    onCatchUp: () => void catchUp(),
+    build: (channel) =>
+      channel
         .on(
           "postgres_changes",
           {
@@ -145,7 +177,7 @@ export function CommunityChat({
             // The realtime payload is the RAW table row, so it carries the true
             // sender_id even for anonymous messages. Never render it — refetch
             // through community_chat_view, which applies the masking.
-            const { data } = await supabase
+            const { data } = await createClient()
               .from("community_chat_view")
               .select(VIEW_COLUMNS)
               .eq("id", id)
@@ -174,7 +206,7 @@ export function CommunityChat({
           },
           async (payload) => {
             const id = (payload.new as { id: string }).id;
-            const { data } = await supabase
+            const { data } = await createClient()
               .from("community_chat_view")
               .select(VIEW_COLUMNS)
               .eq("id", id)
@@ -189,25 +221,16 @@ export function CommunityChat({
         .on("broadcast", { event: "poll_vote" }, ({ payload }) => {
           const pollId = (payload as { pollId?: string })?.pollId;
           if (pollId) refreshPoll(pollId);
-        })
-        .subscribe((status, err) => {
-          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || err) {
-            console.error(
-              `[chat] community chat realtime subscription failed for ${communityId}`,
-              status,
-              err
-            );
-          }
-        });
+        }),
+  });
 
-      channelRef.current = channel;
-    })();
-
+  // Opening the room is a read.
+  useEffect(() => {
     markCommunityChatRead(communityId);
-    return () => {
-      if (channelRef.current) supabase.removeChannel(channelRef.current);
-    };
-  }, [communityId, refreshPoll]);
+  }, [communityId]);
+
+  // Resume that did not re-subscribe still has to check for missed messages.
+  useVisibilityRefresh(() => void catchUp(), { onMount: false });
 
   // Scroll the list container directly (not scrollIntoView, which also scrolls
   // ancestors and jumped the page when the keyboard opened). First paint jumps

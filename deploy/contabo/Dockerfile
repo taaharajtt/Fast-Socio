@@ -86,6 +86,17 @@ COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 COPY --from=builder --chown=node:node /app/public ./public
 
+# next/image writes its optimized renders here, and compose mounts a named
+# volume at this path so they survive a restart (see docker-compose.yml).
+#
+# The directory MUST exist in the image, owned by `node`, BEFORE the volume is
+# mounted. Docker seeds a new named volume from whatever is at the mount point
+# in the image, ownership included — but if the path does not exist it creates
+# the volume root-owned instead, and this container runs as uid 1000. The
+# optimizer would then fail every write, fall back to re-encoding on each
+# request, and say so only in a log line nobody reads.
+RUN mkdir -p /app/.next/cache/images
+
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useTransition } from "react";
 import Link from "next/link";
 import { RequestRow } from "@/components/chat/request-row";
 import { AppImage } from "@/components/ui/app-image";
@@ -8,8 +8,9 @@ import { resolveAvatarUrl } from "@/lib/avatar";
 import { OnlineDot, UnreadBadge } from "@/components/ui/badges";
 import { discoverGroupLabel } from "@/lib/discover/group-label";
 import { DiscoverGroupAvatar } from "@/components/discover/discover-group-avatar";
-import { createClient } from "@/lib/supabase/client";
 import { refreshInbox, openConversation } from "@/app/(student)/chat/actions";
+import { setInboxSnapshot, useInboxData } from "@/lib/chat/inbox-store";
+import { useVisibilityRefresh } from "@/lib/realtime/use-realtime-channel";
 import { EPOCH, type InboxData, type InboxProfile } from "@/lib/chat/inbox-types";
 import { cn } from "@/lib/utils";
 import { isOnline, timeAgo } from "@/lib/time";
@@ -25,13 +26,25 @@ import { isOnline, timeAgo } from "@/lib/time";
  *  - Requests holds everything waiting to become a conversation: pending
  *    incoming message requests, and matches nobody has written to yet.
  *
- * It owns its data. The page hands it a server-rendered snapshot; from then on
- * realtime events cause it to re-read JUST the inbox (the `refreshInbox` server
- * action) and swap this component's state. Previously an `InboxRealtime` island
- * called `router.refresh()` on every message, conversation, request and room
- * event, which re-rendered the whole server tree — layout, dock, badges and
- * page — to change one preview line, and did so repeatedly while a conversation
- * was active.
+ * It no longer owns its data, and that is the point.
+ *
+ * The realtime subscription that used to live here moved to <InboxRealtime/> in
+ * the student layout, because a listener that only exists while /chat is
+ * mounted is deaf during the one moment that matters most: while the user is
+ * reading a conversation. What is left here is the rendering, plus two cheap
+ * reads that close the remaining gaps:
+ *
+ *  - ON MOUNT. Arriving at /chat is not evidence the payload is current — Next
+ *    16 replays the cached page segment on back/forward navigation (see
+ *    01-app/04-glossary.md, Client Cache), which is precisely the "still shows
+ *    the message from the last full reload" bug. So the list always re-reads
+ *    once, and renders the store's snapshot meanwhile rather than the replay.
+ *  - ON FOCUS/RESUME. A backgrounded PWA loses its socket; coming back to the
+ *    app re-reads (throttled).
+ *
+ * Both go through `refreshInbox()` — one targeted server action — never
+ * `router.refresh()`, which would re-render the whole server tree to change a
+ * preview line.
  */
 export function InboxList({
   initial,
@@ -41,88 +54,24 @@ export function InboxList({
   /** Which panel of the Messages · Requests pair is showing. */
   showRequests: boolean;
 }) {
-  const [data, setData] = useState(initial);
-  const [lastServerData, setLastServerData] = useState(initial);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const channelRef = useRef<ReturnType<
-    ReturnType<typeof createClient>["channel"]
-  > | null>(null);
+  // The store wins whenever it holds something newer than this render's
+  // payload — see `pickFreshestInbox`, which compares the payloads themselves
+  // rather than trusting object identity (a replayed Client Cache payload is a
+  // new object holding old data).
+  const data = useInboxData(initial);
+  // `me` is no longer read here: the viewer id was only needed to name the
+  // realtime channel, which now lives in <InboxRealtime/>.
+  const { threads, newMatches, profiles, incoming } = data;
 
-  // A fresh server render (navigating back to /chat) is newer than whatever we
-  // last fetched, so it wins. Applied during render rather than in an effect,
-  // so the new rows are in the first commit instead of a second one.
-  if (lastServerData !== initial) {
-    setLastServerData(initial);
-    setData(initial);
-  }
+  const reread = useCallback(() => {
+    refreshInbox().then(setInboxSnapshot, () => {
+      // Keep whatever is on screen; <InboxRealtime/> will try again on the next
+      // event or resume.
+    });
+  }, []);
 
-  const { me, threads, newMatches, profiles, incoming } = data;
-
-  useEffect(() => {
-    const supabase = createClient();
-
-    // Coalesce a burst of events (a message insert alongside the
-    // conversations.last_message_at trigger update, say) into one re-read.
-    const scheduleRefresh = () => {
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => {
-        refreshInbox().then(setData, () => {});
-      }, 350);
-    };
-
-    (async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (session) supabase.realtime.setAuth(session.access_token);
-
-      const channel = supabase
-        .channel(`chat-inbox:${me}`)
-        // RLS on postgres_changes already scopes delivery to rows this user can
-        // select (their own conversations/messages/requests), so no per-row
-        // filter is needed here.
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "messages" },
-          scheduleRefresh
-        )
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "conversations" },
-          scheduleRefresh
-        )
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "message_requests" },
-          scheduleRefresh
-        )
-        // Kept BROAD rather than filtered to this viewer's Discover rooms.
-        // postgres_changes filters are a single `column=eq.value`, so scoping
-        // would mean one `.on()` per room and re-subscribing the channel every
-        // time the room set changed — and it would go deaf to being ADDED to a
-        // new room, which is exactly when the inbox must update. RLS already
-        // limits delivery to rooms this user is a member of, and a message in a
-        // community room the inbox no longer lists costs one wasted re-read
-        // that recomputes to the same list.
-        .on(
-          "postgres_changes",
-          { event: "INSERT", schema: "public", table: "community_chat_messages" },
-          scheduleRefresh
-        )
-        .subscribe((status, err) => {
-          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || err) {
-            console.error("[chat] inbox realtime subscription failed", status, err);
-          }
-        });
-
-      channelRef.current = channel;
-    })();
-
-    return () => {
-      if (timer.current) clearTimeout(timer.current);
-      if (channelRef.current) supabase.removeChannel(channelRef.current);
-    };
-  }, [me]);
+  // Once on mount, then on focus/visibility resume at most every 5s.
+  useVisibilityRefresh(reread);
 
   if (showRequests) {
     // Everything that is not yet a conversation. Pending message requests need

@@ -16,7 +16,28 @@ self.addEventListener("push", (event) => {
     tag: data.tag,
     data: { url: data.url || "/" },
   };
-  event.waitUntil(self.registration.showNotification(title, options));
+
+  // Tell any OPEN app window that something arrived, as well as painting the OS
+  // notification. Without this the two disagree: the tray says "new message"
+  // while the in-app inbox and Activity bell still show whatever they last
+  // rendered. It matters most on iOS, where a backgrounded PWA's realtime
+  // socket is killed and this push is the only signal that survives.
+  //
+  // The message carries no payload beyond its type on purpose — the client
+  // re-reads through RLS-scoped queries rather than trusting anything the push
+  // body says about counts.
+  const notifyClients = self.clients
+    .matchAll({ type: "window", includeUncontrolled: true })
+    .then((clients) => {
+      for (const client of clients) {
+        client.postMessage({ type: "PUSH_RECEIVED", tag: data.tag || null });
+      }
+    })
+    .catch(() => {});
+
+  event.waitUntil(
+    Promise.all([self.registration.showNotification(title, options), notifyClients])
+  );
 });
 
 self.addEventListener("notificationclick", (event) => {

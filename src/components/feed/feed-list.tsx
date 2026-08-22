@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PostCard } from "@/components/feed/post-card";
 import { fetchFeedPage } from "@/app/(student)/home/actions";
+import { mergeFeedPage, reconcileServerFeed } from "@/lib/feed/merge";
+import { useVisibilityRefresh } from "@/lib/realtime/use-realtime-channel";
 import { FEED_PAGE_SIZE, type FeedPost } from "@/lib/feed/types";
 
 /**
@@ -25,22 +27,55 @@ export function FeedList({
   const [done, setDone] = useState(initial.length < FEED_PAGE_SIZE);
   const sentinel = useRef<HTMLDivElement>(null);
 
-  // Targeted refresh: fetch page 1 and prepend what we haven't seen. Far
-  // cheaper than router.refresh(), which re-runs the layout + page as RSC.
+  // A newer server render must not be discarded. This component copied
+  // `initial` into state at mount and then ignored the prop forever, so when
+  // React reused the instance across a re-render carrying fresh server data,
+  // those rows never reached the screen. Reconciled during render (not in an
+  // effect) so they land in the first commit; `reconcileServerFeed` compares
+  // content rather than identity, because a replayed Client Cache payload is a
+  // new object holding old data.
+  const [lastServerPosts, setLastServerPosts] = useState(initial);
+  if (lastServerPosts !== initial) {
+    setLastServerPosts(initial);
+    setPosts((prev) => reconcileServerFeed(prev, initial));
+  }
+
+  // Targeted refresh: fetch page 1, prepend unseen posts and refresh the counts
+  // of the ones already on screen. Far cheaper than router.refresh(), which
+  // re-runs the layout + page as RSC.
+  const refreshFirstPage = useCallback(async () => {
+    const fresh = await fetchFeedPage(null);
+    setPosts((prev) => mergeFeedPage(prev, fresh));
+  }, []);
+
   useEffect(() => {
     if (!refreshToken) return;
     let active = true;
     fetchFeedPage(null).then((fresh) => {
       if (!active) return;
-      setPosts((prev) => {
-        const seen = new Set(prev.map((p) => p.id));
-        return [...fresh.filter((p) => !seen.has(p.id)), ...prev];
-      });
+      setPosts((prev) => mergeFeedPage(prev, fresh));
     });
     return () => {
       active = false;
     };
   }, [refreshToken]);
+
+  /**
+   * Freshness for the feed is resume-driven, NOT realtime.
+   *
+   * A subscription here would mean every student listening to every post, like
+   * and comment on campus — the widest possible fan-out on the screen people
+   * leave open longest. Re-reading page 1 when the app comes back to the
+   * foreground (throttled to once every 30s) covers the case that actually
+   * bothers people: posts and counts that moved while they were away.
+   *
+   * `onMount: false` — a real navigation to /home has just fetched this data;
+   * only a resume is evidence that it might be stale.
+   */
+  useVisibilityRefresh(() => void refreshFirstPage(), {
+    throttleMs: 30_000,
+    onMount: false,
+  });
 
   const removePost = useCallback((id: string) => {
     setPosts((prev) => prev.filter((p) => p.id !== id));

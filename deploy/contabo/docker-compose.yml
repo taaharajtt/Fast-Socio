@@ -34,6 +34,21 @@ services:
     env_file:
       - ./.env
 
+    volumes:
+      # PERF (Phase 1) — persist next/image's optimized-image cache.
+      #
+      # The Dockerfile copies .next/standalone, .next/static and public, but NOT
+      # .next/cache — so without this volume the optimizer starts empty on every
+      # container start and re-encodes every local image (the brand logo, which
+      # is the LCP element on /home, plus badges and splash art) on the app's own
+      # 2 vCPU. Verified on production 2026-08-22: /_next/image reports
+      # X-Nextjs-Cache: MISS → STALE → HIT, i.e. the cache works at runtime and
+      # is simply thrown away on restart.
+      #
+      # This is only for LOCAL assets. Everything in object storage already goes
+      # through the imgproxy container below and never touches this path.
+      - fastsocio-image-cache:/app/.next/cache/images
+
     # NOT published to the host. The only way in is through Caddy on the
     # shared internal network — the app is unreachable from the internet
     # directly, so there is no way to bypass TLS or the proxy's rate limits.
@@ -150,3 +165,7 @@ volumes:
     name: fastsocio-caddy-data
   caddy_config:
     name: fastsocio-caddy-config
+  # next/image's optimized renders. Safe to delete at any time — it is a pure
+  # cache and the app refills it on demand.
+  fastsocio-image-cache:
+    name: fastsocio-image-cache
