@@ -1,11 +1,9 @@
-import Link from "next/link";
 import { GlassCard } from "@/components/ui";
 import {
   PageHeader,
   SettingsGroup,
   SettingsRow,
 } from "@/components/ui/page-header";
-import { glassButton } from "@/components/ui/glass-button";
 import { SignOutButton } from "@/components/sign-out-button";
 import { DeleteAccountButton } from "@/components/delete-account-button";
 import { NotificationPrefs } from "@/components/settings/notification-prefs";
@@ -91,20 +89,6 @@ export default async function SettingsPage() {
             }}
           />
         </div>
-      </SettingsGroup>
-
-      <SettingsGroup label="Your data">
-        <p className="type-callout text-fg-muted">
-          Download a copy of your FAST SOCIO data as JSON.
-        </p>
-        <Link
-          href="/settings/export"
-          prefetch={false}
-          download
-          className={glassButton({ variant: "secondary", size: "md" }) + " mt-3"}
-        >
-          Export my data
-        </Link>
       </SettingsGroup>
 
       <SettingsGroup label="Session">

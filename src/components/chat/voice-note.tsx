@@ -31,6 +31,10 @@ export function VoiceNote({ src, mine }: { src: string; mine: boolean }) {
   const [playing, setPlaying] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [duration, setDuration] = useState(0);
+  // Which src failed, rather than a boolean — a re-signed URL replacing an
+  // expired one then clears the state by derivation, with no reset effect.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const failed = failedSrc !== null && failedSrc === src;
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -48,12 +52,20 @@ export function VoiceNote({ src, mine }: { src: string; mine: boolean }) {
     audio.addEventListener("timeupdate", onTime);
     audio.addEventListener("loadedmetadata", onMeta);
     audio.addEventListener("durationchange", onMeta);
+    const onError = () => {
+      // Read the attribute, not the closed-over prop: this listener is
+      // registered once at mount, so `src` here would be the first URL.
+      setFailedSrc(audio.getAttribute("src"));
+      setPlaying(false);
+    };
     audio.addEventListener("ended", onEnded);
+    audio.addEventListener("error", onError);
     return () => {
       audio.removeEventListener("timeupdate", onTime);
       audio.removeEventListener("loadedmetadata", onMeta);
       audio.removeEventListener("durationchange", onMeta);
       audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("error", onError);
     };
   }, []);
 
@@ -64,8 +76,17 @@ export function VoiceNote({ src, mine }: { src: string; mine: boolean }) {
       audio.pause();
       setPlaying(false);
     } else {
-      void audio.play();
-      setPlaying(true);
+      // play() REJECTS when the source failed to load or cannot be decoded.
+      // Swallowing it left the button stuck showing Pause on a note that was
+      // never going to play, which read as "voice notes are broken" with no
+      // other signal. Only claim playback once the promise resolves.
+      audio
+        .play()
+        .then(() => setPlaying(true))
+        .catch(() => {
+          setPlaying(false);
+          setFailedSrc(src);
+        });
     }
   }
 
@@ -85,9 +106,17 @@ export function VoiceNote({ src, mine }: { src: string; mine: boolean }) {
       <button
         type="button"
         onClick={toggle}
-        aria-label={playing ? "Pause voice note" : "Play voice note"}
+        disabled={failed}
+        aria-label={
+          failed
+            ? "Voice note unavailable"
+            : playing
+              ? "Pause voice note"
+              : "Play voice note"
+        }
         className={cn(
           "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+          failed && "opacity-40",
           mine ? "bg-white/25 text-white" : "bg-accent text-white"
         )}
       >
@@ -131,7 +160,9 @@ export function VoiceNote({ src, mine }: { src: string; mine: boolean }) {
           mine ? "text-white/75" : "text-fg-muted"
         )}
       >
-        {formatClock(playing || elapsed > 0 ? elapsed : duration)}
+        {failed
+          ? "Unavailable"
+          : formatClock(playing || elapsed > 0 ? elapsed : duration)}
       </span>
     </div>
   );

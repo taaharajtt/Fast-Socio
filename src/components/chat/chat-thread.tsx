@@ -442,18 +442,29 @@ export function ChatThread({
 
   // Returns the storage PATH (not a URL): chat-media is private, so messages
   // store the path and the app resolves a signed URL at read time (P5-01).
+  /**
+   * Upload a voice note.
+   *
+   * This used to PUT straight into Supabase Storage while every other chat
+   * attachment went through the presigned Contabo path. Playback signs through
+   * /api/storage/sign-get, which resolves against Contabo — so a voice note
+   * written to Supabase Storage had no object behind its signed URL and simply
+   * never played. Same route as images now, so the bytes land where the reader
+   * looks for them. `uploadWithProgress` only recompresses image/*, so the
+   * recorded audio is passed through untouched.
+   */
   async function uploadMedia(
     file: Blob,
     ext: string,
     contentType: string
   ): Promise<string | null> {
-    const supabase = createClient();
     const path = `${conversationId}/${crypto.randomUUID()}.${ext}`;
-    const { error: upErr } = await supabase.storage
-      .from("chat-media")
-      .upload(path, file, { contentType });
-    if (upErr) return null;
-    return path;
+    try {
+      await uploadWithProgress("chat-media", path, file, { contentType });
+      return path;
+    } catch {
+      return null;
+    }
   }
 
   /** Selecting a file just opens the crop step — nothing touches chat-media yet. */

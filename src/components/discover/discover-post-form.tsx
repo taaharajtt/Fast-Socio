@@ -5,7 +5,11 @@ import { ChevronDown } from "lucide-react";
 import { GlassButton } from "@/components/ui";
 import { DegreeCapsulePicker, Field, FormField } from "@/components/discover/post-intent-fields";
 import { modeMeta, type PostMode } from "@/lib/smart-match/modes";
-import { postToFormValues, type PostFormValues } from "@/lib/smart-match/validate";
+import {
+  postToFormValues,
+  validatePostInput,
+  type PostFormValues,
+} from "@/lib/smart-match/validate";
 import {
   createDiscoverPost,
   updateDiscoverPost,
@@ -103,8 +107,10 @@ function DiscoverPostFormBody({
     setValues((prev) => ({ ...prev, [key]: v }));
   }
 
-  function submit() {
-    setError(null);
+  // The payload the server action will actually receive. Built here rather
+  // than inside submit() so the submit button can run the SAME validator the
+  // server runs, instead of a lookalike copy of the rules.
+  function buildPayload(): PostFormValues {
     const payload: PostFormValues = { ...values };
     if (kind === "recruitment" && anchor) {
       const [anchorKind, id] = anchor.split(":");
@@ -116,6 +122,17 @@ function DiscoverPostFormBody({
       if (editing.societyId) payload.society_id = editing.societyId;
       if (editing.eventId) payload.event_id = editing.eventId;
     }
+    return payload;
+  }
+
+  // Every required field for this mode is filled. Drives the disabled state
+  // below; the server action still validates independently, so this is an
+  // affordance, not the enforcement.
+  const complete = validatePostInput(kind, buildPayload()).ok;
+
+  function submit() {
+    setError(null);
+    const payload = buildPayload();
     start(async () => {
       const ids = team.map((t) => t.id);
       const res = editing
@@ -224,7 +241,7 @@ function DiscoverPostFormBody({
 
           <GlassButton
             type="button"
-            disabled={pending}
+            disabled={pending || !complete}
             onClick={submit}
             className="w-full"
           >

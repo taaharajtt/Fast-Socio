@@ -8,7 +8,6 @@ import { GlassButton } from "@/components/ui/glass-button";
 import { Field } from "@/components/ui/field";
 import { createClient } from "@/lib/supabase/client";
 import { recallEmail, rememberEmail } from "@/lib/auth/last-email";
-import { isStandalone } from "@/lib/pwa/install";
 
 /** Static for the lifetime of the document — nothing to subscribe to. */
 const noopSubscribe = () => () => {};
@@ -121,7 +120,6 @@ export default function LoginPage() {
           the honest fix is to say why rather than let it read as "the app I
           just installed has already forgotten me". Shown only in the installed
           app, and only while signed out (this route redirects when signed in). */}
-      <StandaloneNote />
 
       <form onSubmit={submit} className="mt-8 flex flex-col gap-4">
         {/* Visible labels, not `aria-label` alone: the placeholder that used to
@@ -202,23 +200,3 @@ export default function LoginPage() {
   );
 }
 
-/**
- * Renders nothing in a browser tab, and one reassuring line inside the
- * installed app. Read through useSyncExternalStore so the prerendered HTML and
- * the hydration pass agree (both render nothing) — the same reason the install
- * detectors elsewhere use this pattern rather than an effect.
- */
-function StandaloneNote() {
-  const standalone = useSyncExternalStore(
-    noopSubscribe,
-    isStandalone,
-    () => false
-  );
-  if (!standalone) return null;
-  return (
-    <p className="glass mx-auto mt-5 rounded-[14px] px-4 py-3 text-[13px] leading-relaxed text-fg-muted">
-      Welcome to the app. Your phone keeps the app and your browser separate, so
-      sign in once here — after that you&rsquo;ll stay signed in.
-    </p>
-  );
-}
