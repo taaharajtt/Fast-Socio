@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, Fragment } from "react";
 import { MessageCircle, Plus, Trash2, VenetianMask, X } from "lucide-react";
 import { GlassButton, GlassSheet } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
@@ -17,6 +17,8 @@ import { createClient } from "@/lib/supabase/client";
 import { uploadWithProgress } from "@/lib/storage-upload";
 import { signChatMediaMany } from "@/lib/chat-media-sign";
 import { PollCard } from "@/components/communities/poll-card";
+import { DayDivider } from "@/components/chat/day-divider";
+import { chatDayLabel, dayKey } from "@/lib/chat-day";
 import {
   createCommunityPoll,
   deleteCommunityMessage,
@@ -348,8 +350,12 @@ export function CommunityChat({
             <p className="text-sm text-fg-muted">Chat room is quiet. Say hello!</p>
           </div>
         )}
-        {messages.map((m) => {
+        {messages.map((m, i) => {
           const mine = m.sender_id === meId;
+          // Day separators, same rules and same component as the DM thread.
+          const prev = i > 0 ? messages[i - 1] : null;
+          const showDay =
+            !prev || dayKey(prev.created_at) !== dayKey(m.created_at);
           const anonymous = m.is_anonymous;
           const deleted = Boolean(m.deleted_at);
           const isImage = !deleted && m.attachment_type === "image";
@@ -360,10 +366,11 @@ export function CommunityChat({
               : "Anonymous"
             : (m.sender_name ?? "Member");
           return (
-            <div
-              key={m.id}
-              className={cn("flex gap-2", mine ? "justify-end" : "justify-start")}
-            >
+            <Fragment key={m.id}>
+              {showDay && <DayDivider label={chatDayLabel(m.created_at)} />}
+              <div
+                className={cn("flex gap-2", mine ? "justify-end" : "justify-start")}
+              >
               {!mine && (
                 <div className="glass relative mt-auto flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full">
                   {anonymous ? (
@@ -462,7 +469,8 @@ export function CommunityChat({
                   </time>
                 )}
               </div>
-            </div>
+              </div>
+            </Fragment>
           );
         })}
         <div ref={bottomRef} />

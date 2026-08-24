@@ -16,7 +16,12 @@ import {
 import { GlassSheet, VerifiedBadge } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { likeToneClass, likeGlyphClass } from "@/components/ui/like-style";
-import { renderLinkifiedText } from "@/lib/linkify";
+import { PostBody } from "@/components/feed/post-body";
+import {
+  mentionsToPlainText,
+  parseMentions,
+  serializeMentions,
+} from "@/lib/mentions";
 import {
   toggleLike,
   reportPost,
@@ -69,7 +74,9 @@ function PostCardImpl({
   // z-50, so DOM order (not intent) decided stacking and the options sheet painted
   // over the edit sheet while it animated out, making Edit unreachable.
   const [editing, setEditing] = useState(false);
-  const [editDraft, setEditDraft] = useState(post.body ?? "");
+  const [editDraft, setEditDraft] = useState(() =>
+    mentionsToPlainText(post.body ?? "")
+  );
   const [body, setBody] = useState(post.body);
   const [editedAt, setEditedAt] = useState(post.edited_at ?? null);
   const [saving, setSaving] = useState(false);
@@ -145,7 +152,14 @@ function PostCardImpl({
   }
 
   async function onSaveEdit() {
-    const next = editDraft.trim();
+    // The draft holds plain "@username" text. Re-tokenise only the handles the
+    // post already had confirmed, so editing the caption around a tag keeps the
+    // tag a real link instead of degrading it to text.
+    const known: Record<string, string> = {};
+    for (const part of parseMentions(body ?? "")) {
+      if (part.type === "mention") known[part.username.toLowerCase()] = part.id;
+    }
+    const next = serializeMentions(editDraft.trim(), known);
     const prevBody = body;
     const prevEditedAt = editedAt;
     setSaving(true);
@@ -165,7 +179,7 @@ function PostCardImpl({
   }
 
   function onCancelEdit() {
-    setEditDraft(body ?? "");
+    setEditDraft(mentionsToPlainText(body ?? ""));
     setEditError(null);
     setEditing(false);
   }
@@ -275,7 +289,7 @@ function PostCardImpl({
       ) : (
         body && (
           <p className="type-body mt-2.5 whitespace-pre-wrap text-fg">
-            {renderLinkifiedText(body)}
+            <PostBody body={body} />
           </p>
         )
       )}
@@ -401,22 +415,26 @@ function PostCardImpl({
             ) : (
               <>
                 <h3 className="text-lg font-bold">Post options</h3>
-                {!post.poll_id && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditDraft(body ?? "");
-                      setEditError(null);
-                      // Close the only sheet, then edit in place on the card itself.
-                      setOptionsOpen(false);
-                      setEditing(true);
-                    }}
-                    className="glass flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm font-medium text-fg"
-                  >
-                    <Pencil className="h-4 w-4" aria-hidden />
-                    Edit post
-                  </button>
-                )}
+                {/* Every kind of own post is editable — text, image caption,
+                    anonymous and polls alike. For a poll the body IS the
+                    question, which `edit_post` (mig 0134) already handles and
+                    refuses to empty. */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Tokens are stored markup; the draft shows the readable
+                    // "@username" and is re-serialised on save.
+                    setEditDraft(mentionsToPlainText(body ?? ""));
+                    setEditError(null);
+                    // Close the only sheet, then edit in place on the card itself.
+                    setOptionsOpen(false);
+                    setEditing(true);
+                  }}
+                  className="glass flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm font-medium text-fg"
+                >
+                  <Pencil className="h-4 w-4" aria-hidden />
+                  Edit post
+                </button>
                 <button
                   type="button"
                   onClick={() => setConfirmDelete(true)}

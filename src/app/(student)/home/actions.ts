@@ -63,6 +63,8 @@ export async function editPost(
       return { ok: false, error: "You can only edit your own posts." };
     if (error.message.includes("write something"))
       return { ok: false, error: "Write something." };
+    if (error.message.includes("poll questions are limited"))
+      return { ok: false, error: "Poll questions are limited to 300 characters." };
     return { ok: false, error: error.message };
   }
 

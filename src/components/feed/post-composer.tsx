@@ -14,6 +14,8 @@ import { UploadProgressBar } from "@/components/ui/upload-progress";
 import { uploadWithProgress, publicStorageUrl } from "@/lib/storage-upload";
 import { createClient } from "@/lib/supabase/client";
 import { createPost } from "@/app/(student)/home/actions";
+import { MentionMenu } from "@/components/feed/mention-menu";
+import { useMentionAutocomplete } from "@/components/feed/use-mention-autocomplete";
 
 export function PostComposer({
   communityId,
@@ -30,6 +32,7 @@ export function PostComposer({
 }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [body, setBody] = useState("");
   const [anon, setAnon] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -42,6 +45,11 @@ export function PostComposer({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, start] = useTransition();
+
+  // Tag a match with "@" — the same picker the comment composer uses, so a
+  // post, an image caption and a poll question all tag identically. Only
+  // confirmed picks serialise into mention tokens at submit.
+  const mention = useMentionAutocomplete(body, setBody, textareaRef);
 
   function onPickImage(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -109,7 +117,7 @@ export function PostComposer({
     setNotice(null);
     start(async () => {
       const res = await createPost({
-        body,
+        body: mention.serialize(body),
         imageUrl,
         isAnonymous: anon,
         communityId,
@@ -120,6 +128,7 @@ export function PostComposer({
         return;
       }
       setBody("");
+      mention.reset();
       setAnon(false);
       setImageUrl(null);
       setPollOptions(null);
@@ -152,12 +161,31 @@ export function PostComposer({
         </div>
       )}
       <textarea
+        ref={textareaRef}
         value={body}
-        onChange={(e) => setBody(e.target.value.slice(0, 2000))}
+        onChange={(e) => {
+          const next = e.target.value.slice(0, 2000);
+          setBody(next);
+          mention.syncCaret(next, e.target.selectionStart ?? next.length);
+        }}
+        onKeyDown={(e) => {
+          mention.onKeyDown(e);
+        }}
         placeholder={pollOptions ? "Ask a question…" : placeholder}
         rows={3}
         className="w-full resize-none bg-transparent text-base text-fg outline-none placeholder:text-fg-muted"
       />
+
+      {mention.showMenu && (
+        <MentionMenu
+          roster={mention.roster}
+          suggestions={mention.suggestions}
+          activeIdx={mention.activeIdx}
+          onPick={mention.pickMention}
+          onHover={mention.setActiveIdx}
+          className="mt-2 w-full"
+        />
+      )}
 
       {pollOptions && (
         <div className="mt-1 space-y-2">

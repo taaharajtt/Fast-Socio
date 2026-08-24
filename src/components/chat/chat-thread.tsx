@@ -31,6 +31,8 @@ import { signChatMedia, signChatMediaMany } from "@/lib/chat-media-sign";
 import { uploadWithProgress } from "@/lib/storage-upload";
 import { clockTime, absoluteTime, timeAgo } from "@/lib/time";
 import { VoiceNote } from "@/components/chat/voice-note";
+import { DayDivider } from "@/components/chat/day-divider";
+import { chatDayLabel, dayKey } from "@/lib/chat-day";
 import {
   SharedPostCard,
   type SharedPostPreview,
@@ -746,8 +748,13 @@ export function ChatThread({
         {messages.length === 0 && (
           <p className="mt-8 text-center text-sm text-fg-muted">Say hello 👋</p>
         )}
-        {messages.map((m) => {
+        {messages.map((m, i) => {
           const mine = m.sender_id === meId;
+          // A day separator opens every new local calendar day, including the
+          // first message in the thread.
+          const prev = i > 0 ? messages[i - 1] : null;
+          const showDay =
+            !prev || dayKey(prev.created_at) !== dayKey(m.created_at);
           const deleted = Boolean(m.deleted_at);
           const isMedia =
             !deleted && (m.attachment_type === "image" || Boolean(m.shared_post_id));
@@ -758,6 +765,7 @@ export function ChatThread({
 
           return (
             <div key={m.id}>
+              {showDay && <DayDivider label={chatDayLabel(m.created_at)} />}
               {/* "New messages" divider above the first message that was still
                   unread when this thread opened (WhatsApp/Slack convention). */}
               {m.id === initialUnread.firstId && (

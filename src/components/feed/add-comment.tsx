@@ -1,22 +1,12 @@
 "use client";
 
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useTransition,
-} from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Send, Smile, X } from "lucide-react";
 import { GlassButton } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
-import { resolveAvatarUrl } from "@/lib/avatar";
-import {
-  addComment,
-  fetchMentionRoster,
-  type MentionTarget,
-} from "@/app/(student)/home/actions";
-import { activeMentionQuery, serializeMentions } from "@/lib/mentions";
+import { addComment } from "@/app/(student)/home/actions";
+import { MentionMenu } from "@/components/feed/mention-menu";
+import { useMentionAutocomplete } from "@/components/feed/use-mention-autocomplete";
 import type { ReplyTarget } from "@/components/feed/comment-thread";
 
 const EMOJIS = [
@@ -54,14 +44,9 @@ export function AddComment({
   const [pending, start] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // @-mention autocomplete. `mentions` maps a confirmed lowercased username to
-  // its user id; only these become links when the comment is serialised. The
-  // roster (the viewer's matches) is fetched once, on first "@", then filtered
-  // client-side as they type. `mq` is the "@query" the caret currently sits in.
-  const [mentions, setMentions] = useState<Record<string, string>>({});
-  const [roster, setRoster] = useState<MentionTarget[] | null>(null);
-  const [mq, setMq] = useState<{ start: number; query: string } | null>(null);
-  const [activeIdx, setActiveIdx] = useState(0);
+  // @-mention autocomplete, shared with the post composer so both surfaces
+  // offer the identical picker over the matches the viewer has.
+  const mention = useMentionAutocomplete(body, setBody, inputRef);
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Focus the field when a reply is started so the user can type immediately.
@@ -69,73 +54,18 @@ export function AddComment({
     if (replyingTo) inputRef.current?.focus();
   }, [replyingTo]);
 
-  // Lazily load the mention roster the first time a mention is being typed.
-  useEffect(() => {
-    if (mq && roster === null) fetchMentionRoster().then(setRoster);
-  }, [mq, roster]);
-
-  const suggestions = useMemo(() => {
-    if (!mq || !roster) return [];
-    const q = mq.query.toLowerCase();
-    const list = roster.filter((p) => {
-      if (!p.username) return false;
-      if (!q) return true;
-      return (
-        (p.full_name ?? "").toLowerCase().includes(q) ||
-        p.username.toLowerCase().includes(q)
-      );
-    });
-    return list.slice(0, 30);
-  }, [mq, roster]);
-
-  const showMenu = mq !== null && (roster === null || suggestions.length > 0);
-
   function onChange(e: React.ChangeEvent<HTMLInputElement>) {
     const value = e.target.value;
     setBody(value);
-    const caret = e.target.selectionStart ?? value.length;
-    setMq(activeMentionQuery(value, caret));
-    setActiveIdx(0);
-  }
-
-  function pickMention(t: MentionTarget) {
-    if (!mq || !t.username) return;
-    const before = body.slice(0, mq.start);
-    const after = body.slice(mq.start + 1 + mq.query.length);
-    const insert = `@${t.username} `;
-    setBody(before + insert + after);
-    setMentions((prev) => ({ ...prev, [t.username!.toLowerCase()]: t.id }));
-    setMq(null);
-    const pos = (before + insert).length;
-    requestAnimationFrame(() => {
-      const el = inputRef.current;
-      if (el) {
-        el.focus();
-        el.setSelectionRange(pos, pos);
-      }
-    });
+    mention.syncCaret(value, e.target.selectionStart ?? value.length);
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (!showMenu || suggestions.length === 0) return;
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setActiveIdx((i) => (i + 1) % suggestions.length);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setActiveIdx((i) => (i - 1 + suggestions.length) % suggestions.length);
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      pickMention(suggestions[activeIdx]);
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      setMq(null);
-    }
+    mention.onKeyDown(e);
   }
 
   function insertEmoji(emoji: string) {
     setBody((prev) => prev + emoji);
-    setMq(null);
     inputRef.current?.focus();
   }
 
@@ -145,14 +75,13 @@ export function AddComment({
     if (!text) return;
     setError(null);
     const parentId = replyingTo?.parentId ?? null;
-    const serialized = serializeMentions(text, mentions);
+    const serialized = mention.serialize(text);
     start(async () => {
       const res = await addComment(postId, serialized, parentId);
       if (!res.ok) setError(res.error);
       else {
         setBody("");
-        setMentions({});
-        setMq(null);
+        mention.reset();
         setShowEmoji(false);
         onSubmitted?.(parentId);
       }
@@ -162,45 +91,15 @@ export function AddComment({
   return (
     <div className="relative pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
       {/* @-mention suggestions, floating above the composer. */}
-      {showMenu && (
-        <div className="glass-strong absolute inset-x-0 bottom-full z-20 mb-2 max-h-56 overflow-y-auto overscroll-contain rounded-[var(--radius-sm)] border border-glass-border">
-          {roster === null ? (
-            <p className="px-3 py-2.5 text-sm text-fg-muted">Loading matches…</p>
-          ) : (
-            suggestions.map((t, i) => (
-              <button
-                key={t.id}
-                type="button"
-                // Keep the input focused so the tap registers before blur.
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => pickMention(t)}
-                onMouseEnter={() => setActiveIdx(i)}
-                className={
-                  "flex w-full items-center gap-3 px-3 py-2 text-left transition-colors " +
-                  (i === activeIdx ? "bg-glass" : "hover:bg-glass")
-                }
-              >
-                <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full bg-card">
-                  {resolveAvatarUrl(t.avatar_url, t.gender) && (
-                    <AppImage
-                      src={resolveAvatarUrl(t.avatar_url, t.gender)!}
-                      alt=""
-                      sizes="32px"
-                    />
-                  )}
-                </div>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[14px] font-semibold text-fg">
-                    {t.full_name ?? "Student"}
-                  </span>
-                  <span className="block truncate text-[12px] text-fg-muted">
-                    @{t.username}
-                  </span>
-                </span>
-              </button>
-            ))
-          )}
-        </div>
+      {mention.showMenu && (
+        <MentionMenu
+          roster={mention.roster}
+          suggestions={mention.suggestions}
+          activeIdx={mention.activeIdx}
+          onPick={mention.pickMention}
+          onHover={mention.setActiveIdx}
+          className="absolute inset-x-0 bottom-full mb-2"
+        />
       )}
 
       {/* "Replying to …" banner with a dismiss control. */}
@@ -280,7 +179,7 @@ export function AddComment({
           onKeyDown={onKeyDown}
           onBlur={() => {
             // Delay so a suggestion tap still fires before the menu closes.
-            blurTimer.current = setTimeout(() => setMq(null), 120);
+            blurTimer.current = setTimeout(() => mention.close(), 120);
           }}
           onFocus={() => {
             if (blurTimer.current) clearTimeout(blurTimer.current);
