@@ -18,8 +18,16 @@ export const config = {
    * site as having no robots.txt at all — i.e. crawl everything — which is the
    * exact opposite of what src/app/robots.ts says, and silently undid the
    * VULN-14 fix.
+   *
+   * `swe-worker-*.js` is the same class of bug, found 2026-08-28: next-pwa
+   * emits it alongside sw.js, but only sw.js and workbox-* were excluded, so
+   * the worker answered `307 -> /login` and the browser refused to execute it
+   * ("MIME type ('text/html') is not executable"). That is the worker backing
+   * `cacheOnFrontEndNav` / `aggressiveFrontEndNavCaching` in next.config.ts —
+   * both were switched on but had never actually worked, so every client-side
+   * navigation went to the server that the option exists to avoid.
    */
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|robots.txt|manifest.webmanifest|sw.js|workbox-.*|icons/.*|apple-touch-icon.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|robots.txt|manifest.webmanifest|sw.js|swe-worker-.*|workbox-.*|icons/.*|apple-touch-icon.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
