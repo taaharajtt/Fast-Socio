@@ -31,6 +31,7 @@ import {
   restoreCard,
   type DiscoverDeckPage,
 } from "@/lib/discover/deck-pager";
+import { beginSwipe, endSwipe } from "@/lib/discover/swipe-guard";
 import { safeMatchingDisplay } from "@/lib/smart-match/display";
 import {
   recordSwipe,
@@ -74,8 +75,10 @@ export function SwipeDeck({ initial }: { initial: DiscoverDeckPage }) {
   const [lastSwiped, setLastSwiped] = useState<LastSwipe | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Keys whose swipe is optimistically applied but not yet persisted. Excluded
-  // from top-ups so a card can't be re-added by a fetch that races its write.
+  // Keys whose swipe is optimistically applied but not yet persisted. Two jobs:
+  // excluded from top-ups so a card can't be re-added by a fetch that races its
+  // write, AND the duplicate-submission guard (see `beginSwipe`) — drag, button
+  // and keyboard all funnel through it, so one visible card submits once.
   const inFlight = useRef<Set<string>>(new Set());
   // True once BOTH server feeds have said they have nothing left. This — never
   // "the local array is empty" — gates "You're all caught up".
@@ -140,7 +143,7 @@ export function SwipeDeck({ initial }: { initial: DiscoverDeckPage }) {
    */
   const restore = useCallback(
     (card: DiscoverSwipeCard, message: string) => {
-      inFlight.current.delete(card.key);
+      endSwipe(inFlight.current, card.key);
       setLastSwiped(null);
       setDeck((d) => restoreCard(d, card));
       flash(message || "That didn’t save — try again.");
@@ -150,8 +153,13 @@ export function SwipeDeck({ initial }: { initial: DiscoverDeckPage }) {
 
   const act = useCallback(
     async (card: DiscoverSwipeCard, direction: "like" | "pass") => {
+      // FIRST: claim the card. Drag release, button tap and keyboard arrow all
+      // land here, and the handler is async, so without this the same visible
+      // card could be submitted twice — two writes, two burst-quota entries and
+      // an undo stack out of step with what the user saw. An ignored duplicate
+      // returns before any optimistic change.
+      if (!beginSwipe(inFlight.current, card.key)) return;
       // Optimistic: advance immediately, then persist. Offer a 3s undo window.
-      inFlight.current.add(card.key);
       advance();
       if (undoTimer.current) clearTimeout(undoTimer.current);
       undoTimer.current = setTimeout(() => setLastSwiped(null), 3000);
@@ -159,7 +167,7 @@ export function SwipeDeck({ initial }: { initial: DiscoverDeckPage }) {
       if (card.kind === "socio") {
         setLastSwiped({ card, kind: "socio" });
         const res = await recordSwipe(card.id, direction);
-        inFlight.current.delete(card.key);
+        endSwipe(inFlight.current, card.key);
         if (!res.ok) {
           restore(card, res.error);
           return;
@@ -167,7 +175,7 @@ export function SwipeDeck({ initial }: { initial: DiscoverDeckPage }) {
         if (res.matched) setMatchName(card.profile.full_name ?? "Someone");
       } else if (direction === "like") {
         const res = await respondToDiscoverPost(card.id);
-        inFlight.current.delete(card.key);
+        endSwipe(inFlight.current, card.key);
         if (res.ok) {
           setLastSwiped({
             card,
@@ -183,7 +191,7 @@ export function SwipeDeck({ initial }: { initial: DiscoverDeckPage }) {
       } else {
         setLastSwiped({ card, kind: "intent", direction: "pass", responseId: null });
         const res = await passDiscoverPost(card.id);
-        inFlight.current.delete(card.key);
+        endSwipe(inFlight.current, card.key);
         if (res && !res.ok) {
           restore(card, res.error);
           return;

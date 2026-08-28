@@ -2,7 +2,12 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
-import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import {
+  checkRateLimitResult,
+  limitedMessage,
+  DISCOVER_SWIPE_BURST,
+  RATE_LIMITS,
+} from "@/lib/rate-limit";
 import type { DiscoverProfile } from "@/lib/profile/types";
 
 type SwipeResult =
@@ -10,9 +15,27 @@ type SwipeResult =
   | { ok: false; error: string };
 
 /**
- * Record a like/pass. Rate-limited per Phase 1 policy. On a like, the DB trigger
- * creates a match if reciprocal; we report back whether a match now exists so
- * the UI can celebrate.
+ * Record a like/pass. On a like, the DB trigger creates a match if reciprocal;
+ * we report back whether a match now exists so the UI can celebrate.
+ *
+ * RATE LIMITING. The old hourly quotas (100 likes/hour, 300 passes/hour) are
+ * GONE. A student with a few hundred eligible candidates could not reach the
+ * end of their own deck in one sitting, so the limiter was rejecting the
+ * product's core loop rather than abuse — and the rejection arrived as an
+ * ambiguous "Slow down a little" that a user could do nothing about.
+ *
+ * What remains is a burst guard: `DISCOVER_SWIPE_BURST`, 20 completed swipe
+ * requests per 10 seconds, with likes and passes sharing ONE bucket. It exists
+ * to absorb duplicate-event storms, retry loops and scripted traffic (Server
+ * Actions are reachable by direct POST, so the client-side dedupe is UX only —
+ * this is the real protection). No realistic session can exhaust a deck
+ * against it.
+ *
+ * The quota is consumed BEFORE the write, so a swipe whose persistence then
+ * fails still costs one burst slot. That is deliberate: a client stuck in a
+ * failing retry loop is precisely the shape this guard is for, and refunding on
+ * failure would make it trivially bypassable. With a 10-second window the cost
+ * to a genuine user of a one-off failure is at most a few seconds.
  */
 export async function recordSwipe(
   targetId: string,
@@ -22,13 +45,24 @@ export async function recordSwipe(
   const userId = await getAuthUserId();
   if (!userId) return { ok: false, error: "Not signed in." };
 
-  const limit = direction === "like" ? RATE_LIMITS.like : RATE_LIMITS.pass;
-  const allowed = await checkRateLimit(
-    direction,
-    limit.max,
-    limit.windowSeconds
+  const burst = await checkRateLimitResult(
+    DISCOVER_SWIPE_BURST.action,
+    DISCOVER_SWIPE_BURST.max,
+    DISCOVER_SWIPE_BURST.windowSeconds
   );
-  if (!allowed) return { ok: false, error: "Slow down a little." };
+  if (burst.status === "limited") {
+    return {
+      ok: false,
+      error: "You’re swiping very quickly. Try again in a few seconds.",
+    };
+  }
+  if (burst.status === "error") {
+    // NOT a rate-limit violation: the limiter itself failed. Say so honestly
+    // rather than blaming the user's pace. Swipes are low-consequence (a
+    // private like/pass row, no content and no notification to anyone else),
+    // so this fails CLOSED on persistence but reports the real reason.
+    return { ok: false, error: "Couldn’t save that right now — try again." };
+  }
 
   // Upsert, not insert (UAT-002): re-deciding a recycled profile refreshes its
   // swipe timestamp so it drops to the BACK of the resurfaced queue instead of
@@ -100,12 +134,24 @@ export async function sendMessageRequest(
   if (text.length < 1 || text.length > 500)
     return { ok: false, error: "Message must be 1–500 characters." };
 
-  const allowed = await checkRateLimit(
+  // Unchanged policy (20/hour) — a message request reaches another student's
+  // inbox, so it keeps its stricter quota and its fail-closed behaviour. Only
+  // the MESSAGE improves: a real quota rejection now says when to come back,
+  // and a limiter outage no longer masquerades as one.
+  const gate = await checkRateLimitResult(
     "messageRequest",
     RATE_LIMITS.messageRequest.max,
     RATE_LIMITS.messageRequest.windowSeconds
   );
-  if (!allowed) return { ok: false, error: "Too many requests for now." };
+  if (gate.status === "limited") {
+    return {
+      ok: false,
+      error: limitedMessage(gate, "Too many requests for now."),
+    };
+  }
+  if (gate.status === "error") {
+    return { ok: false, error: "Couldn’t send that right now — try again." };
+  }
 
   const { error } = await supabase
     .from("message_requests")
@@ -128,12 +174,19 @@ export async function reportProfile(
   const userId = await getAuthUserId();
   if (!userId) return { ok: false, error: "Not signed in." };
 
-  const allowed = await checkRateLimit(
+  // Unchanged policy (20/day) — reports create moderation work, so the quota
+  // and the fail-closed posture both stay exactly as they were.
+  const gate = await checkRateLimitResult(
     "report",
     RATE_LIMITS.report.max,
     RATE_LIMITS.report.windowSeconds
   );
-  if (!allowed) return { ok: false, error: "Too many reports for now." };
+  if (gate.status === "limited") {
+    return { ok: false, error: limitedMessage(gate, "Too many reports for now.") };
+  }
+  if (gate.status === "error") {
+    return { ok: false, error: "Couldn’t file that report right now — try again." };
+  }
 
   const { error } = await supabase.from("reports").insert({
     reporter_id: userId,

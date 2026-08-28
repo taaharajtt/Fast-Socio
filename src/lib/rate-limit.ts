@@ -1,40 +1,62 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import {
+  interpretRateLimitRpc,
+  isAllowed,
+  type RateLimitResult,
+} from "@/lib/rate-limit-policy";
+
+export {
+  RATE_LIMITS,
+  DISCOVER_SWIPE_BURST,
+  isAllowed,
+  limitedMessage,
+  interpretRateLimitRpc,
+  type RateLimitResult,
+  type RateLimitPolicy,
+} from "@/lib/rate-limit-policy";
 
 /**
- * Server-side rate-limit check backed by the check_rate_limit SQL function
- * (Phase 1 infrastructure). Returns true if the action is allowed (and records
- * it), false if the caller has exceeded the limit in the window.
+ * Server-side rate-limit check backed by SQL, returning a STRUCTURED result.
  *
- * Used by abuse-prone server actions in later phases (likes/passes/message
- * requests in Discover, sends in Chat) before they mutate state.
+ * The three outcomes are distinct on purpose:
+ *   - `allowed`  — recorded, proceed.
+ *   - `limited`  — the caller really has used their quota; `retryAfterSeconds`
+ *                  says when a slot frees, so the UI can be specific.
+ *   - `error`    — the limiter could not be consulted at all (RPC, network or
+ *                  database failure). This is an INFRASTRUCTURE problem and
+ *                  must never be reported to the user as "slow down".
+ *
+ * Backed by `check_rate_limit_burst` (migration 0159), which takes a
+ * transaction-scoped advisory lock on (user, action) before counting, so
+ * parallel requests cannot each read "19 events" and all insert a 20th.
+ */
+export async function checkRateLimitResult(
+  action: string,
+  max: number,
+  windowSeconds: number
+): Promise<RateLimitResult> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("check_rate_limit_burst", {
+    p_action: action,
+    p_max: max,
+    p_window: `${windowSeconds} seconds`,
+  });
+  return interpretRateLimitRpc(data, error);
+}
+
+/**
+ * Fail-closed boolean check. Unchanged behaviour for the abuse-prone callers
+ * that only need allow/deny — reports, message requests, post/comment creation,
+ * chat sends, community and society writes. A limiter failure still denies:
+ * for those actions a broken limiter must not become an open door.
+ *
+ * Prefer `checkRateLimitResult` where the user-facing message matters.
  */
 export async function checkRateLimit(
   action: string,
   max: number,
   windowSeconds: number
 ): Promise<boolean> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("check_rate_limit", {
-    p_action: action,
-    p_max: max,
-    p_window: `${windowSeconds} seconds`,
-  });
-  if (error) {
-    // Fail closed: if the limiter errors, do not allow the action.
-    return false;
-  }
-  return data === true;
+  return isAllowed(await checkRateLimitResult(action, max, windowSeconds));
 }
-
-/** Common limits, centralized so phases share one policy table. */
-export const RATE_LIMITS = {
-  like: { max: 100, windowSeconds: 60 * 60 }, // 100 swipe-likes/hour
-  pass: { max: 300, windowSeconds: 60 * 60 },
-  messageRequest: { max: 20, windowSeconds: 60 * 60 },
-  chatSend: { max: 120, windowSeconds: 60 }, // 120 msgs/min
-  report: { max: 20, windowSeconds: 24 * 60 * 60 },
-  // Post-like toggles: cap the notification/push a target can be made to receive
-  // (P5-04). Generous for real use, throttles like/unlike spam loops.
-  postLike: { max: 60, windowSeconds: 60 }, // 60 like-toggles/min
-} as const;

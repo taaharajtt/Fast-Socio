@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { resolveAvatarUrl } from "@/lib/avatar";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { checkRateLimitResult, limitedMessage } from "@/lib/rate-limit";
 import { orIlike } from "@/lib/postgrest/search";
 import { isPostMode, type PostMode } from "@/lib/smart-match/modes";
 import {
@@ -649,8 +649,14 @@ export async function createDiscoverPost(
   if (!check.ok)
     return { ok: false, error: `Please fill in: ${check.missing.join(", ")}.` };
 
-  const allowed = await checkRateLimit("smart_match_post", 20, 60 * 60);
-  if (!allowed) return { ok: false, error: "Too many posts for now." };
+  // Unchanged policy (20/hour) — creating an opportunity post is content that
+  // fans out to other students' decks, so the quota and the fail-closed
+  // posture both stay. Only the wording gets more precise.
+  const gate = await checkRateLimitResult("smart_match_post", 20, 60 * 60);
+  if (gate.status === "limited")
+    return { ok: false, error: limitedMessage(gate, "Too many posts for now.") };
+  if (gate.status === "error")
+    return { ok: false, error: "Couldn’t save that right now — try again." };
 
   const ids = teamMemberIds.slice(0, 20);
   if (ids.length) {
@@ -886,8 +892,13 @@ export async function respondToDiscoverPost(
   if (!uid) return { ok: false, error: "Not signed in." };
   if (message && message.length > 500)
     return { ok: false, error: "Message is too long." };
-  const allowed = await checkRateLimit("smart_match_interest", 40, 60 * 60);
-  if (!allowed) return { ok: false, error: "Too many requests for now." };
+  // Unchanged policy (40/hour) — responding to an opportunity notifies its
+  // author, so it keeps its quota and its fail-closed posture.
+  const gate = await checkRateLimitResult("smart_match_interest", 40, 60 * 60);
+  if (gate.status === "limited")
+    return { ok: false, error: limitedMessage(gate, "Too many requests for now.") };
+  if (gate.status === "error")
+    return { ok: false, error: "Couldn’t send that right now — try again." };
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("express_smart_match_interest", {
     p_post: postId,
@@ -988,8 +999,12 @@ export async function reportDiscoverPost(
 ): Promise<Result> {
   const uid = await getAuthUserId();
   if (!uid) return { ok: false, error: "Not signed in." };
-  const allowed = await checkRateLimit("report", 20, 24 * 60 * 60);
-  if (!allowed) return { ok: false, error: "Too many reports for now." };
+  // Unchanged policy (20/day) — reports create moderation work.
+  const gate = await checkRateLimitResult("report", 20, 24 * 60 * 60);
+  if (gate.status === "limited")
+    return { ok: false, error: limitedMessage(gate, "Too many reports for now.") };
+  if (gate.status === "error")
+    return { ok: false, error: "Couldn’t file that report right now — try again." };
   const supabase = await createClient();
   const { error } = await supabase.from("reports").insert({
     reporter_id: uid,
