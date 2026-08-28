@@ -142,7 +142,11 @@ async function CommunitySections() {
       // are private to the team that formed them — never browsable here.
       .eq("is_discover_group", false)
       .order("member_count", { ascending: false })
-      .limit(30),
+      // The whole approved directory, not a top-30 slice. At 30 the cap was
+      // silently hiding every newly approved community — they start at one
+      // member, sort last, and never surfaced. The list is searchable client
+      // side, so length costs scrolling, not discoverability.
+      .limit(200),
     supabase.from("community_join_requests").select("community_id, status").eq("user_id", me),
     supabase
       .from("matches")

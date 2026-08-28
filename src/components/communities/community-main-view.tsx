@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { Calendar, Compass, MessageSquare, ShieldCheck } from "lucide-react";
+import { Calendar, Compass, ShieldCheck } from "lucide-react";
 import { AppImage } from "@/components/ui/app-image";
 import { SectionHeader, VerifiedBadge } from "@/components/ui";
 import { communityIcon } from "@/lib/communities/icon";
 import { CreateSpaceButton } from "@/components/communities/create-space-button";
-import { ChatRoomCard, type ChatRoomCardVM } from "@/components/communities/chat-room-card";
+import type { ChatRoomCardVM } from "@/components/communities/chat-room-card";
+import { ChatRoomDirectory } from "@/components/communities/chat-room-directory";
 
 export type YourSpaceVM = {
   id: string;
@@ -238,23 +239,7 @@ export function CommunityMainView({
 
       <section className="mt-7">
         <SectionHeader title="Community Chats" />
-        {chatRooms.length === 0 ? (
-          <EmptyState
-            icon={<MessageSquare className="h-7 w-7" aria-hidden />}
-            title="No community chats yet"
-            hint={
-              <Link href="/communities/new" className="font-medium text-accent">
-                Create the first one
-              </Link>
-            }
-          />
-        ) : (
-          <div className="space-y-2.5">
-            {chatRooms.map((c) => (
-              <ChatRoomCard key={c.id} c={c} />
-            ))}
-          </div>
-        )}
+        <ChatRoomDirectory rooms={chatRooms} />
       </section>
     </>
   );
