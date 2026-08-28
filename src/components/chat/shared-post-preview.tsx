@@ -57,6 +57,7 @@ export function SharedPostCard({
   return (
     <Link
       href={`/post/${postId}`}
+      prefetch={false}
       onClick={(e) => e.stopPropagation()}
       className={cn(
         "block w-[240px] max-w-full overflow-hidden rounded-xl border",

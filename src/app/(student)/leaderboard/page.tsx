@@ -1,5 +1,6 @@
 import { Suspense } from "react";
-import { createClient } from "@/lib/supabase/server";
+import { cacheLife } from "next/cache";
+import { createAnonClient } from "@/lib/supabase/anon";
 import { getAuthUserId } from "@/lib/auth/user";
 import { timed } from "@/lib/perf";
 import { resolveAvatarUrl } from "@/lib/avatar";
@@ -45,12 +46,23 @@ export default function LeaderboardPage() {
   );
 }
 
-async function Rankings() {
-  const supabase = await createClient();
-  // Verified locally from the JWT — no Auth API round trip (middleware already
-  // gated this route; RLS scopes every query below).
-  const me = (await getAuthUserId())!;
+/**
+ * The board itself is identical for every viewer, so it is cached once per
+ * revalidation window instead of being recomputed per request. Both RPCs are
+ * SECURITY DEFINER and executable by `anon`, so the anon client returns exactly
+ * the same rows a signed-in student would get — nothing here is viewer-scoped.
+ *
+ * The viewer's own id is deliberately NOT read in this scope: cached scopes
+ * cannot read cookies, and folding a per-user value in here would key the cache
+ * per user and defeat the point. `Rankings` reads it outside and passes it down.
+ */
+async function getBoard() {
+  "use cache";
+  // Aura moves continuously but nobody needs a second-accurate ranking, and
+  // this route was one of the heaviest prefetch targets in the access log.
+  cacheLife("minutes");
 
+  const supabase = createAnonClient();
   const [{ data: deptData }, { data: boardData }] = await timed(
     "leaderboard:rpcs",
     () =>
@@ -95,11 +107,14 @@ async function Rankings() {
   // first 10 physical rows, which could cut a tied group in half. The full
   // board (`students`, up to 50 rows) still feeds the department-rivalry aura
   // derivation above.
-  return (
-    <RanksTabs
-      students={students.filter((s) => s.rank <= 10)}
-      depts={depts}
-      meId={me}
-    />
-  );
+  return { students: students.filter((s) => s.rank <= 10), depts };
+}
+
+async function Rankings() {
+  // Verified locally from the JWT — no Auth API round trip (middleware already
+  // gated this route). Read OUTSIDE `getBoard` so the board stays shareable.
+  const me = (await getAuthUserId())!;
+  const { students, depts } = await getBoard();
+
+  return <RanksTabs students={students} depts={depts} meId={me} />;
 }

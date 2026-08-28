@@ -35,6 +35,7 @@ export function MatchRow({
     <div className="flex items-center gap-3 px-4 py-3">
       <Link
         href={`/profile/${row.id}`}
+        prefetch={false}
         className="flex min-w-0 flex-1 items-center gap-3"
       >
         <span className="glass relative h-11 w-11 shrink-0 overflow-hidden rounded-full">

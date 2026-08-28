@@ -56,6 +56,7 @@ export function MemberAccessList({
           <div key={m.user_id} className="flex items-center gap-3 rounded-[12px] px-2 py-2.5 transition-colors hover:bg-card">
             <Link
               href={`/profile/${m.user_id}`}
+              prefetch={false}
               className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/10 text-sm font-bold text-fg-muted"
             >
               {resolveAvatarUrl(m.avatar_url, m.gender) ? (
@@ -64,7 +65,7 @@ export function MemberAccessList({
                 name.charAt(0).toUpperCase()
               )}
             </Link>
-            <Link href={`/profile/${m.user_id}`} className="min-w-0 flex-1">
+            <Link href={`/profile/${m.user_id}`} prefetch={false} className="min-w-0 flex-1">
               <span className="block truncate text-sm font-semibold text-fg">{name}</span>
               {m.username && (
                 <span className="block truncate text-xs text-fg-muted">@{m.username}</span>

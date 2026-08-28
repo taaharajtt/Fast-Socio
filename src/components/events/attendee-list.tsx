@@ -67,6 +67,7 @@ export function AttendeeList({ attendees }: { attendees: Attendee[] }) {
             <Link
               key={a.id}
               href={`/profile/${a.id}`}
+              prefetch={false}
               className="flex items-center gap-3 rounded-[12px] px-2 py-2.5 transition-colors hover:bg-card"
             >
               <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-card">

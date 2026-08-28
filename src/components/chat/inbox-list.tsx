@@ -174,6 +174,7 @@ export function InboxList({
                 <Link
                   key={`sp:${t.space.id}`}
                   href={`/chat/c/${t.space.id}`}
+                  prefetch={false}
                   className="pressable-subtle focus-ring -mx-2 flex items-center gap-3.5 rounded-[10px] px-2 py-3.5"
                 >
                   <div className="relative h-12 w-12 shrink-0 rounded-full">
@@ -220,6 +221,7 @@ export function InboxList({
               <Link
                 key={t.convId}
                 href={`/chat/${t.convId}`}
+                prefetch={false}
                 className={cn(
                   "pressable-subtle focus-ring -mx-2 flex items-center gap-3.5",
                   "rounded-[10px] px-2 py-3.5"

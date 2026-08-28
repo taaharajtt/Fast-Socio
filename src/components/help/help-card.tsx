@@ -47,6 +47,7 @@ export function HelpCard({ req }: { req: HelpRequestRow }) {
     */
     <Link
       href={`/help/${req.id}`}
+      prefetch={false}
       className="pressable-subtle focus-ring -mx-2 block rounded-[12px] px-2 py-5"
     >
       {/* Top row: URGENT capsule (boosted) + category + status + age */}

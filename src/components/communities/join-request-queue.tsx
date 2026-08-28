@@ -53,6 +53,7 @@ export function JoinRequestQueue({
           <div key={r.user_id} className="flex items-center gap-3 rounded-[14px] bg-card p-3">
             <Link
               href={`/profile/${r.user_id}`}
+              prefetch={false}
               className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/10 text-sm font-bold text-fg-muted"
             >
               {resolveAvatarUrl(r.avatar_url, r.gender) ? (
@@ -61,7 +62,7 @@ export function JoinRequestQueue({
                 name.charAt(0).toUpperCase()
               )}
             </Link>
-            <Link href={`/profile/${r.user_id}`} className="min-w-0 flex-1">
+            <Link href={`/profile/${r.user_id}`} prefetch={false} className="min-w-0 flex-1">
               <span className="block truncate text-sm font-semibold text-fg">{name}</span>
               {r.username && (
                 <span className="block truncate text-xs text-fg-muted">@{r.username}</span>

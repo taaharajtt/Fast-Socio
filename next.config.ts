@@ -97,6 +97,16 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // next/image srcset widths. The defaults run up to 3840px, which for a
+  // mobile-first PWA means imgproxy was being asked to render desktop-retina
+  // sizes nothing ever displays: 3840px transforms alone measured p50 3.7s /
+  // max 30s on the origin, and 1920px was the single largest image cost. The
+  // widest thing we lay out is a full-bleed cover on a large phone, so 1080
+  // is the real ceiling; imageSizes covers avatars and thumbnails.
+  images: {
+    deviceSizes: [640, 750, 828, 1080],
+    imageSizes: [32, 48, 64, 96, 128, 256, 384],
+  },
   // Cache Components (Next 16) — dynamic-by-default with PPR: every route emits
   // a prerendered static shell immediately and streams the request-scoped parts
   // in behind their Suspense boundaries. This is what makes a dock tab switch

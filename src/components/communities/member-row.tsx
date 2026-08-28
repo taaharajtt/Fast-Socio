@@ -25,6 +25,7 @@ export function MemberRow({ member }: { member: CommunityMemberVM }) {
   return (
     <Link
       href={`/profile/${member.user_id}`}
+      prefetch={false}
       // Plain row, no card — matches the events attendee list. A member row
       // is a name in a roster, not a standalone object; a card behind each
       // one made a 40-person roster read as 40 stacked panels.

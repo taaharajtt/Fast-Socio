@@ -139,7 +139,7 @@ export function EventOverviewTab({
           <p className="text-xs text-fg-muted">Co-organizers</p>
           <div className="mt-2 space-y-2">
             {organizers.map((o) => (
-              <Link key={o.id} href={`/profile/${o.id}`} className="flex items-center gap-3">
+              <Link key={o.id} href={`/profile/${o.id}`} prefetch={false} className="flex items-center gap-3">
                 <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full bg-bg-elevated">
                   {resolveAvatarUrl(o.avatar_url, o.gender) && (
                     <AppImage src={resolveAvatarUrl(o.avatar_url, o.gender)!} alt="" sizes="32px" />

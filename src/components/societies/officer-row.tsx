@@ -22,6 +22,7 @@ export function OfficerRow({
     <div className="flex items-center gap-3 rounded-[12px] px-2 py-2.5 transition-colors hover:bg-card">
       <Link
         href={`/profile/${officer.user_id}`}
+        prefetch={false}
         className="flex min-w-0 flex-1 items-center gap-3"
       >
         <span className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/10 text-sm font-bold text-fg-muted">

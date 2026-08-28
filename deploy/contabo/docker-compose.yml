@@ -43,13 +43,31 @@ services:
     networks:
       - fastsocio-net
 
-    # Leaves ~5.5 GiB and 2 vCPU for the existing Supabase stack, which
-    # currently sits at ~2.2 GiB. A runaway Next.js process cannot starve it.
+    # WEB_CONCURRENCY drives cluster.js. It must be read together with the cpu
+    # limit below: 3 workers against a 3.0 quota, so a fully busy worker still
+    # has a core to itself and the 4th host core is left for imgproxy, nginx,
+    # Caddy and the kernel.
+    #
+    # Memory, not CPU, is the real ceiling on this number — each worker is a
+    # full Next runtime measured at ~450 MB RSS, so 3 workers plus the primary
+    # fit inside 3G with headroom for a request spike.
+    #
+    # NOTE: `use cache` entries live in each worker's own memory, so the same
+    # entry can be computed up to 3 times instead of once. That is still far
+    # cheaper than the uncached path it replaced, but it is why raising this
+    # number has diminishing returns.
+    environment:
+      WEB_CONCURRENCY: "3"
+
+    # The self-hosted Supabase stack this used to leave room for has been
+    # stopped since 2026-08-16 (all 11 containers exited), so the reservation
+    # that capped this service at 2 vCPU was protecting nothing while the app
+    # queued renders on a single core.
     deploy:
       resources:
         limits:
-          memory: 2G
-          cpus: "2.0"
+          memory: 3G
+          cpus: "3.0"
 
     # Bounded logs. Without this, json-file logging grows until the disk fills
     # and takes the Supabase stack down with it.
@@ -95,11 +113,57 @@ services:
     networks:
       - fastsocio-net
 
+    # Raised from 1.0/512M. Image transforms are pure CPU and were the single
+    # slowest endpoint in the access log; one core meant concurrent renders
+    # serialised behind each other. libvips is memory-hungry on large sources
+    # (IMGPROXY_MAX_SRC_RESOLUTION is 50 MP), so memory rises with it.
     deploy:
       resources:
         limits:
-          memory: 512M
-          cpus: "1.0"
+          memory: 1G
+          cpus: "2.0"
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # Caching reverse proxy in front of imgproxy — see imgcache.conf for why this
+  # exists and why it is nginx rather than a Caddy cache module. Caddy's /img
+  # route points HERE, not at imgproxy directly.
+  imgcache:
+    image: nginx:1-alpine
+    container_name: fastsocio-imgcache
+    restart: unless-stopped
+    depends_on:
+      - imgproxy
+
+    volumes:
+      - ./imgcache.conf:/etc/nginx/conf.d/default.conf:ro
+      # Named volume, so the cache survives a container recreate. A cold cache
+      # after every deploy would mean re-rendering the whole working set at the
+      # exact moment the new image is also warming up.
+      - imgcache_data:/var/cache/nginx/img
+
+    expose:
+      - "80"
+
+    networks:
+      - fastsocio-net
+
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+    # Proxying and disk writes only — no image work happens here.
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
 
     logging:
       driver: json-file
@@ -113,7 +177,7 @@ services:
     restart: unless-stopped
     depends_on:
       - app
-      - imgproxy
+      - imgcache
 
     # The only publicly bound ports in this project. 80 is required for the
     # Let's Encrypt HTTP-01 challenge and for the automatic HTTP->HTTPS
@@ -150,3 +214,5 @@ volumes:
     name: fastsocio-caddy-data
   caddy_config:
     name: fastsocio-caddy-config
+  imgcache_data:
+    name: fastsocio-imgcache-data

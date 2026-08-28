@@ -73,7 +73,7 @@ export function CommunityAdminRow({
             </button>
           </>
         )}
-        <Link href={`/communities/${community.id}`} className={ctrl}>
+        <Link href={`/communities/${community.id}`} prefetch={false} className={ctrl}>
           View →
         </Link>
         {community.isSociety &&

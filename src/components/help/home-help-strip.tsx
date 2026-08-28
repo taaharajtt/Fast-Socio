@@ -65,6 +65,7 @@ export async function HomeHelpStrip() {
               <Link
                 key={r.id}
                 href={`/help/${r.id}`}
+                prefetch={false}
                 className="pressable-subtle focus-ring w-[168px] shrink-0 snap-start rounded-[14px]"
               >
                 <GlassCard className="flex aspect-square flex-col p-3.5">

@@ -86,6 +86,11 @@ COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 COPY --from=builder --chown=node:node /app/public ./public
 
+# Copied from the SOURCE tree, not the builder: it is a plain runtime script and
+# never takes part in the Next build. It sits next to the generated server.js
+# because that is what it requires.
+COPY --chown=node:node deploy/contabo/cluster.js ./cluster.js
+
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
@@ -93,4 +98,6 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
 
 # standalone emits its own server.js; `next start` is not used (and is not even
 # installed in this stage). This is the documented way to run standalone output.
-CMD ["node", "server.js"]
+# cluster.js is a thin supervisor around that same server.js — with
+# WEB_CONCURRENCY unset or 1 it simply requires it in-process.
+CMD ["node", "cluster.js"]

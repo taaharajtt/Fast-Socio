@@ -20,6 +20,7 @@ export function PostBody({ body }: { body: string }) {
           <Link
             key={i}
             href={`/profile/${p.id}`}
+            prefetch={false}
             // The card itself is tappable; a tag must not open the post too.
             onClick={(e) => e.stopPropagation()}
             className="font-semibold text-accent hover:underline"

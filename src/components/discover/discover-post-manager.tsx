@@ -284,6 +284,7 @@ function IncomingRequests({
         <div key={a.id} className="flex items-center gap-2.5 rounded-[14px] bg-card p-3">
           <Link
             href={`/profile/${a.applicantId}`}
+            prefetch={false}
             className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-bg-elevated"
           >
             {a.applicantAvatar && (

@@ -18,6 +18,7 @@ export function CommentBody({ body }: { body: string }) {
           <Link
             key={i}
             href={`/profile/${p.id}`}
+            prefetch={false}
             className="font-semibold text-accent hover:underline"
           >
             @{p.username}

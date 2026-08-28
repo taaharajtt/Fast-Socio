@@ -232,6 +232,7 @@ function PostCardImpl({
           return !anon && post.author_id ? (
             <Link
               href={`/profile/${post.author_id}`}
+              prefetch={false}
               className="flex min-w-0 flex-1 items-center gap-2.5"
             >
               {inner}

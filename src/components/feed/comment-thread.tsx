@@ -363,6 +363,7 @@ function CommentRow({
       {/* Avatar opens the commenter's profile (comments are always attributed). */}
       <Link
         href={`/profile/${comment.author_id}`}
+        prefetch={false}
         className={cn(
           "glass relative shrink-0 overflow-hidden rounded-full",
           avatarSize
@@ -381,6 +382,7 @@ function CommentRow({
         <p className="text-[13px]">
           <Link
             href={`/profile/${comment.author_id}`}
+            prefetch={false}
             className="font-semibold text-fg"
           >
             {author?.full_name ?? "Student"}

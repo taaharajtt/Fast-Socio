@@ -103,6 +103,7 @@ export function MembersTab({
                     <Link
                       key={p.id}
                       href={`/profile/${p.id}`}
+                      prefetch={false}
                       // Plain row, no card — matches the events attendee list.
                       className="flex items-center gap-3 rounded-[12px] px-2 py-2.5 transition-colors hover:bg-card"
                     >

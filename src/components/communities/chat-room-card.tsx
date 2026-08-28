@@ -56,6 +56,7 @@ export function ChatRoomCard({ c }: { c: ChatRoomCardVM }) {
           swallowing a tap meant for Follow/Join. */}
       <Link
         href={`/communities/${c.id}`}
+        prefetch={false}
         aria-label={c.name}
         className="absolute inset-0 z-0"
       />
