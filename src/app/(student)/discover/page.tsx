@@ -57,8 +57,11 @@ async function PostButtonSlot() {
 }
 
 async function DeckSlot() {
-  const cards = await timed("discover:deck", getDiscoverSwipeDeck);
-  return <SwipeDeck initial={cards} />;
+  // The deck now arrives as a PAGE — cards plus the continuation state the
+  // client needs to fetch the next one. Handing that whole object to SwipeDeck
+  // is what lets it distinguish "still loading more" from "genuinely done".
+  const page = await timed("discover:deck", getDiscoverSwipeDeck);
+  return <SwipeDeck initial={page} />;
 }
 
 /** The card + action row, at the exact geometry SwipeDeck renders, so nothing

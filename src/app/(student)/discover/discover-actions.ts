@@ -11,8 +11,11 @@ import { isPostMode, type PostMode } from "@/lib/smart-match/modes";
 import {
   buildSwipeDeck,
   INTENT_KINDS,
-  type DiscoverSwipeCard,
 } from "@/lib/discover/cards";
+import {
+  EMPTY_DECK_PAGE,
+  type DiscoverDeckPage,
+} from "@/lib/discover/deck-pager";
 import {
   buildPostPayload,
   validatePostInput,
@@ -192,26 +195,56 @@ function mapPost(r: PostRow): SmartMatchPost {
 }
 
 /**
- * One page of open intent posts, newest first. `cursor` is the created_at of
- * the last row already in the deck. Scoring/interleaving is pure TS in
- * lib/discover/cards.ts.
+ * One page of open intent posts, newest first, WITH its keyset continuation.
+ *
+ * The cursor is `(created_at, id)` of the last RAW row of the page — before any
+ * client-side eligibility filtering — so posts the deck drops still advance the
+ * cursor instead of being re-fetched, and no eligible post is skipped when the
+ * page it lived on was partly filtered out. `hasMore` is a full page: the only
+ * authoritative signal that this feed still has something to give.
  */
-export async function getDiscoverIntents({
+export async function getDiscoverIntentsPage({
   cursor = null,
+  cursorId = null,
   limit = 40,
   modes = INTENT_KINDS,
 }: {
   cursor?: string | null;
+  cursorId?: string | null;
   limit?: number;
   modes?: readonly PostMode[];
-} = {}): Promise<SmartMatchPost[]> {
+} = {}): Promise<{
+  posts: SmartMatchPost[];
+  cursor: string | null;
+  cursorId: string | null;
+  hasMore: boolean;
+}> {
+  const capped = Math.max(1, Math.min(limit, 80));
   const supabase = await createClient();
   const { data } = await supabase.rpc("get_unified_discover_feed", {
     p_modes: [...modes],
-    p_limit: Math.max(1, Math.min(limit, 80)),
+    p_limit: capped,
     p_before: cursor,
+    p_before_id: cursorId,
   });
-  return ((data as PostRow[]) ?? []).map(mapPost);
+  const rows = (data as PostRow[]) ?? [];
+  const last = rows.length ? rows[rows.length - 1] : null;
+  return {
+    posts: rows.map(mapPost),
+    cursor: last ? last.created_at : cursor,
+    cursorId: last ? last.id : cursorId,
+    hasMore: rows.length >= capped,
+  };
+}
+
+/** Posts only, for callers that don't page (map, sports strip). */
+export async function getDiscoverIntents(args: {
+  cursor?: string | null;
+  limit?: number;
+  modes?: readonly PostMode[];
+} = {}): Promise<SmartMatchPost[]> {
+  const { posts } = await getDiscoverIntentsPage(args);
+  return posts;
 }
 
 /**
@@ -224,42 +257,95 @@ export async function getActiveSportsPlans(): Promise<SmartMatchPost[]> {
   return getDiscoverIntents({ modes: ["sports"], limit: 80 });
 }
 
-/** SOCIO swipe candidates. Preserves the original deck behaviour verbatim. */
+/** Upper bound on the SOCIO exclusion set carried in one request. */
+const MAX_SOCIO_EXCLUDE = 500;
+
+/**
+ * SOCIO swipe candidates. `exclude` is the continuation: the candidate ids the
+ * caller already holds, which migration 0157's `p_exclude` drops server-side so
+ * the next call returns the best of the REST under the same ranking. Ranking,
+ * privacy and recycling rules are untouched.
+ *
+ * The rows come back in final deck order and `buildSwipeDeck` preserves it, so
+ * the gender-balanced pacing migration 0158 applies for female viewers (2
+ * female : 1 other, mirrored and unit-tested in `lib/discover/gender-pacing.ts`)
+ * arrives here already applied — the client must not re-sort SOCIO cards.
+ */
 export async function getSocioSwipeCandidates(
-  limit = 20
+  limit = 20,
+  exclude: string[] = []
 ): Promise<DiscoverProfile[]> {
   const supabase = await createClient();
   const { data } = await supabase.rpc("get_discover_candidates", {
     p_limit: limit,
+    // Bounded: the exclusion set travels in every request, and a session that
+    // pages far enough would otherwise grow it without limit.
+    p_exclude: exclude.slice(-MAX_SOCIO_EXCLUDE),
   });
   return (data as DiscoverProfile[]) ?? [];
 }
 
 /**
- * The whole Discover deck as ONE normalized, pre-interleaved list: SOCIO people
- * and open intent posts, ranked and mixed. This is what the swipe deck renders
- * and what it calls to top itself up.
+ * The whole Discover deck as ONE normalized, pre-interleaved page: SOCIO people
+ * and open intent posts, ranked and mixed, PLUS the continuation state the
+ * client needs to ask for the next page.
+ *
+ * `socioHasMore` / `intentHasMore` are the only authority on exhaustion — an
+ * empty local deck is not. Either limit may be 0, meaning "that source already
+ * reported exhaustion, don't query it".
  */
 export async function getDiscoverSwipeDeck({
-  cursor = null,
+  socioExclude = [],
+  intentCursor = null,
+  intentCursorId = null,
   socioLimit = 20,
   intentLimit = 40,
 }: {
-  cursor?: string | null;
+  socioExclude?: string[];
+  intentCursor?: string | null;
+  intentCursorId?: string | null;
   socioLimit?: number;
   intentLimit?: number;
-} = {}): Promise<DiscoverSwipeCard[]> {
+} = {}): Promise<DiscoverDeckPage> {
   const uid = await getAuthUserId();
-  if (!uid) return [];
+  if (!uid) return EMPTY_DECK_PAGE;
   const viewer = await getDiscoverViewer();
-  if (!viewer) return [];
+  if (!viewer) return EMPTY_DECK_PAGE;
 
-  const [socio, posts] = await Promise.all([
-    getSocioSwipeCandidates(socioLimit),
-    getDiscoverIntents({ cursor, limit: intentLimit }),
+  const [socio, intents] = await Promise.all([
+    socioLimit > 0
+      ? getSocioSwipeCandidates(socioLimit, socioExclude)
+      : Promise.resolve<DiscoverProfile[]>([]),
+    intentLimit > 0
+      ? getDiscoverIntentsPage({
+          cursor: intentCursor,
+          cursorId: intentCursorId,
+          limit: intentLimit,
+        })
+      : Promise.resolve({
+          posts: [] as SmartMatchPost[],
+          cursor: intentCursor,
+          cursorId: intentCursorId,
+          hasMore: false,
+        }),
   ]);
 
-  return buildSwipeDeck({ socio, posts, viewer, viewerId: uid });
+  return {
+    cards: buildSwipeDeck({ socio, posts: intents.posts, viewer, viewerId: uid }),
+    // Every candidate the server just handed over is excluded next time, even
+    // the ones the client already had — that is what makes the page advance.
+    socioContinuation: { excludeIds: socio.map((p) => p.id) },
+    intentContinuation: { cursor: intents.cursor, cursorId: intents.cursorId },
+    // A SHORT page is NOT exhaustion for this RPC. `get_discover_candidates`
+    // is tiered: the recycle round (passed profiles) is gated behind
+    // `not exists (select 1 from fresh)`, so a viewer with one fresh candidate
+    // left gets a 1-row page, and the recycled people only appear on the NEXT
+    // call once that one is excluded. Only an EMPTY page means done — verified
+    // against prod, where a real account returned fresh=1, recycled=0 on page
+    // one and five recycled profiles on page two.
+    socioHasMore: socioLimit > 0 && socio.length > 0,
+    intentHasMore: intents.hasMore,
+  };
 }
 
 /** Societies / events the viewer may recruit for (recruitment create anchor). */

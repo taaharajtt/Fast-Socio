@@ -560,6 +560,12 @@ penalised, and roughly a third of the number came from signals a user cannot see
 renders (`profile.compatibility`, `swipe-deck.tsx:486`). `src/lib/discover/match-score.ts` is a
 pure-function mirror serving as the executable specification, with 19 unit tests.
 
+> **SUPERSEDED by migration 0158 (2026-08-28).** The +15 opposite-gender term below is gone:
+> gender no longer contributes to the percentage at all. Those 15 points moved to shared
+> interests (50 -> 65, term ' + chr(96) + '9 x min(s,6) + 11 x e/(e+6)' + chr(96) + '), so the worked example below now
+> scores **92**, not 94. Gender is now purely an ORDERING policy for female viewers
+> (see ' + chr(96) + 'src/lib/discover/gender-pacing.ts' + chr(96) + '). The rest of this section is kept as history.
+
 ### Final weights (total 100 before clamping)
 | signal | weight | notes |
 |---|---|---|

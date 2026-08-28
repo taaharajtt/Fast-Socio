@@ -26,6 +26,11 @@ import {
   type DiscoverSwipeCard,
   type IntentKind,
 } from "@/lib/discover/cards";
+import {
+  createDeckPager,
+  restoreCard,
+  type DiscoverDeckPage,
+} from "@/lib/discover/deck-pager";
 import { safeMatchingDisplay } from "@/lib/smart-match/display";
 import {
   recordSwipe,
@@ -59,8 +64,8 @@ type LastSwipe =
  * unchanged from the original deck; intents ride the same rails with their own
  * verbs underneath.
  */
-export function SwipeDeck({ initial }: { initial: DiscoverSwipeCard[] }) {
-  const [deck, setDeck] = useState<DiscoverSwipeCard[]>(initial);
+export function SwipeDeck({ initial }: { initial: DiscoverDeckPage }) {
+  const [deck, setDeck] = useState<DiscoverSwipeCard[]>(initial.cards);
   const [matchName, setMatchName] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [sheetFor, setSheetFor] = useState<DiscoverProfile | null>(null);
@@ -72,14 +77,25 @@ export function SwipeDeck({ initial }: { initial: DiscoverSwipeCard[] }) {
   // Keys whose swipe is optimistically applied but not yet persisted. Excluded
   // from top-ups so a card can't be re-added by a fetch that races its write.
   const inFlight = useRef<Set<string>>(new Set());
-  const loadingMore = useRef(false);
-  // Every card shown this session (seeded from the initial server load). The
-  // SOCIO RPC recycles passed profiles indefinitely, so without this a session
-  // would loop them forever. Filtering top-ups against it means the recycle
-  // round runs ONCE: after fresh + one pass over the passed people, top-ups
-  // return nothing new and "You're all caught up" sticks. A reload builds a
-  // fresh component (empty set), so passed people surface again next session.
-  const seenThisSession = useRef<Set<string>>(new Set(initial.map((c) => c.key)));
+  // True once BOTH server feeds have said they have nothing left. This — never
+  // "the local array is empty" — gates "You're all caught up".
+  const [refilling, setRefilling] = useState(false);
+  const [exhausted, setExhausted] = useState(
+    () => !initial.socioHasMore && !initial.intentHasMore
+  );
+
+  // The pager owns continuation state (SOCIO exclusion set + opportunity
+  // keyset), refill serialisation and the session's seen-card set. Passed
+  // profiles are recycled by the RPC, and the exclusion set means that recycle
+  // round runs at most ONCE per mounted session: a reload starts a fresh pager,
+  // so passed people surface again next session, exactly as before.
+  const pagerRef = useRef<ReturnType<typeof createDeckPager> | null>(null);
+  if (pagerRef.current == null) {
+    pagerRef.current = createDeckPager({
+      initial,
+      fetchPage: (req) => getDiscoverSwipeDeck(req),
+    });
+  }
 
   const top = deck[0];
 
@@ -89,28 +105,24 @@ export function SwipeDeck({ initial }: { initial: DiscoverSwipeCard[] }) {
     toastTimer.current = setTimeout(() => setToast(null), 2200);
   }, []);
 
-  // Pull more cards and append the ones we haven't already shown this session.
+  // Pull the NEXT page and append what's new. Overlapping calls are collapsed
+  // by the pager: a top-up requested while one is running queues a follow-up
+  // round instead of being dropped, so the swipe that empties the deck always
+  // ends up triggering a fetch.
   const topUp = useCallback(async () => {
-    if (loadingMore.current) return;
-    loadingMore.current = true;
-    try {
-      const more = await getDiscoverSwipeDeck();
-      if (more.length) {
-        setDeck((cur) => {
-          const have = new Set(cur.map((c) => c.key));
-          const add = more.filter(
-            (m) =>
-              !have.has(m.key) &&
-              !inFlight.current.has(m.key) &&
-              !seenThisSession.current.has(m.key)
-          );
-          for (const m of add) seenThisSession.current.add(m.key);
-          return add.length ? [...cur, ...add] : cur;
-        });
-      }
-    } finally {
-      loadingMore.current = false;
-    }
+    const pager = pagerRef.current!;
+    setRefilling(true);
+    await pager.refill((cards) => {
+      setDeck((cur) => {
+        const have = new Set(cur.map((c) => c.key));
+        const add = cards.filter(
+          (m) => !have.has(m.key) && !inFlight.current.has(m.key)
+        );
+        return add.length ? [...cur, ...add] : cur;
+      });
+    });
+    setRefilling(pager.isRefilling);
+    setExhausted(pager.isExhausted);
   }, []);
 
   const advance = useCallback(() => {
@@ -120,6 +132,21 @@ export function SwipeDeck({ initial }: { initial: DiscoverSwipeCard[] }) {
       return next;
     });
   }, [topUp]);
+
+  /**
+   * A swipe that did NOT persist must not count as traversed: put the card back
+   * at the top of the deck, drop the undo affordance (there is nothing to undo)
+   * and say what went wrong.
+   */
+  const restore = useCallback(
+    (card: DiscoverSwipeCard, message: string) => {
+      inFlight.current.delete(card.key);
+      setLastSwiped(null);
+      setDeck((d) => restoreCard(d, card));
+      flash(message || "That didn’t save — try again.");
+    },
+    [flash]
+  );
 
   const act = useCallback(
     async (card: DiscoverSwipeCard, direction: "like" | "pass") => {
@@ -133,8 +160,11 @@ export function SwipeDeck({ initial }: { initial: DiscoverSwipeCard[] }) {
         setLastSwiped({ card, kind: "socio" });
         const res = await recordSwipe(card.id, direction);
         inFlight.current.delete(card.key);
-        if (res.ok && res.matched)
-          setMatchName(card.profile.full_name ?? "Someone");
+        if (!res.ok) {
+          restore(card, res.error);
+          return;
+        }
+        if (res.matched) setMatchName(card.profile.full_name ?? "Someone");
       } else if (direction === "like") {
         const res = await respondToDiscoverPost(card.id);
         inFlight.current.delete(card.key);
@@ -147,13 +177,17 @@ export function SwipeDeck({ initial }: { initial: DiscoverSwipeCard[] }) {
           });
           flash(SWIPE_CONFIRMATION[card.kind]);
         } else {
-          setLastSwiped(null);
-          flash(res.error);
+          restore(card, res.error);
+          return;
         }
       } else {
         setLastSwiped({ card, kind: "intent", direction: "pass", responseId: null });
-        await passDiscoverPost(card.id);
+        const res = await passDiscoverPost(card.id);
         inFlight.current.delete(card.key);
+        if (res && !res.ok) {
+          restore(card, res.error);
+          return;
+        }
       }
 
       // Now that the decision is persisted, if that was the last card, refill.
@@ -162,8 +196,20 @@ export function SwipeDeck({ initial }: { initial: DiscoverSwipeCard[] }) {
         return d;
       });
     },
-    [advance, topUp, flash]
+    [advance, topUp, flash, restore]
   );
+
+  // The deck can empty while the sources still have pages left (an early page
+  // that was entirely duplicates, or a refill that lost a race). Keep asking
+  // until either cards arrive or the pager declares itself exhausted — the
+  // pager's empty-round guard is what makes this terminate.
+  useEffect(() => {
+    if (deck.length > 0 || exhausted || refilling) return;
+    // Scheduled rather than called inline: the refill sets state, and an effect
+    // body that does so synchronously cascades renders.
+    const t = setTimeout(() => void topUp(), 0);
+    return () => clearTimeout(t);
+  }, [deck.length, exhausted, refilling, topUp]);
 
   // Clear pending timers if the deck unmounts mid-window.
   useEffect(() => {
@@ -180,9 +226,7 @@ export function SwipeDeck({ initial }: { initial: DiscoverSwipeCard[] }) {
     if (undoTimer.current) clearTimeout(undoTimer.current);
     setMatchName(null);
     setToast(null);
-    setDeck((d) =>
-      d.some((c) => c.key === entry.card.key) ? d : [entry.card, ...d]
-    );
+    setDeck((d) => restoreCard(d, entry.card));
     if (entry.kind === "socio") await undoSwipe(entry.card.id);
     else if (entry.direction === "pass") await unpassDiscoverPost(entry.card.id);
     else if (entry.responseId) await cancelDiscoverResponse(entry.responseId);
@@ -204,7 +248,23 @@ export function SwipeDeck({ initial }: { initial: DiscoverSwipeCard[] }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [top, sheetFor, matchName, reportFor, detailFor, act]);
 
+  // An empty deck is NOT the same as an empty campus. While either feed may
+  // still have something — or a refill is in flight — this is a loading state;
+  // only the pager's authoritative exhaustion earns "You're all caught up".
   if (!top) {
+    if (!exhausted || refilling) {
+      return (
+        <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
+          <div
+            className="mb-3 h-8 w-8 animate-spin rounded-full border-2 border-fg-muted/30 border-t-fg-muted"
+            aria-hidden
+          />
+          <p className="text-fg-muted" role="status">
+            Finding more people&hellip;
+          </p>
+        </div>
+      );
+    }
     return (
       <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
         <RotateCcw className="mb-3 h-8 w-8 text-fg-muted" aria-hidden />

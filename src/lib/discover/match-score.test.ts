@@ -5,6 +5,7 @@ import {
   interestsTerm,
   sharedInterestCount,
   rollBatchYear,
+  MATCH_WEIGHTS,
   MATCH_SCORE_MIN,
   MATCH_SCORE_MAX,
   type MatchScoreInput,
@@ -13,14 +14,12 @@ import {
 /** A pair sharing nothing and matching on no categorical signal. */
 const strangerA: MatchScoreInput = {
   interests: ["Cricket"],
-  gender: "male",
   department: "Fast School of Computing",
   semester: 4,
   batchYear: 22,
 };
 const strangerB: MatchScoreInput = {
   interests: ["Poetry"],
-  gender: "male",
   department: "Fast School of Computing",
   semester: 6,
   batchYear: 21,
@@ -43,23 +42,23 @@ describe("sharedInterestCount", () => {
 });
 
 describe("interestsTerm", () => {
-  it("gives 7 per shared interest up to the plateau of 6", () => {
+  it("gives 9 per shared interest up to the plateau of 6", () => {
     expect(interestsTerm(0)).toBe(0);
-    expect(interestsTerm(1)).toBe(7);
-    expect(interestsTerm(6)).toBe(42);
+    expect(interestsTerm(1)).toBe(9);
+    expect(interestsTerm(6)).toBe(54);
   });
 
   it("keeps rising past 6 but with diminishing returns", () => {
-    expect(interestsTerm(12)).toBeCloseTo(46, 6);
-    expect(interestsTerm(24)).toBeCloseTo(48, 6);
+    expect(interestsTerm(12)).toBeCloseTo(59.5, 6);
+    expect(interestsTerm(24)).toBeCloseTo(62.25, 6);
     expect(interestsTerm(30)).toBeGreaterThan(interestsTerm(24));
   });
 
-  it("never reaches its 50-point ceiling, however many interests are ticked", () => {
+  it("never reaches its 65-point ceiling, however many interests are ticked", () => {
     // The whole point: ticking all 40 interests must not max the dominant term.
-    expect(interestsTerm(40)).toBeLessThan(50);
-    expect(interestsTerm(1000)).toBeLessThan(50);
-    expect(interestsTerm(40)).toBeLessThan(49);
+    expect(interestsTerm(40)).toBeLessThan(65);
+    expect(interestsTerm(1000)).toBeLessThan(65);
+    expect(interestsTerm(40)).toBeLessThan(64);
   });
 
   it("is monotonically non-decreasing", () => {
@@ -70,25 +69,23 @@ describe("interestsTerm", () => {
 });
 
 describe("matchScore weighting", () => {
-  it("scores the worked example at 94", () => {
-    // 8 shared interests, opposite gender, same semester, different school, same batch.
+  it("scores the worked example at 92", () => {
+    // 8 shared interests, same semester, different school, same batch.
     const a: MatchScoreInput = {
       interests: ["a", "b", "c", "d", "e", "f", "g", "h"],
-      gender: "female",
       department: "Fast School of Computing",
       semester: 4,
       batchYear: 22,
     };
     const b: MatchScoreInput = {
       interests: ["a", "b", "c", "d", "e", "f", "g", "h"],
-      gender: "male",
       department: "Fast School of Management",
       semester: 4,
       batchYear: 22,
     };
-    // interests 42 + 8*2/8 = 44, +15 gender, +13 semester, +12 school, +10 batch
-    expect(rawMatchScore(a, b)).toBeCloseTo(94, 6);
-    expect(matchScore(a, b)).toBe(94);
+    // interests 54 + 11*2/8 = 56.75, +13 semester, +12 school, +10 batch
+    expect(rawMatchScore(a, b)).toBeCloseTo(91.75, 6);
+    expect(matchScore(a, b)).toBe(92);
   });
 
   it("favours a DIFFERENT school over the same one", () => {
@@ -105,28 +102,33 @@ describe("matchScore weighting", () => {
     expect(cross - same).toBe(12);
   });
 
-  it("makes interests the dominant signal — roughly half the total weight", () => {
-    // The four categorical signals sum to 50, and the interests term's ceiling is
-    // also 50: interests alone carry half the scale, per the runbook's "roughly half".
-    const allCategoricals = 15 + 13 + 12 + 10;
-    expect(allCategoricals).toBe(50);
-    // It approaches that ceiling without ever reaching it (asserted above), so the
-    // dominance claim is "asymptotically equal to all categoricals combined".
-    expect(interestsTerm(1000)).toBeGreaterThan(allCategoricals - 1);
-    expect(interestsTerm(1000)).toBeLessThan(allCategoricals);
-    // And no single categorical signal comes close to a solid interest overlap.
-    expect(interestsTerm(6)).toBeGreaterThan(15 + 13 + 12);
+  it("makes interests dominant — 65 of the 100 points", () => {
+    // The three categorical signals sum to 35; the interests ceiling is 65, so the
+    // weights still total 100 after the +15 opposite-gender term was removed.
+    const allCategoricals =
+      MATCH_WEIGHTS.sameSemester +
+      MATCH_WEIGHTS.differentSchool +
+      MATCH_WEIGHTS.sameBatch;
+    expect(allCategoricals).toBe(35);
+    const interestsCeiling =
+      MATCH_WEIGHTS.interestsBase * MATCH_WEIGHTS.interestsPlateau +
+      MATCH_WEIGHTS.interestsBonus;
+    expect(interestsCeiling).toBe(65);
+    expect(interestsCeiling + allCategoricals).toBe(100);
+    // The term approaches its ceiling without ever reaching it.
+    expect(interestsTerm(1e6)).toBeGreaterThan(interestsCeiling - 1);
+    expect(interestsTerm(1e6)).toBeLessThan(interestsCeiling);
+    // And every categorical signal combined is worth less than six shared interests.
+    expect(interestsTerm(6)).toBeGreaterThan(allCategoricals);
   });
 
   it("awards nothing for a signal missing on either side", () => {
     const known: MatchScoreInput = {
-      gender: "male",
       department: "X",
       semester: 4,
       batchYear: 22,
     };
     const unknown: MatchScoreInput = {
-      gender: null,
       department: null,
       semester: null,
       batchYear: null,
@@ -134,10 +136,38 @@ describe("matchScore weighting", () => {
     expect(rawMatchScore(known, unknown)).toBe(0);
   });
 
-  it("ignores a gender value that is neither male nor female", () => {
-    const a: MatchScoreInput = { gender: "male" };
-    const b: MatchScoreInput = { gender: "prefer not to say" };
-    expect(rawMatchScore(a, b)).toBe(0);
+  it("does not read gender at all", () => {
+    // The +15 "opposite gender" term is gone. Gender-aware behaviour lives only in
+    // the pacing policy (gender-pacing.ts), which cannot touch the percentage.
+    expect(Object.keys(MATCH_WEIGHTS)).not.toContain("oppositeGender");
+    expect(JSON.stringify(MATCH_WEIGHTS)).not.toMatch(/gender/i);
+  });
+
+  it("scores identically whatever gender the two profiles carry", () => {
+    const shape: MatchScoreInput = {
+      interests: ["a", "b", "c"],
+      department: "X",
+      semester: 4,
+      batchYear: 22,
+    };
+    const other: MatchScoreInput = {
+      interests: ["a", "b", "c"],
+      department: "Y",
+      semester: 4,
+      batchYear: 22,
+    };
+    const expected = matchScore(shape, other);
+    // Gender is not even part of MatchScoreInput any more; smuggling one in
+    // through a spread must still leave the score untouched.
+    const genders = ["male", "female", "prefer_not_to_say", null, "??"];
+    for (const ga of genders) {
+      for (const gb of genders) {
+        const a = { ...shape, gender: ga } as MatchScoreInput;
+        const b = { ...other, gender: gb } as MatchScoreInput;
+        expect(matchScore(a, b)).toBe(expected);
+        expect(rawMatchScore(a, b)).toBe(rawMatchScore(shape, other));
+      }
+    }
   });
 });
 
@@ -146,12 +176,11 @@ describe("matchScore contract", () => {
     expect(matchScore(strangerA, strangerB)).toBe(MATCH_SCORE_MIN);
     const maxed: MatchScoreInput = {
       interests: Array.from({ length: 500 }, (_, i) => `i${i}`),
-      gender: "female",
       department: "X",
       semester: 4,
       batchYear: 22,
     };
-    const maxedOther: MatchScoreInput = { ...maxed, gender: "male", department: "Y" };
+    const maxedOther: MatchScoreInput = { ...maxed, department: "Y" };
     const top = matchScore(maxed, maxedOther);
     expect(top).toBeLessThanOrEqual(MATCH_SCORE_MAX);
     expect(top).toBeGreaterThan(90);
@@ -163,14 +192,12 @@ describe("matchScore contract", () => {
         const score = matchScore(
           {
             interests: Array.from({ length: s }, (_, i) => `i${i}`),
-            gender: "male",
             department: "X",
             semester: 4,
             batchYear: 22,
           },
           {
             interests: Array.from({ length: s }, (_, i) => `i${i}`),
-            gender: cross ? "female" : "male",
             department: cross ? "Y" : "X",
             semester: 4,
             batchYear: 22,
@@ -186,14 +213,12 @@ describe("matchScore contract", () => {
     expect(matchScore(strangerA, strangerB)).toBe(matchScore(strangerB, strangerA));
     const a: MatchScoreInput = {
       interests: ["a", "b"],
-      gender: "female",
       department: "X",
       semester: 2,
       batchYear: 23,
     };
     const b: MatchScoreInput = {
       interests: ["b", "c"],
-      gender: "male",
       department: "Y",
       semester: 2,
       batchYear: 23,
