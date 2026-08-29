@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { setChatBadge } from "@/lib/chat/badge-store";
+import { fetchChatBadge } from "@/lib/chat/badge-count";
+import { useRealtimeChannel } from "@/lib/realtime/use-realtime-channel";
+import { usePushSignal } from "@/lib/push/use-push-signal";
 
 /**
  * Keeps the dock's chat badge (unread DMs + pending requests) live on every
@@ -10,12 +13,12 @@ import { setChatBadge } from "@/lib/chat/badge-store";
  *
  * This used to call `router.refresh()` on every message/request event, which
  * re-rendered the whole server tree for the current route to update one number.
- * Now it re-runs just the two count queries itself and pushes the result into
- * the badge store, so a burst of messages costs two `head: true` counts and a
- * single dock re-render instead of a full RSC round trip per event.
+ * It then re-ran two count queries itself; it now makes ONE `chat_badge_count()`
+ * RPC call (migration 0166), which is driven from the caller's conversations
+ * instead of scanning `messages` and letting RLS filter the result.
  *
- * RLS scopes both counts to the caller exactly as it did server-side, so the
- * number can't differ from what the server would have computed.
+ * The recount is scoped by `auth.uid()` inside the function, so the number can't
+ * differ from what the server would have computed.
  */
 export function DockRealtime({
   userId,
@@ -26,11 +29,6 @@ export function DockRealtime({
    *  value doesn't cause a pointless re-render. */
   initialBadge?: number;
 }) {
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const channelRef = useRef<ReturnType<
-    ReturnType<typeof createClient>["channel"]
-  > | null>(null);
-
   // The store outlives any single render (it is module state), so re-seed it
   // whenever the server hands us a freshly computed count. Otherwise a stale
   // realtime value from an earlier session would keep overriding the server's.
@@ -38,42 +36,33 @@ export function DockRealtime({
     if (initialBadge !== undefined) setChatBadge(initialBadge);
   }, [initialBadge]);
 
+  const recount = useCallback(async () => {
+    const badge = await fetchChatBadge(createClient(), userId);
+    setChatBadge(badge.total);
+  }, [userId]);
+
+  // Coalesce a burst of events (a message INSERT plus the conversations trigger
+  // UPDATE plus a read receipt, say) into one recount.
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleRecount = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => void recount(), 350);
+  }, [recount]);
   useEffect(() => {
-    const supabase = createClient();
-
-    async function recount() {
-      const [{ count: unread }, { count: pending }] = await Promise.all([
-        supabase
-          .from("messages")
-          .select("id", { count: "exact", head: true })
-          .neq("sender_id", userId)
-          .is("read_at", null),
-        supabase
-          .from("message_requests")
-          .select("id", { count: "exact", head: true })
-          .eq("recipient_id", userId)
-          .eq("status", "pending"),
-      ]);
-      setChatBadge((unread ?? 0) + (pending ?? 0));
-    }
-
-    // Coalesce a burst of events (a message insert plus the conversations
-    // trigger update, say) into one recount.
-    const scheduleRecount = () => {
+    return () => {
       if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => {
-        void recount();
-      }, 350);
     };
+  }, []);
 
-    (async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (session) supabase.realtime.setAuth(session.access_token);
-
-      const channel = supabase
-        .channel(`chat-dock:${userId}`)
+  useRealtimeChannel({
+    name: `chat-dock:${userId}`,
+    label: "chat dock",
+    // On (re)subscribe, focus/visibility resume, `online`, and from the polling
+    // fallback. A badge that is silently one behind is the most visible symptom
+    // of a dropped event, so it recounts at every recovery point.
+    onCatchUp: () => void recount(),
+    build: (channel) =>
+      channel
         // RLS scopes delivery to messages/requests this user can see, so an
         // unfiltered subscription only ever carries rows relevant to them.
         .on(
@@ -85,21 +74,12 @@ export function DockRealtime({
           "postgres_changes",
           { event: "*", schema: "public", table: "message_requests" },
           scheduleRecount
-        )
-        .subscribe((status, err) => {
-          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || err) {
-            console.error("[chat] dock realtime subscription failed", status, err);
-          }
-        });
+        ),
+  });
 
-      channelRef.current = channel;
-    })();
-
-    return () => {
-      if (timer.current) clearTimeout(timer.current);
-      if (channelRef.current) supabase.removeChannel(channelRef.current);
-    };
-  }, [userId]);
+  // A push means the app was almost certainly backgrounded, so the socket was
+  // not there to receive the INSERT that should have moved this number.
+  usePushSignal(() => void recount());
 
   return null;
 }

@@ -20,9 +20,12 @@ import { timed } from "@/lib/perf";
  * URL selects, and the inbox itself) so they stream in together — the inbox is
  * a fan-out of a dozen queries and is by far the slowest thing here.
  *
- * `InboxRealtime` is gone: the list component now owns its own data and
- * re-reads only the inbox when realtime fires, instead of asking the router to
- * refresh the entire tree.
+ * The realtime listener is NOT here. `<InboxRealtime/>` is mounted from the
+ * student layout, so it keeps receiving while the user is inside a conversation
+ * or anywhere else in the app; this page's payload only seeds the list, which
+ * renders whichever of {payload, store snapshot} is actually fresher. An event
+ * still costs one targeted inbox re-read rather than a router refresh of the
+ * whole tree.
  */
 export default function ChatPage({
   searchParams,

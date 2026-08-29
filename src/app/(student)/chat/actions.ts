@@ -30,6 +30,66 @@ export async function fetchOlderMessages(
 }
 
 /**
+ * Catch-up read: every message in a conversation NEWER than `cursor`.
+ *
+ * `postgres_changes` has no replay, so anything published while the socket was
+ * down — a backgrounded PWA, a tunnel, a WebSocket the network ate — is simply
+ * gone, and nothing in the thread ever went looking for it. `fetchOlderMessages`
+ * above only pages backwards, so there was no way to close a FORWARD gap short
+ * of a full reload. Called on mount, on every (re)subscribe, on focus/visibility
+ * resume, on `online`, and from the polling fallback.
+ *
+ * THE CURSOR IS A PAIR, NOT A TIMESTAMP. Asking for `created_at > since` drops
+ * any row written in the same microsecond as the newest one already on screen —
+ * two messages sent in the same instant, which is exactly what a burst looks
+ * like. The cursor is `(created_at, id)` and the predicate is the lexicographic
+ * "greater than" on that pair, which is a total order over the table's rows and
+ * therefore cannot skip one.
+ *
+ * A null cursor means the caller has nothing server-backed on screen (an empty
+ * conversation). That is NOT a reason to skip the read — it is the case where a
+ * first incoming message is most likely to have been missed — so it falls back
+ * to the latest page, the same read the page itself does.
+ *
+ * RLS scopes rows to conversation participants exactly as the initial page read
+ * does, and `hidden` moderated messages stay excluded to match it.
+ */
+export async function fetchNewerMessages(
+  conversationId: string,
+  cursor: { createdAt: string; id: string } | null
+) {
+  const supabase = await createClient();
+  // Bounded on purpose. A thread that missed more than this while away is
+  // better served by the page's own read on the next navigation than by
+  // streaming an unbounded backlog into client state.
+  const limit = MESSAGE_PAGE_SIZE * 2;
+
+  if (!cursor) {
+    const { data } = await supabase
+      .from("messages")
+      .select("*")
+      .eq("conversation_id", conversationId)
+      .eq("hidden", false)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    return ((data ?? []) as unknown[]).slice().reverse();
+  }
+
+  const { data } = await supabase
+    .from("messages")
+    .select("*")
+    .eq("conversation_id", conversationId)
+    .eq("hidden", false)
+    .or(
+      `created_at.gt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.gt.${cursor.id})`
+    )
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true })
+    .limit(limit);
+  return (data ?? []) as unknown[];
+}
+
+/**
  * Accept or decline an incoming message request. RLS restricts updates to the
  * recipient, so we additionally scope by recipient_id = auth.uid(). An accepted
  * request becomes a conversation in Phase 3 (Chat).
@@ -105,7 +165,10 @@ export async function sendMessage(
   conversationId: string,
   body: string,
   attachment?: Attachment
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; message: { id: string; created_at: string } }
+  | { ok: false; error: string }
+> {
   const supabase = await createClient();
   // Local JWT verification — no Auth API round trip on this hot path.
   const userId = await getAuthUserId();
@@ -127,15 +190,38 @@ export async function sendMessage(
   );
   if (!allowed) return { ok: false, error: "You're sending too fast." };
 
-  const { error } = await supabase.from("messages").insert({
-    conversation_id: conversationId,
-    sender_id: userId,
-    body: text || null,
-    attachment_url: attachment?.url ?? null,
-    attachment_type: attachment?.type ?? null,
-  });
-  if (error) return { ok: false, error: error.message };
-  return { ok: true };
+  // `.select()` so the caller gets the row's real id and timestamp back. That
+  // id is what reconciles the optimistic bubble: the thread used to pair a
+  // pending bubble with its authoritative row by comparing BODY TEXT, which
+  // mis-paired them whenever someone sent the same short message twice in a
+  // row, leaving a duplicate on screen. Returning the id makes the match exact
+  // and costs nothing — the row has already been written.
+  const { data, error } = await supabase
+    .from("messages")
+    .insert({
+      conversation_id: conversationId,
+      sender_id: userId,
+      body: text || null,
+      attachment_url: attachment?.url ?? null,
+      attachment_type: attachment?.type ?? null,
+    })
+    .select("id, created_at")
+    .single();
+  if (error || !data)
+    return { ok: false, error: error?.message ?? "Could not send that message." };
+
+  // NOTE ON CACHE INVALIDATION — there is deliberately no `revalidatePath("/chat")`
+  // here, and that is a considered choice rather than an omission. It would
+  // re-render a server tree on the hottest path in the app, to fix one list on
+  // a route the sender is not even looking at. It is also unnecessary now: the
+  // sender's own INSERT reaches <InboxRealtime/> in the student layout, which is
+  // subscribed from every screen INCLUDING inside this thread, re-reads just the
+  // inbox and publishes it to the shared store. That also fixes the RECIPIENT's
+  // inbox, which no amount of cache invalidation on the sender's request could.
+  return {
+    ok: true,
+    message: { id: data.id as string, created_at: data.created_at as string },
+  };
 }
 
 export type MatchedFriend = {

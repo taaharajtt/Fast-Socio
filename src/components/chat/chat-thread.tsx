@@ -49,9 +49,22 @@ import {
   type SharedPostPreview,
 } from "@/components/chat/shared-post-preview";
 import {
+  useRealtimeChannel,
+  useVisibilityRefresh,
+} from "@/lib/realtime/use-realtime-channel";
+import {
+  dropOptimistic,
+  mergeMessage,
+  mergeMessages,
+  newestServerCursor,
+  resolveOptimistic,
+  type MessageCursor,
+} from "@/lib/chat/message-merge";
+import {
   sendMessage,
   markConversationRead,
   fetchOlderMessages,
+  fetchNewerMessages,
   editMessage,
   deleteMessage,
   toggleMessageReaction,
@@ -67,6 +80,13 @@ const QUICK_EMOJIS = ["❤️", "😂", "🔥", "👍", "😮", "😢", "🙏"];
 // caps at ~5-6 lines before it scrolls internally.
 const MIN_TEXTAREA_HEIGHT = 40;
 const MAX_TEXTAREA_HEIGHT = 144;
+/**
+ * At most one `mark_conversation_read` RPC per this many ms. The RPC marks the
+ * WHOLE conversation, so calling it once per inbound message — as this
+ * component used to — bought nothing and cost a round trip plus an UPDATE
+ * broadcast back down every subscriber's socket each time.
+ */
+const MARK_READ_THROTTLE_MS = 3_000;
 
 function formatRecordingTime(totalSeconds: number): string {
   const m = Math.floor(totalSeconds / 60);
@@ -316,10 +336,25 @@ export function ChatThread({
   const listRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const channelRef = useRef<ReturnType<
-    ReturnType<typeof createClient>["channel"]
-  > | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
+  /** tempId -> how to retry that failed optimistic send. Keyed by the bubble on
+   *  screen, so a discarded bubble takes its retry with it. */
+  const retriesRef = useRef<Map<string, () => Promise<void>>>(new Map());
+  /**
+   * How many of MY sends are waiting on their server action response.
+   *
+   * Reconciling an optimistic bubble now happens off the action's returned id
+   * rather than in the INSERT handler, which means the two can race: if the
+   * socket delivers my own row before the action returns, both the bubble and
+   * the real row would be on screen for that window and the message would flash
+   * twice. So an own INSERT is SKIPPED while a send of mine is in flight — the
+   * response is about to place that exact row by rebranding the bubble.
+   *
+   * Skipping cannot lose a message. If the response never arrives, the row is
+   * newer than the catch-up cursor (which only tracks rows actually on screen),
+   * so the next subscribe/resume/poll fetches it.
+   */
+  const pendingSendsRef = useRef(0);
   const chunksRef = useRef<Blob[]>([]);
   // Set when the user discards a take, so onstop skips the upload/send.
   const cancelledRef = useRef(false);
@@ -341,19 +376,117 @@ export function ChatThread({
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPress = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Realtime: new messages, edits/deletes/read updates, and typing broadcasts.
+  /**
+   * The cursor a catch-up asks for rows after: the newest SERVER-BACKED row on
+   * screen, as a `(created_at, id)` pair. Kept in a ref so the catch-up callback
+   * can read it without being re-created — and therefore without resubscribing
+   * the channel — on every incoming message.
+   */
+  const cursorRef = useRef<MessageCursor | null>(
+    newestServerCursor(initialMessages)
+  );
   useEffect(() => {
-    const supabase = createClient();
-    (async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (session) supabase.realtime.setAuth(session.access_token);
+    cursorRef.current = newestServerCursor(messages);
+  }, [messages]);
 
-      const channel = supabase
-        .channel(`conv:${conversationId}`, {
-          config: { broadcast: { self: false } },
-        })
+  /**
+   * Read receipts, throttled.
+   *
+   * `markConversationRead` used to fire once per inbound INSERT, so receiving a
+   * burst of ten messages meant ten server actions, each an RPC round trip, and
+   * each publishing UPDATEs that came straight back down the socket. The RPC is
+   * idempotent and marks the whole conversation, so one call per window is
+   * exactly as correct and an order of magnitude cheaper.
+   */
+  const lastMarkReadAt = useRef(0);
+  const markReadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleMarkRead = useCallback(() => {
+    if (markReadTimer.current) return;
+    const elapsed = Date.now() - lastMarkReadAt.current;
+    const wait = Math.max(0, MARK_READ_THROTTLE_MS - elapsed);
+    markReadTimer.current = setTimeout(() => {
+      markReadTimer.current = null;
+      lastMarkReadAt.current = Date.now();
+      markConversationRead(conversationId);
+    }, wait);
+  }, [conversationId]);
+
+  useEffect(() => {
+    return () => {
+      if (markReadTimer.current) clearTimeout(markReadTimer.current);
+    };
+  }, []);
+
+  /** Mirrors `messages` for callbacks that must not resubscribe the channel.
+   *  Written in an effect: the React Compiler rejects a ref write in render. */
+  const messagesRef = useRef(messages);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  /**
+   * Re-read reactions for every message on screen. Only used when a reaction
+   * DELETE arrives without a `message_id` — see the handler below.
+   */
+  const refreshVisibleReactions = useCallback(async () => {
+    const supabase = createClient();
+    const ids = messagesRef.current
+      .map((m) => m.id)
+      .filter((id) => !id.startsWith("temp-"));
+    if (ids.length === 0) return;
+    const { data } = await supabase
+      .from("message_reactions")
+      .select("message_id, emoji, user_id")
+      .in("message_id", ids);
+    const next: Record<string, Reaction[]> = {};
+    for (const id of ids) next[id] = [];
+    for (const r of data ?? []) {
+      (next[r.message_id] ??= []).push({ emoji: r.emoji, user_id: r.user_id });
+    }
+    setReactions(next);
+  }, []);
+
+  /**
+   * Catch-up read. `postgres_changes` cannot replay, so anything published
+   * while this socket was down — a backgrounded PWA, a tunnel, a WebSocket the
+   * network ate — is recoverable only by asking for it. Runs on mount, on every
+   * (re)subscribe, on focus/visibility resume, on `online`, and from the polling
+   * fallback, and normally returns zero rows.
+   */
+  const catchUp = useCallback(async () => {
+    try {
+      // A null cursor means an empty conversation. That is NOT a reason to skip
+      // — the action falls back to the latest page, because an empty thread is
+      // precisely where a first incoming message is most likely to be missed.
+      const rows = (await fetchNewerMessages(
+        conversationId,
+        cursorRef.current
+      )) as ChatMessage[];
+      if (rows.length === 0) return;
+      setMessages((prev) => mergeMessages(prev, rows));
+      for (const m of rows) if (m.attachment_url) signAttachment(m);
+      // Recovered messages from the other side are unread by definition, and
+      // the thread is open, so they must be marked — throttled like every other
+      // read receipt.
+      if (rows.some((m) => m.sender_id !== meId)) scheduleMarkRead();
+    } catch {
+      // Leave what is on screen; the next resume, event or poll tries again.
+    }
+  }, [conversationId, meId, signAttachment, scheduleMarkRead]);
+
+  // Realtime: new messages, edits/deletes/read updates, and typing broadcasts.
+  //
+  // The subscription goes through `useRealtimeChannel`, which owns the race-free
+  // teardown, the reconnect/focus catch-up and the polling fallback that this
+  // effect used to lack entirely.
+  const channelRef = useRealtimeChannel({
+    name: `conv:${conversationId}`,
+    // Static: the conversation id must never reach telemetry.
+    label: "chat thread",
+    channelOptions: { config: { broadcast: { self: false } } },
+    onCatchUp: () => void catchUp(),
+    build: (channel) =>
+      channel
         .on(
           "postgres_changes",
           {
@@ -364,32 +497,16 @@ export function ChatThread({
           },
           (payload) => {
             const m = payload.new as ChatMessage;
-            setMessages((prev) => {
-              if (prev.some((x) => x.id === m.id)) return prev;
-              // Reconcile my optimistic bubble: the authoritative row replaces
-              // the first matching temp message instead of duplicating it.
-              if (m.sender_id === meId) {
-                const tempIdx = prev.findIndex((x) =>
-                  x.id.startsWith("temp-")
-                    ? m.attachment_type
-                      ? // Image temp: match by kind (body is empty on both).
-                        x.attachment_type === m.attachment_type &&
-                        x._localSrc != null
-                      : x.body === m.body
-                    : false
-                );
-                if (tempIdx >= 0) {
-                  const next = [...prev];
-                  // Carry the local preview onto the real row so the bubble
-                  // doesn't flash to a placeholder while its signed URL resolves.
-                  next[tempIdx] = { ...m, _localSrc: prev[tempIdx]._localSrc };
-                  return next;
-                }
-              }
-              return [...prev, m];
-            });
+            // Dedupe by id and keep the list in (created_at, id) order.
+            // Reconciling MY OWN optimistic bubble is not done here any more —
+            // it happens off `sendMessage`'s returned id, which cannot mis-pair
+            // two identical messages the way body-text matching did. While one
+            // of my sends is still out, its row is left to that response rather
+            // than merged here alongside the bubble it belongs to.
+            if (m.sender_id === meId && pendingSendsRef.current > 0) return;
+            setMessages((prev) => mergeMessage(prev, m));
             if (m.attachment_url) signAttachment(m);
-            if (m.sender_id !== meId) markConversationRead(conversationId);
+            if (m.sender_id !== meId) scheduleMarkRead();
           }
         )
         .on(
@@ -401,7 +518,7 @@ export function ChatThread({
             filter: `conversation_id=eq.${conversationId}`,
           },
           (payload) => {
-            // Take the whole row, not just read_at: an UPDATE now also carries
+            // Take the whole row, not just read_at: an UPDATE also carries
             // edits and soft-deletes (UAT-009), which the old handler dropped.
             const m = payload.new as ChatMessage;
             setMessages((prev) =>
@@ -413,36 +530,42 @@ export function ChatThread({
           "postgres_changes",
           { event: "*", schema: "public", table: "message_reactions" },
           (payload) => {
-            // Reactions carry no conversation_id, so we can't filter server-side.
-            // RLS already limits delivery to our conversations; re-read the one
-            // affected message's reactions (works for INSERT/UPDATE/DELETE alike).
+            // Reactions carry no conversation_id, so we cannot filter
+            // server-side. RLS already limits delivery to our conversations;
+            // re-read the affected message's reactions.
+            //
+            // On DELETE, `payload.old` carries ONLY the primary key unless the
+            // table is REPLICA IDENTITY FULL — and no migration in this repo
+            // sets that — so `message_id` is absent and removing a reaction
+            // never refreshed for the other party. Rather than widen the WAL
+            // for every reaction row, fall back to a bounded authoritative
+            // re-read of the reactions for the messages currently on screen.
             const row = (payload.new ?? payload.old) as { message_id?: string };
-            if (row?.message_id) refreshReactions(row.message_id);
+            if (row?.message_id) {
+              refreshReactions(row.message_id);
+            } else if (payload.eventType === "DELETE") {
+              refreshVisibleReactions();
+            }
           }
         )
         .on("broadcast", { event: "typing" }, () => {
           setOtherTyping(true);
           if (typingTimeout.current) clearTimeout(typingTimeout.current);
           typingTimeout.current = setTimeout(() => setOtherTyping(false), 2500);
-        })
-        .subscribe((status, err) => {
-          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || err) {
-            console.error(
-              `[chat] thread realtime subscription failed for conversation ${conversationId}`,
-              status,
-              err
-            );
-          }
-        });
+        }),
+  });
 
-      channelRef.current = channel;
-    })();
-
+  // Opening the thread is a read. Subsequent marks are throttled above.
+  useEffect(() => {
     markConversationRead(conversationId);
-    return () => {
-      if (channelRef.current) supabase.removeChannel(channelRef.current);
-    };
-  }, [conversationId, meId, signAttachment, refreshReactions]);
+    lastMarkReadAt.current = Date.now();
+  }, [conversationId]);
+
+  // Belt-and-braces alongside the channel's own catch-up: a resume that does
+  // NOT resubscribe (the socket survived being backgrounded) fires no
+  // SUBSCRIBED, but messages may still have arrived while the tab was hidden.
+  // `onMount: false` — the channel's first SUBSCRIBED already covers mount.
+  useVisibilityRefresh(() => void catchUp(), { onMount: false });
 
   // Scroll the MESSAGE LIST container directly instead of scrollIntoView —
   // scrollIntoView walks every scrollable ancestor (including the page behind
@@ -472,7 +595,9 @@ export function ChatThread({
       event: "typing",
       payload: { userId: meId },
     });
-  }, [meId]);
+    // `channelRef` is the stable ref the shared hook returns; listed because the
+    // lint rule cannot see that a hook return value is a ref.
+  }, [meId, channelRef]);
 
   // Returns the storage PATH (not a URL): chat-media is private, so messages
   // store the path and the app resolves a signed URL at read time (P5-01).
@@ -536,28 +661,78 @@ export function ChatThread({
     };
     setMessages((prev) => [...prev, temp]);
 
-    const path = `${conversationId}/${crypto.randomUUID()}.${extension}`;
-    try {
-      await uploadWithProgress("chat-media", path, blob, { contentType: mimeType });
-    } catch {
+    // A failed image send must be RECOVERABLE, not a permanent temp row: the
+    // retry closure is kept so the bubble can offer "Retry", and the bubble can
+    // always be discarded. Neither leaves an unsendable row behind for good.
+    const attempt = async () => {
       setMessages((prev) =>
-        prev.map((m) => (m.id === tempId ? { ...m, _uploadStatus: "error" } : m))
+        prev.map((m) =>
+          m.id === tempId ? { ...m, _uploadStatus: "uploading" } : m
+        )
       );
-      return;
-    }
+      const path = `${conversationId}/${crypto.randomUUID()}.${extension}`;
+      try {
+        await uploadWithProgress("chat-media", path, blob, {
+          contentType: mimeType,
+        });
+      } catch {
+        failMessage(tempId, attempt);
+        return;
+      }
 
-    const res = await sendMessage(conversationId, "", { url: path, type: "image" });
-    if (!res.ok) {
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      URL.revokeObjectURL(localSrc);
-      setError(res.error);
+      pendingSendsRef.current += 1;
+      const res = await sendMessage(conversationId, "", {
+        url: path,
+        type: "image",
+      }).finally(() => {
+        pendingSendsRef.current -= 1;
+      });
+      if (!res.ok) {
+        setError(res.error);
+        failMessage(tempId, attempt);
+        return;
+      }
+      // Reconcile by the id the insert actually got, keeping the local preview
+      // so the bubble does not flash to a placeholder while its signed URL
+      // resolves. If the realtime INSERT beat this round trip the bubble is
+      // dropped (its preview carried onto the real row) rather than duplicated
+      // — see `resolveOptimistic`.
+      retriesRef.current.delete(tempId);
+      setMessages((prev) =>
+        resolveOptimistic(prev, tempId, {
+          id: res.message.id,
+          created_at: res.message.created_at,
+          attachment_url: path,
+          _uploadStatus: "sent",
+        })
+      );
+    };
+    await attempt();
+  }
+
+  /** Park an optimistic bubble in the failed state and remember how to retry. */
+  function failMessage(tempId: string, retry: () => Promise<void>) {
+    retriesRef.current.set(tempId, retry);
+    setMessages((prev) =>
+      prev.map((m) => (m.id === tempId ? { ...m, _uploadStatus: "error" } : m))
+    );
+  }
+
+  /** Drop a failed optimistic bubble for good, releasing its object URL. */
+  function discardFailed(m: ChatMessage) {
+    retriesRef.current.delete(m.id);
+    if (m._localSrc) URL.revokeObjectURL(m._localSrc);
+    setMessages((prev) => dropOptimistic(prev, m.id));
+  }
+
+  function retryFailed(m: ChatMessage) {
+    const retry = retriesRef.current.get(m.id);
+    if (!retry) {
+      discardFailed(m);
       return;
     }
-    // Mark sent; the realtime INSERT then swaps in the authoritative row (which
-    // carries the local preview forward until its signed URL resolves).
-    setMessages((prev) =>
-      prev.map((m) => (m.id === tempId ? { ...m, _uploadStatus: "sent" } : m))
-    );
+    setError(null);
+    void retry();
   }
 
   async function onSendText(e: React.FormEvent) {
@@ -582,12 +757,27 @@ export function ChatThread({
     };
     setMessages((prev) => [...prev, temp]);
     setDraft("");
-    const res = await sendMessage(conversationId, text);
+    pendingSendsRef.current += 1;
+    const res = await sendMessage(conversationId, text).finally(() => {
+      pendingSendsRef.current -= 1;
+    });
     if (!res.ok) {
-      setMessages((prev) => prev.filter((m) => m.id !== temp.id));
+      // The bubble goes away and the text goes back in the composer, so the
+      // send is retried by pressing send again — nothing unsendable is left on
+      // screen.
+      setMessages((prev) => dropOptimistic(prev, temp.id));
       setDraft(text);
       setError(res.error);
+      return;
     }
+    // Reconciled by id, not by body text: sending the same short message twice
+    // used to pair the second row with the first bubble and leave a duplicate.
+    setMessages((prev) =>
+      resolveOptimistic(prev, temp.id, {
+        id: res.message.id,
+        created_at: res.message.created_at,
+      })
+    );
   }
 
   /** Discard the take: stop the recorder but skip the upload in onstop. */
@@ -1060,9 +1250,26 @@ export function ChatThread({
                         Uploading…
                       </>
                     ) : m._uploadStatus === "error" ? (
+                      // A failed send is recoverable rather than a stuck temp
+                      // row: retry re-runs the upload and insert, discard drops
+                      // the bubble and releases its object URL.
                       <>
                         <span aria-hidden>·</span>
                         Failed to send
+                        <button
+                          type="button"
+                          onClick={() => retryFailed(m)}
+                          className="focus-ring rounded font-semibold text-fg underline underline-offset-2"
+                        >
+                          Retry
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => discardFailed(m)}
+                          className="focus-ring rounded text-fg-muted underline underline-offset-2"
+                        >
+                          Discard
+                        </button>
                       </>
                     ) : (
                       m.id === (lastReadMine ?? lastMineId) && (

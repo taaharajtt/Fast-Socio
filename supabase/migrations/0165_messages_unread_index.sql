@@ -1,0 +1,87 @@
+-- =============================================================================
+-- FAST SOCIO — Index the unread-message probe (DM realtime work, Phase 6)
+--
+-- WHY
+-- The dock's chat badge counts unread DMs like this (src/app/(student)/layout.tsx
+-- and again in the browser from <DockRealtime/>):
+--
+--   select count(*) from messages where sender_id <> $me and read_at is null
+--
+-- Note what is NOT in that predicate: anything scoping the query to the caller.
+-- Scoping is left entirely to the RLS policy "participants read conversation
+-- messages" (0006_chat.sql, rewritten by 0032_rls_initplan_perf.sql), which is
+-- an EXISTS against `conversations`.
+--
+-- That is correct, and it is also the slowest possible shape. Across every
+-- migration up to 0164 there is exactly one index on `messages`:
+--
+--   messages_conversation_idx on public.messages (conversation_id, created_at)
+--
+-- Nothing indexes `read_at`. So the planner's best available route is to find
+-- every row in the WHOLE TABLE with read_at is null and evaluate the policy's
+-- sub-select for each one. The work scales with the app's total unread volume,
+-- not with the asking user's — and this query runs in the student layout on
+-- every hard page load, and again on every realtime message event for every
+-- connected client. Today the table is small and this is invisible; it gets
+-- worse precisely as the app succeeds, which is the wrong time to find out.
+--
+-- WHAT THIS DOES
+-- A partial index over unread rows only. `read_at is null` is highly selective
+-- in the steady state (most messages get read), so the index stays a small
+-- fraction of the table, and leading with `conversation_id` lets the planner
+-- feed both the RLS EXISTS and the conversation-driven RPC in 0166 directly
+-- instead of filtering afterwards.
+--
+-- `sender_id` is INCLUDEd so the `sender_id <> $me` half is answered from the
+-- index without a heap fetch. It is deliberately NOT a leading column: `<>` is
+-- not an equality predicate and cannot drive an index scan.
+--
+-- The same index serves the inbox's per-conversation unread read in
+-- src/app/(student)/chat/inbox-data.ts, which filters
+-- `conversation_id in (...) and sender_id <> me and read_at is null`.
+--
+-- WHAT THIS DOES NOT DO
+-- This makes the existing query cheap; migration 0166 is what makes it the
+-- right SHAPE, by driving the count from `conversations` (where the caller IS
+-- an indexed column) rather than scanning `messages`. This index is the half
+-- that is safe on its own, with no code change.
+--
+-- LOCKING NOTE FOR A LARGE TABLE
+-- A plain CREATE INDEX takes a SHARE lock and blocks writes to `messages` for
+-- the duration of the build. That is the right trade at this table's current
+-- size and it matches every other index in this repo, none of which uses
+-- CONCURRENTLY. If `messages` has grown enough that a brief write pause is not
+-- acceptable, run this statement by hand instead, outside the migration:
+--
+--   create index concurrently if not exists messages_unread_idx
+--     on public.messages (conversation_id) include (sender_id)
+--     where read_at is null;
+--
+-- CREATE INDEX CONCURRENTLY cannot run inside a transaction block, and the
+-- migration runner wraps statements in one, which is why it is not used here.
+-- A failed CONCURRENTLY build leaves an INVALID index behind rather than
+-- rolling back; check and clean up before retrying:
+--
+--   select indexrelid::regclass, indisvalid
+--     from pg_index where indrelid = 'public.messages'::regclass;
+--   drop index concurrently if exists public.messages_unread_idx;  -- if invalid
+--
+-- VERIFY (as the authenticated role — as superuser RLS is bypassed and the plan
+-- looks fine no matter what):
+--
+--   begin;
+--   set local role authenticated;
+--   set local request.jwt.claims = '{"sub":"<REAL-USER-UUID>","role":"authenticated"}';
+--   explain (analyze, buffers)
+--     select count(*) from messages
+--      where sender_id <> auth.uid() and read_at is null;
+--   rollback;
+--
+-- Expect the sequential scan on `messages` to disappear and `shared read`
+-- buffers to drop, against the same plan captured before this ran.
+-- =============================================================================
+
+create index if not exists messages_unread_idx
+  on public.messages (conversation_id)
+  include (sender_id)
+  where read_at is null;

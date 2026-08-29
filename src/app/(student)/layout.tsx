@@ -6,12 +6,14 @@ import { FloatingDock } from "@/components/floating-dock";
 import { PushAutoEnable } from "@/components/push/push-auto-enable";
 import { PresenceHeartbeat } from "@/components/presence/heartbeat";
 import { DockRealtime } from "@/components/chat/dock-realtime";
+import { InboxRealtime } from "@/components/chat/inbox-realtime";
 import { AnnouncementModal } from "@/components/notifications/announcement-modal";
 import { ExternalLinkInterceptor } from "@/components/ui/external-link-interceptor";
 import { RouteFallback } from "@/components/ui/route-fallback";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { getMaintenanceState, resolveFlags } from "@/lib/flags";
+import { fetchChatBadge } from "@/lib/chat/badge-count";
 import { timed } from "@/lib/perf";
 import { resolveAvatarUrl } from "@/lib/avatar";
 
@@ -110,8 +112,7 @@ async function StudentShell() {
     { data: profile },
     maintenance,
     flags,
-    { count: unreadMsgs },
-    { count: pendingReqs },
+    badge,
     { data: announcements },
   ] = await timed("layout:shell", () =>
     Promise.all([
@@ -122,16 +123,10 @@ async function StudentShell() {
       .single(),
     getMaintenanceState(),
     resolveFlags(["discover", "events", "leaderboard"]),
-    supabase
-      .from("messages")
-      .select("id", { count: "exact", head: true })
-      .neq("sender_id", userId)
-      .is("read_at", null),
-    supabase
-      .from("message_requests")
-      .select("id", { count: "exact", head: true })
-      .eq("recipient_id", userId)
-      .eq("status", "pending"),
+    // ONE call (mig 0166) instead of two counts, one of which had no predicate
+    // scoping it to the caller and left RLS to filter a whole-table scan. Same
+    // helper the dock's realtime recount uses, so the two can never disagree.
+    fetchChatBadge(supabase, userId),
     // UAT-012: broadcasts are delivered as a modal on a cold open, not as a row
     // buried in Activity. Unread = not yet dismissed.
     supabase
@@ -190,13 +185,18 @@ async function StudentShell() {
     !flags.leaderboard && "/leaderboard",
   ].filter((h): h is string => Boolean(h));
 
-  const chatBadge = (unreadMsgs ?? 0) + (pendingReqs ?? 0);
+  const chatBadge = badge.total;
 
   return (
     <>
       {/* Keeps the dock's chat badge (unread DMs + pending requests) live on
           every student screen, not just after a navigation. */}
       <DockRealtime userId={userId} initialBadge={chatBadge} />
+      {/* The DM inbox's listener. It lives HERE, not on /chat, so it keeps
+          receiving while the student is inside a conversation or anywhere else
+          in the app — the channel used to be torn down on navigation and every
+          event that arrived meanwhile was lost, with no replay to recover it. */}
+      <InboxRealtime userId={userId} />
       <AnnouncementModal
         announcements={(announcements ?? []).map((a) => ({
           id: a.id as string,
