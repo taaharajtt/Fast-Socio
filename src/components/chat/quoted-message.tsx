@@ -30,7 +30,14 @@ export function QuotedMessage({
   const body = (
     <span
       className={cn(
-        "flex min-w-0 flex-col gap-0.5 rounded-xl border-l-2 px-2.5 py-1.5 text-left",
+        // `w-full`, not shrink-to-fit: the column around the bubble is
+        // `items-end`/`items-start`, so without an explicit width the quote
+        // sized itself to its own text and sat narrower (or wider) than the
+        // bubble beneath it. Full width resolves against that column, which
+        // is as wide as the widest child — i.e. the bubble — so the quote and
+        // the message it answers share one edge on both sides, incoming and
+        // outgoing alike.
+        "flex w-full min-w-0 flex-col gap-0.5 rounded-xl border-l-2 px-2.5 py-1.5 text-left",
         mine
           ? "border-white/60 bg-white/15 text-white/85"
           : "border-fg-subtle/50 bg-fill text-fg-muted",
