@@ -39,7 +39,12 @@ export default async function TablePage({
   const meta = metaData as TableMeta;
 
   const pageNum = Math.max(0, Number.parseInt(page ?? "0", 10) || 0);
-  const { data: rowsData } = await supabase.rpc("admin_table_rows", {
+  // admin_browser_table_rows, not admin_table_rows: the wrapper (migration
+  // 0160) refuses to read tables holding private DM content or report evidence.
+  // 0149 guarded this browser's writes and left reads alone, which left
+  // admin_table_rows('messages') working as a DM browser with ilike search over
+  // every text column — the exact capability Phase 2 removes everywhere else.
+  const { data: rowsData, error: rowsErr } = await supabase.rpc("admin_browser_table_rows", {
     p_table: table,
     p_limit: PAGE_SIZE,
     p_offset: pageNum * PAGE_SIZE,
@@ -68,6 +73,14 @@ export default async function TablePage({
         </Link>
       </div>
 
+      {rowsErr ? (
+        <p
+          role="alert"
+          className="rounded-[4px] border border-glass-border px-4 py-3 text-sm text-fg-muted"
+        >
+          {rowsErr.message}
+        </p>
+      ) : (
       <TableBrowser
         table={table}
         columns={meta.columns}
@@ -83,6 +96,7 @@ export default async function TablePage({
         dir={dir === "desc" ? "desc" : "asc"}
         indexes={meta.indexes}
       />
+      )}
     </>
   );
 }

@@ -29,9 +29,15 @@ export default async function AdminMatchingPage() {
     supabase.from("swipes").select("swiper_id", { count: "exact", head: true }),
     supabase.from("message_requests").select("id", { count: "exact", head: true }).eq("status", "pending"),
     supabase.from("matches").select("id, user_low, user_high, created_at").order("created_at", { ascending: false }).limit(30),
+    // `message` is deliberately NOT selected. It is the opening line of a DM —
+    // private user text — and this page is a matching dashboard, not a
+    // moderation surface. Selecting it here would serialise it into the RSC
+    // payload and into a client component's props, which is the same
+    // unrestricted-DM-content exposure Phase 2 removed everywhere else.
+    // Moderating a message request goes through a user report instead.
     supabase
       .from("message_requests")
-      .select("id, sender_id, recipient_id, message, status, created_at")
+      .select("id, sender_id, recipient_id, status, created_at")
       .eq("status", "pending")
       .order("created_at", { ascending: false })
       .limit(30),
@@ -102,7 +108,6 @@ export default async function AdminMatchingPage() {
                   id: r.id,
                   sender: nm(r.sender_id),
                   recipient: nm(r.recipient_id),
-                  message: r.message,
                   status: r.status,
                   createdAt: `${r.created_at.slice(0, 16).replace("T", " ")} UTC`,
                 }}

@@ -18,13 +18,20 @@ import {
   MESSAGE_PAGE_SIZE,
 } from "@/lib/chat-media";
 import { presignDownload } from "@/lib/s3/sign";
+import { ThreadMenu } from "@/components/chat/thread-menu";
 
 export default async function ConversationPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ report?: string }>;
 }) {
   const { id } = await params;
+  // ?report=1 is how the header menu hands "Report messages" to the thread —
+  // read here and passed as a prop rather than via useSearchParams in the
+  // client component, which would need its own Suspense boundary under PPR.
+  const { report } = await searchParams;
   const supabase = await createClient();
   // Verified locally from the JWT — no Auth API round trip; RLS is authoritative.
   const me = (await getAuthUserId())!;
@@ -178,6 +185,7 @@ export default async function ConversationPage({
             </p>
           </div>
         </Link>
+        <ThreadMenu conversationId={id} />
       </header>
 
       <ChatThread
@@ -191,6 +199,8 @@ export default async function ConversationPage({
         showReadReceipts={
           (other as { read_receipts?: boolean } | null)?.read_receipts !== false
         }
+        otherName={other?.full_name ?? null}
+        reportParam={report ?? null}
       />
     </div>
   );

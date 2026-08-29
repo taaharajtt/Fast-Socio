@@ -10,6 +10,7 @@ import {
   CalendarDays,
   ScrollText,
   MessageSquareWarning,
+  MessageSquareLock,
   Megaphone,
   Zap,
   Heart,
@@ -33,6 +34,9 @@ const NAV: NavItem[] = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard, match: "/admin" },
   { href: "/admin/content", label: "Content", icon: MessageSquareWarning, match: "/admin/content" },
   { href: "/admin/reports?type=profile", label: "Reports", icon: Flag, match: "/admin/reports" },
+  // The only route from the console to a private message, and it shows only
+  // what a participant deliberately disclosed (migrations 0160/0161).
+  { href: "/admin/dm-reports", label: "DM reports", icon: MessageSquareLock, match: "/admin/dm-reports" },
   { href: "/admin/users", label: "Users", icon: Users, match: "/admin/users" },
   { href: "/admin/communities", label: "Communities", icon: Boxes, match: "/admin/communities" },
   { href: "/admin/events", label: "Events", icon: CalendarDays, match: "/admin/events" },

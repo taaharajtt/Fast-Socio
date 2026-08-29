@@ -6,9 +6,19 @@ import { getAdminContext } from "@/lib/admin/access";
 
 type Result = { error: string } | { ok: true };
 
-export type ContentType = "post" | "comment" | "message" | "community";
+/**
+ * One-to-one DM messages are deliberately absent from this list.
+ *
+ * The content browser used to moderate them like any other object, which meant
+ * any moderator could hide or hard-delete an arbitrary private message with no
+ * report behind it — and the delete path snapshotted the row, body included,
+ * into the audit log. Migration 0160 removed the `'message'` branch from both
+ * RPCs below, so passing it now raises. A DM is acted on only from the case
+ * that disclosed it: see `src/app/admin/dm-reports/actions.ts`.
+ */
+export type ContentType = "post" | "comment" | "community";
 
-/** Soft-hide / unhide a post, comment, or message (audited). */
+/** Soft-hide / unhide a post, comment, or community chat message (audited). */
 export async function setHidden(
   type: ContentType,
   id: string,
@@ -36,18 +46,5 @@ export async function deleteContent(type: ContentType, id: string): Promise<Resu
   });
   if (error) return { error: error.message };
   revalidatePath("/admin/content");
-  return { ok: true };
-}
-
-/** Delete a single DM message from a conversation transcript (audited). */
-export async function deleteMessage(id: string, conversationId: string): Promise<Result> {
-  await getAdminContext();
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("admin_delete_content", {
-    p_type: "message",
-    p_id: id,
-  });
-  if (error) return { error: error.message };
-  revalidatePath(`/admin/content/dm/${conversationId}`);
   return { ok: true };
 }

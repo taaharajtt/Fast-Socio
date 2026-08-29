@@ -47,7 +47,9 @@ export function MatchRow({
 export function RequestRow({
   request,
 }: {
-  request: { id: string; sender: string; recipient: string; message: string | null; status: string; createdAt: string };
+  // No `message` field: the opening message of a DM is private user text and
+  // never reaches this component. See the query in matching/page.tsx.
+  request: { id: string; sender: string; recipient: string; status: string; createdAt: string };
 }) {
   const { pending, err, run } = useAction();
   return (
@@ -57,7 +59,6 @@ export function RequestRow({
           {request.sender} <span className="text-fg-muted">→</span> {request.recipient}
           <Tag>{request.status}</Tag>
         </p>
-        {request.message && <p className="mt-1 line-clamp-2 text-sm text-fg-muted">{request.message}</p>}
         <p className="mt-1 font-mono text-[11px] text-fg-muted">{request.createdAt}</p>
         {err && <p className="font-mono text-[11px] text-error">{err}</p>}
       </div>

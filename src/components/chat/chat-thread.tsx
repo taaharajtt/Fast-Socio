@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Camera,
   Check,
@@ -17,6 +18,16 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import {
+  MAX_REPORT_MESSAGES,
+  canDisclose,
+  undisclosableReason,
+} from "@/lib/chat/dm-report";
+import {
+  ReportFiled,
+  ReportReview,
+  type ReviewMessage,
+} from "@/components/chat/report-review";
 import { GlassButton, GlassSheet } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
 import { resolveAvatarUrl } from "@/lib/avatar";
@@ -40,7 +51,6 @@ import {
 import {
   sendMessage,
   markConversationRead,
-  reportMessage,
   fetchOlderMessages,
   editMessage,
   deleteMessage,
@@ -89,13 +99,6 @@ export type ChatMessage = {
 
 export type { SharedPostPreview };
 
-const REPORT_REASONS = [
-  "Harassment or hate",
-  "Inappropriate content",
-  "Spam or scam",
-  "Other",
-];
-
 export function ChatThread({
   conversationId,
   meId,
@@ -105,6 +108,8 @@ export function ChatThread({
   initialSignedAttachments = {},
   initialReactions = {},
   showReadReceipts = true,
+  otherName = null,
+  reportParam = null,
 }: {
   conversationId: string;
   meId: string;
@@ -117,6 +122,11 @@ export function ChatThread({
   initialReactions?: Record<string, Reaction[]>;
   /** Whether the other participant reveals read receipts (privacy, Phase 8). */
   showReadReceipts?: boolean;
+  /** The other participant's display name, for labelling report evidence. */
+  otherName?: string | null;
+  /** The `?report` search param. The thread menu sets it to open selection
+   *  mode; ChatThread clears it when selection ends. */
+  reportParam?: string | null;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [signedAttachments, setSignedAttachments] = useState<
@@ -131,8 +141,30 @@ export function ChatThread({
   // Selected-but-not-yet-cropped image (UAT-011): opens the ImageCropper
   // dialog before anything touches chat-media.
   const [pendingFile, setPendingFile] = useState<File | null>(null);
-  const [reportId, setReportId] = useState<string | null>(null);
   const [actionsFor, setActionsFor] = useState<ChatMessage | null>(null);
+  // Selective reporting (Phase 3): pick 1-10 messages, review, file. `selecting`
+  // suppresses the thread's normal tap/long-press affordances so a tap means
+  // "select" and nothing else.
+  const [selecting, setSelecting] = useState(reportParam === "1");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [reviewing, setReviewing] = useState(false);
+  const [filedReportId, setFiledReportId] = useState<string | null>(null);
+  const [selectionNotice, setSelectionNotice] = useState<string | null>(null);
+  const router = useRouter();
+
+  // The header menu opens selection by navigating to ?report=1, which is a SOFT
+  // navigation: this component stays mounted, so `useState(reportParam === "1")`
+  // above only ever reflects the value at first mount. This is React's
+  // documented "adjust state when a prop changes" pattern — a render-phase
+  // update, not an effect, so selection opens in the same paint and it does not
+  // trip the repo's set-state-in-effect lint rule.
+  const [seenReportParam, setSeenReportParam] = useState(reportParam);
+  if (reportParam !== seenReportParam) {
+    setSeenReportParam(reportParam);
+    setSelecting(reportParam === "1");
+    setSelectedIds([]);
+    setSelectionNotice(null);
+  }
   const [forwardFor, setForwardFor] = useState<ChatMessage | null>(null);
   const [reactions, setReactions] =
     useState<Record<string, Reaction[]>>(initialReactions);
@@ -619,10 +651,61 @@ export function ChatThread({
     }
   }
 
-  async function submitReport(reason: string) {
-    if (!reportId) return;
-    await reportMessage(reportId, reason);
-    setReportId(null);
+  /** Enter selection mode, optionally seeding it with one message. */
+  function startSelecting(seed?: ChatMessage) {
+    setActionsFor(null);
+    setSelectionNotice(null);
+    setSelectedIds(seed && canDisclose(seed) ? [seed.id] : []);
+    setSelecting(true);
+  }
+
+  function exitSelecting() {
+    setSelecting(false);
+    setSelectedIds([]);
+    setReviewing(false);
+    setSelectionNotice(null);
+    // Drop ?report=1 so a refresh or a back-forward does not silently reopen
+    // selection mode.
+    if (reportParam) router.replace(`/chat/${conversationId}`);
+  }
+
+  /** Toggle one message in the selection, explaining any refusal. */
+  function toggleSelected(m: ChatMessage) {
+    const blocked = undisclosableReason(m);
+    if (blocked) {
+      setSelectionNotice(blocked);
+      return;
+    }
+    setSelectedIds((prev) => {
+      if (prev.includes(m.id)) {
+        setSelectionNotice(null);
+        return prev.filter((id) => id !== m.id);
+      }
+      if (prev.length >= MAX_REPORT_MESSAGES) {
+        setSelectionNotice(
+          `You can report up to ${MAX_REPORT_MESSAGES} messages at a time.`
+        );
+        return prev;
+      }
+      setSelectionNotice(null);
+      return [...prev, m.id];
+    });
+  }
+
+  /** The selection, in thread order, shaped for the review step. Built from the
+   *  loaded messages so the reporter reviews exactly what they saw. */
+  function selectedForReview(): ReviewMessage[] {
+    const chosen = new Set(selectedIds);
+    return messages
+      .filter((m) => chosen.has(m.id))
+      .map((m) => ({
+        id: m.id,
+        body: m.body,
+        attachment_type: m.attachment_type,
+        shared_post_id: m.shared_post_id,
+        created_at: m.created_at,
+        senderLabel: m.sender_id === meId ? "You" : (otherName ?? "Them"),
+      }));
   }
 
   async function submitEdit() {
@@ -673,6 +756,9 @@ export function ChatThread({
 
   /** Long-press (touch) or right-click opens the per-message action sheet. */
   function pressHandlers(m: ChatMessage) {
+    // In selection mode a tap means "select"; the long-press action sheet and
+    // the double-tap reaction would both fight it.
+    if (selecting) return {};
     // No actions on deleted or still-sending (optimistic) messages.
     if (m.deleted_at || m.id.startsWith("temp-")) return {};
     const open = () => setActionsFor(m);
@@ -778,10 +864,30 @@ export function ChatThread({
                   <span className="h-px flex-1 bg-accent/40" aria-hidden />
                 </div>
               )}
-              <div className={cn("flex", mine ? "justify-end" : "justify-start")}>
+              <div
+                className={cn(
+                  "flex items-center gap-2",
+                  mine ? "justify-end" : "justify-start"
+                )}
+              >
+                {selecting && (
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(m.id)}
+                    disabled={!canDisclose(m)}
+                    onChange={() => toggleSelected(m)}
+                    aria-label={`Select message from ${
+                      mine ? "you" : (otherName ?? "them")
+                    } at ${absoluteTime(m.created_at)}${
+                      canDisclose(m) ? "" : " (cannot be reported)"
+                    }`}
+                    className="focus-ring h-5 w-5 shrink-0 accent-[var(--color-accent)] disabled:opacity-30"
+                  />
+                )}
                 <div
                   {...(deleted ? {} : pressHandlers(m))}
-                  onDoubleClick={() => !deleted && react(m.id, "❤️")}
+                  onClick={selecting ? () => toggleSelected(m) : undefined}
+                  onDoubleClick={() => !selecting && !deleted && react(m.id, "❤️")}
                   className={cn(
                     "relative max-w-[78%] text-[15px]",
                     // UAT-002 / fix-037: media (image or shared post) already has
@@ -799,7 +905,9 @@ export function ChatThread({
                           : "glass rounded-bl-md cursor-pointer text-fg",
                     // Unread-on-open incoming messages get an accent ring so they
                     // stand out from everything already read.
-                    isNew && !deleted && "ring-1 ring-accent/50"
+                    isNew && !deleted && "ring-1 ring-accent/50",
+                    selecting && !canDisclose(m) && "opacity-40",
+                    selecting && selectedIds.includes(m.id) && "ring-2 ring-accent"
                   )}
                 >
                   {deleted ? (
@@ -994,7 +1102,36 @@ export function ChatThread({
         </p>
       )}
 
-      {editing ? (
+      {selecting ? (
+        <div className="sticky bottom-0 space-y-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
+          {/* Announced whenever the count or a refusal changes, so a screen
+              reader user hears the limit rather than silently hitting it. */}
+          <p aria-live="polite" className="px-1 text-xs text-fg-muted">
+            {selectionNotice ??
+              `${selectedIds.length} of ${MAX_REPORT_MESSAGES} selected`}
+          </p>
+          <div className="flex gap-2">
+            <GlassButton
+              type="button"
+              variant="secondary"
+              onClick={exitSelecting}
+              className="flex-1"
+            >
+              Cancel
+            </GlassButton>
+            <GlassButton
+              type="button"
+              variant="danger"
+              disabled={selectedIds.length < 1}
+              onClick={() => setReviewing(true)}
+              className="flex-1"
+            >
+              Continue
+              {selectedIds.length > 0 ? ` (${selectedIds.length})` : ""}
+            </GlassButton>
+          </div>
+        </div>
+      ) : editing ? (
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -1302,14 +1439,11 @@ export function ChatThread({
                 ) : (
                   <button
                     type="button"
-                    onClick={() => {
-                      setReportId(a.id);
-                      setActionsFor(null);
-                    }}
+                    onClick={() => startSelecting(a)}
                     className="glass flex w-full items-center gap-3 rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm text-error"
                   >
                     <Flag className="h-4 w-4" aria-hidden />
-                    Report message
+                    Report messages
                   </button>
                 )}
               </div>
@@ -1323,24 +1457,34 @@ export function ChatThread({
         onError={setError}
       />
 
-      <GlassSheet open={Boolean(reportId)} onClose={() => setReportId(null)}>
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <Flag className="h-5 w-5 text-error" aria-hidden />
-            <h3 className="text-lg font-bold">Report message</h3>
-          </div>
-          {REPORT_REASONS.map((r) => (
-            <button
-              key={r}
-              type="button"
-              onClick={() => submitReport(r)}
-              className="glass flex w-full items-center rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm text-fg"
-            >
-              {r}
-            </button>
-          ))}
-        </div>
-      </GlassSheet>
+      {/* Selective reporting replaces the old one-tap "report this message"
+          sheet. That sheet filed a report carrying a reason and a message id
+          and nothing else, so a moderator received a complaint with no
+          evidence they were allowed to look at — and the only way to see the
+          message was the DM transcript browser, which no longer exists. */}
+      {reviewing && (
+        <ReportReview
+          conversationId={conversationId}
+          messages={selectedForReview()}
+          onClose={() => setReviewing(false)}
+          onSubmitted={(id) => {
+            setReviewing(false);
+            setSelecting(false);
+            setSelectedIds([]);
+            setFiledReportId(id);
+          }}
+        />
+      )}
+
+      {filedReportId && (
+        <ReportFiled
+          reportId={filedReportId}
+          onClose={() => {
+            setFiledReportId(null);
+            if (reportParam) router.replace(`/chat/${conversationId}`);
+          }}
+        />
+      )}
     </div>
   );
 }
