@@ -1,5 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
-import { notificationView } from "@/lib/notifications/view";
+import {
+  activityVisibleTypeList,
+  notificationView,
+} from "@/lib/notifications/view";
 import { timeAgo } from "@/lib/time";
 import { resolveAvatarUrl } from "@/lib/avatar";
 import {
@@ -17,14 +20,6 @@ type NotifRow = {
   created_at: string;
 };
 
-const BELL_EXCLUDED_TYPES = [
-  "message",
-  "message_request",
-  "message_request_accepted",
-  "message_reaction",
-  "announcement",
-];
-
 /**
  * Bell with an unread-count dot and an inline dropdown of recent notifications
  * (Figma prototype). Data is fetched server-side; the dropdown itself is a
@@ -33,25 +28,26 @@ const BELL_EXCLUDED_TYPES = [
  */
 export async function NotificationBell() {
   const supabase = await createClient();
+  const visible = activityVisibleTypeList();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // The bell is the Activity entry point, so it mirrors the panel: messages and
-  // message requests are excluded here (they live in Chat, with their own dock
-  // badge) and only surface as mobile push.
+  // The bell is the Notifications entry point, so it mirrors the page exactly:
+  // the same ACTIVITY_VISIBLE_TYPES allow-list drives both the count and the
+  // list, so the dot can never point at a row the dropdown refuses to show.
   const [{ count }, { data: rows }] = await Promise.all([
     supabase
       .from("notifications_live")
       .select("id", { count: "exact", head: true })
       .eq("user_id", user!.id)
       .is("read_at", null)
-      .not("type", "in", `(${BELL_EXCLUDED_TYPES.join(",")})`),
+      .in("type", visible),
     supabase
       .from("notifications_live")
       .select("id, actor_id, type, data, group_count, read_at, created_at")
       .eq("user_id", user!.id)
-      .not("type", "in", `(${BELL_EXCLUDED_TYPES.join(",")})`)
+      .in("type", visible)
       .order("created_at", { ascending: false })
       .limit(6),
   ]);

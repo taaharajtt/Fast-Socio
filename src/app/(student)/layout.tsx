@@ -14,6 +14,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { getMaintenanceState, resolveFlags } from "@/lib/flags";
 import { fetchChatBadge } from "@/lib/chat/badge-count";
+import { fetchCommunityBadge } from "@/lib/community/badge-count";
 import { timed } from "@/lib/perf";
 import { resolveAvatarUrl } from "@/lib/avatar";
 
@@ -97,9 +98,12 @@ export default function StudentLayout({
  * Everything about the shell that depends on WHO is asking. Streams in after the
  * static shell has painted, so none of it delays a navigation.
  *
- * One parallel stage covers the gate data plus the three counts that don't
- * depend on it; the events badge needs `events_seen_at` from the profile row, so
- * it follows in a second, single-query stage. Both are off the critical path.
+ * ONE parallel stage covers everything. It used to be two: the events badge
+ * needed `events_seen_at` off the profile row, so it ran afterwards as a second
+ * sequential round trip. That whole count now lives inside
+ * `community_badge_count()` (migration 0170), which reads the mark itself — so
+ * the layout's shell is a single Promise.all again and the second stage is gone
+ * rather than merely moved.
  */
 async function StudentShell() {
   const supabase = await createClient();
@@ -113,20 +117,24 @@ async function StudentShell() {
     maintenance,
     flags,
     badge,
+    communityBadge,
     { data: announcements },
   ] = await timed("layout:shell", () =>
     Promise.all([
     supabase
       .from("profiles")
-      .select("avatar_url, gender, events_seen_at, admin_role")
+      .select("avatar_url, gender, admin_role")
       .eq("id", userId)
       .single(),
     getMaintenanceState(),
     resolveFlags(["discover", "events", "leaderboard"]),
-    // ONE call (mig 0166) instead of two counts, one of which had no predicate
-    // scoping it to the caller and left RLS to filter a whole-table scan. Same
-    // helper the dock's realtime recount uses, so the two can never disagree.
+    // ONE call each. Both badges go through the same helper the client would
+    // use, so a server render and a realtime recount can never disagree about
+    // what the number MEANS: chat counts unread conversations + pending
+    // requests (mig 0169), community counts grouped Community/Event/Broadcast
+    // items and never chat messages (mig 0170).
     fetchChatBadge(supabase, userId),
+    fetchCommunityBadge(supabase),
     // UAT-012: broadcasts are delivered as a modal on a cold open, not as a row
     // buried in Activity. Unread = not yet dismissed.
     supabase
@@ -164,17 +172,6 @@ async function StudentShell() {
       );
   });
 
-  // Approved, still-upcoming events published since the last /events visit. A
-  // user who has never opened /events sees every upcoming event as new.
-  const { count: newEvents } = await timed("layout:eventsBadge", () =>
-    supabase
-      .from("events")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "approved")
-      .gt("starts_at", new Date().toISOString())
-      .gt("created_at", profile?.events_seen_at ?? "1970-01-01T00:00:00Z")
-  );
-
   // Feature-flagged destinations are dropped from the dock entirely. The
   // fallback dock above shows all six, so a tab whose flag is OFF is briefly
   // visible before this render removes it — the flags fail open and are dark-
@@ -208,7 +205,11 @@ async function StudentShell() {
         }))}
       />
       <FloatingDock
-        badges={{ "/chat": chatBadge, "/events": newEvents ?? 0 }}
+        // Keyed by NAV_ITEM href. "/events" used to be passed here and read by
+        // nothing — /events is an adopted route, not a tab — so the events
+        // signal now arrives as part of the Community badge, under the key the
+        // dock actually renders.
+        badges={{ "/chat": chatBadge, "/communities": communityBadge.total }}
         avatarUrl={resolveAvatarUrl(profile?.avatar_url, profile?.gender)}
         viewerId={userId}
         hiddenHrefs={hiddenTabs}

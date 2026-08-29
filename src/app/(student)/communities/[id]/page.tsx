@@ -12,6 +12,7 @@ import {
   getJoinRequests,
 } from "@/lib/communities/relationship";
 import { getSocialProof } from "@/lib/communities/social-proof";
+import { markCommunitySpaceSeen } from "@/lib/community/seen";
 
 const ROLE_RANK: Record<CommunityMemberVM["role"], number> = {
   owner: 0,
@@ -59,6 +60,12 @@ export default async function CommunityPage({
   // (rather than 404ing) means one deep link, `/communities/<id>?tab=chat`,
   // resolves correctly for every kind of space.
   if (community.is_discover_group) redirect(`/chat/c/${id}`);
+
+  // Stamped only once this is definitely the page being rendered — after the
+  // society and Discover-room redirects above, so a redirect does not mark a
+  // space the student never actually saw. Scoped to THIS space: reading one
+  // room never silences another's badge items.
+  markCommunitySpaceSeen(id);
 
   const pending = community.status !== "approved";
   // is_society is false here by construction (societies redirect above), so

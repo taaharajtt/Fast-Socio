@@ -12,6 +12,7 @@ import {
   Award,
   ShieldAlert,
   Gavel,
+  HandHelping,
   Image as ImageIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -34,43 +35,55 @@ export type ActivityItem = {
   bucket: "Today" | "Earlier";
 };
 
-/** Badge icon overlaid on the actor avatar (or shown in the solid-purple
- *  circle for actor-less system notifications), keyed by notification type. */
+/** Badge icon overlaid on the actor avatar (or shown in the neutral circle for
+ *  actor-less system notifications). Keyed by notification type — it covers
+ *  exactly ACTIVITY_VISIBLE_TYPES, the only types this list can receive. */
 const TYPE_ICON: Record<string, LucideIcon> = {
+  // Reacts
   post_like: Heart,
   comment_like: Heart,
-  message_reaction: Heart,
+  // Comments and replies
   comment: MessageSquare,
+  comment_reply: MessageSquare,
   mention: AtSign,
-  // The bolt, not a star — it's the mark match/discover uses everywhere else.
+  // Matches and Discover — the bolt is the mark match/discover uses everywhere.
   match: Zap,
   match_post: ImageIcon,
-  message: MessageSquare,
-  message_request: UserPlus,
-  message_request_accepted: UserPlus,
-  community_post_approved: Megaphone,
-  community_post_rejected: Megaphone,
-  community_approved: Megaphone,
-  community_rejected: Megaphone,
+  matching_request: UserPlus,
+  matching_accepted: Zap,
+  smart_match_application: UserPlus,
+  smart_match_accepted: Zap,
+  smart_match_mention: AtSign,
+  // Events
   event_approved: Megaphone,
-  event_message: MessageSquare,
   event_rejected: Megaphone,
-  society_role_removed: Megaphone,
   event_organizer_added: Megaphone,
   event_organizer_removed: Megaphone,
   event_reminder: Clock,
   waitlist_promoted: Ticket,
+  // Campus Help
+  help_response: HandHelping,
+  help_offer_accepted: HandHelping,
+  help_follow: HandHelping,
+  help_thanked: HandHelping,
+  help_resolved: HandHelping,
+  // Aura and badges
   level_up: Zap,
   achievement: Award,
   aura_adjusted: Zap,
   leaderboard_top_finish: Award,
+  // Moderation and appeals
   content_moderated: ShieldAlert,
   moderation_warning: ShieldAlert,
   appeal_result: Gavel,
 };
 
-/** Notification types shown with the special solid-purple Aura icon (no actor). */
-const AURA_TYPES = new Set(["aura", "aura_milestone", "level_up", "aura_adjusted", "leaderboard_top_finish"]);
+/** Notification types shown with the special gold Aura icon (no actor). */
+const AURA_TYPES = new Set([
+  "level_up",
+  "aura_adjusted",
+  "leaderboard_top_finish",
+]);
 
 const BUCKET_ORDER = ["Today", "Earlier"] as const;
 

@@ -7,6 +7,7 @@ import { FirstRunTour } from "@/components/tour/first-run-tour";
 import { NewFeaturesTour } from "@/components/tour/new-features-tour";
 import { HomeHelpStrip } from "@/components/help/home-help-strip";
 import { createClient } from "@/lib/supabase/server";
+import { activityVisibleTypeList } from "@/lib/notifications/view";
 import { getAuthUserId } from "@/lib/auth/user";
 import { timed } from "@/lib/perf";
 import { FEED_COLUMNS, FEED_PAGE_SIZE, type FeedPost } from "@/lib/feed/types";
@@ -188,7 +189,7 @@ async function ActivityLinkWithBadge() {
     .select("id", { count: "exact", head: true })
     .eq("user_id", userId)
     .is("read_at", null)
-    .not("type", "in", "(message,message_request,announcement)");
+    .in("type", activityVisibleTypeList());
   return <ActivityLink unread={count ?? 0} />;
 }
 

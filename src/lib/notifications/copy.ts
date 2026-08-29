@@ -72,6 +72,78 @@ export const NOTIFICATION_TYPES = [
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
+/**
+ * The ONLY notification types the Notifications page and the bell/dropdown are
+ * allowed to render, grouped by the product's nine notification categories.
+ *
+ * This is an allow-list, not a deny-list: a type that is not listed here never
+ * reaches the Notifications surface, even if a future migration starts emitting
+ * it. Conversation traffic (DMs, DM requests/accepts, DM reactions, community
+ * and event chat), society/community broadcasts, and admin announcements are
+ * deliberately absent — they may still be created for push and for the Chat
+ * dock badge, but they are not activity to read on this screen.
+ */
+export const ACTIVITY_VISIBLE_TYPES = [
+  // 1. Post reacts
+  "post_like",
+  // 2. Comment reacts
+  "comment_like",
+  // 3. Comments and replies
+  "comment",
+  "comment_reply",
+  "mention",
+  // 4. Matches and Discover
+  "match",
+  "match_post",
+  "matching_request",
+  "matching_accepted",
+  "smart_match_application",
+  "smart_match_accepted",
+  "smart_match_mention",
+  // 5. Event approved / declined
+  "event_approved",
+  "event_rejected",
+  // 6. Organizer changes, reminders, waitlist promotion
+  "event_organizer_added",
+  "event_organizer_removed",
+  "event_reminder",
+  "waitlist_promoted",
+  // 7. Campus Help
+  "help_response",
+  "help_offer_accepted",
+  "help_follow",
+  "help_thanked",
+  "help_resolved",
+  // 8. Aura and badges
+  "level_up",
+  "achievement",
+  "aura_adjusted",
+  "leaderboard_top_finish",
+  // 9. Moderation and appeals
+  "content_moderated",
+  "moderation_warning",
+  "appeal_result",
+] as const satisfies readonly NotificationType[];
+
+export type ActivityVisibleType = (typeof ACTIVITY_VISIBLE_TYPES)[number];
+
+const VISIBLE_SET: ReadonlySet<string> = new Set(ACTIVITY_VISIBLE_TYPES);
+
+/** True when a type may be rendered on the Notifications page / bell. */
+export function isActivityVisibleType(value: string): value is ActivityVisibleType {
+  return VISIBLE_SET.has(value);
+}
+
+/**
+ * The allow-list as a plain (mutable) array for PostgREST `.in("type", …)`.
+ * Every query that feeds the Notifications surface — the page, the bell list,
+ * the bell count, and the dock badge — uses this, so a badge can never count a
+ * row the page refuses to show.
+ */
+export function activityVisibleTypeList(): string[] {
+  return [...ACTIVITY_VISIBLE_TYPES];
+}
+
 const TYPE_SET: ReadonlySet<string> = new Set(NOTIFICATION_TYPES);
 
 /** Boundary guard — `notifications.type` is untyped text in the database. */

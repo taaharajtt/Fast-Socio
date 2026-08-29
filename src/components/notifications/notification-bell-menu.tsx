@@ -7,7 +7,6 @@ import {
   Heart,
   MessageSquare,
   AtSign,
-  Star,
   Zap,
   Megaphone,
   UserPlus,
@@ -17,6 +16,8 @@ import {
   Clock,
   ShieldAlert,
   Gavel,
+  HandHelping,
+  Image as ImageIcon,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -32,22 +33,38 @@ export type BellItem = {
   timeAgo: string;
 };
 
-/** Small badge icon overlaid on the actor avatar, keyed by notification type. */
+/** Small badge icon overlaid on the actor avatar, keyed by notification type.
+ *  Mirrors the Notifications page: it covers exactly the types the dropdown can
+ *  receive (ACTIVITY_VISIBLE_TYPES) — chat traffic never reaches this menu. */
 const TYPE_ICON: Record<string, LucideIcon> = {
   post_like: Heart,
+  comment_like: Heart,
   comment: MessageSquare,
+  comment_reply: MessageSquare,
   mention: AtSign,
-  match: Star,
-  message: MessageSquare,
-  message_request: UserPlus,
-  community_post_approved: Megaphone,
-  community_post_rejected: Megaphone,
-  community_approved: Megaphone,
+  match: Zap,
+  match_post: ImageIcon,
+  matching_request: UserPlus,
+  matching_accepted: Zap,
+  smart_match_application: UserPlus,
+  smart_match_accepted: Zap,
+  smart_match_mention: AtSign,
   event_approved: Megaphone,
+  event_rejected: Megaphone,
+  event_organizer_added: Megaphone,
+  event_organizer_removed: Megaphone,
+  event_reminder: Clock,
+  waitlist_promoted: Ticket,
+  help_response: HandHelping,
+  help_offer_accepted: HandHelping,
+  help_follow: HandHelping,
+  help_thanked: HandHelping,
+  help_resolved: HandHelping,
   level_up: TrendingUp,
   achievement: Trophy,
-  waitlist_promoted: Ticket,
-  event_reminder: Clock,
+  aura_adjusted: TrendingUp,
+  leaderboard_top_finish: Trophy,
+  content_moderated: ShieldAlert,
   moderation_warning: ShieldAlert,
   appeal_result: Gavel,
 };

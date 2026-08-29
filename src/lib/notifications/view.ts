@@ -1,35 +1,42 @@
-﻿import {
+import {
   actorSummary,
+  isActivityVisibleType,
   isNotificationType,
   notificationCopy,
   notificationHref,
+  type ActivityVisibleType,
+} from "@/lib/notifications/copy";
+
+export {
+  ACTIVITY_VISIBLE_TYPES,
+  activityVisibleTypeList,
+  isActivityVisibleType,
+  type ActivityVisibleType,
 } from "@/lib/notifications/copy";
 
 /**
  * Notification types that are NOT tied to a specific "actor doing something to
  * you" and must never be bundled (CR-013): system events shown individually.
+ * Only types the Notifications surface actually renders appear here.
  */
-export const SYSTEM_NOTIFICATION_TYPES = new Set([
+export const SYSTEM_NOTIFICATION_TYPES = new Set<ActivityVisibleType>([
   "match",
-  "community_approved",
   "event_approved",
+  "event_rejected",
+  "event_reminder",
+  "waitlist_promoted",
   "level_up",
   "achievement",
-  "waitlist_promoted",
-  "event_reminder",
+  "aura_adjusted",
+  "leaderboard_top_finish",
   "moderation_warning",
   "appeal_result",
+  "content_moderated",
   "help_thanked",
   "help_resolved",
   "help_offer_accepted",
   "matching_accepted",
   "smart_match_accepted",
-  "community_join_approved",
-  "community_rejected",
-  "event_rejected",
-  "aura_adjusted",
-  "leaderboard_top_finish",
-  "content_moderated",
 ]);
 
 /** Short verb phrase for a groupable actor action, e.g. "liked your post". */
@@ -37,46 +44,18 @@ export function notificationActionPhrase(type: string): string {
   switch (type) {
     case "post_like":
       return "reacted to your post";
+    case "comment_like":
+      return "liked your comment";
     case "comment":
-      return "replied to your post";
+      return "commented on your post";
     case "comment_reply":
       return "replied to your comment";
     case "mention":
       return "mentioned you in a comment";
-    case "message":
-      return "sent you a message";
-    case "message_request":
-      return "sent you a message request";
     case "matching_request":
       return "wants to connect";
     case "matching_accepted":
       return "accepted your request";
-    case "help_response":
-      return "responded to your help request";
-    case "community_message":
-      return "sent a message in your community";
-    case "community_post":
-      return "posted in your community";
-    case "community_post_review":
-      return "submitted a post for review in your community";
-    case "community_join_request":
-      return "asked to join your community";
-    case "event_post_request":
-      return "wants to post in your event";
-    case "event_message":
-      return "sent a message in your event";
-    case "help_offer_accepted":
-      return "approved your offer to help";
-    case "help_follow":
-      return "is following your help request";
-    case "society_announcement":
-      return "posted a society announcement";
-    case "society_role":
-      return "made you a society officer";
-    case "community_post_approved":
-      return "approved your community post";
-    case "community_post_rejected":
-      return "rejected your community post";
     case "match_post":
       return "shared a new post";
     case "smart_match_application":
@@ -85,22 +64,16 @@ export function notificationActionPhrase(type: string): string {
       return "accepted your request";
     case "smart_match_mention":
       return "tagged you as a teammate";
-    case "comment_like":
-      return "liked your comment";
-    case "message_request_accepted":
-      return "accepted your message request";
-    case "message_reaction":
-      return "reacted to your message";
-    case "community_rejected":
-      return "declined your community request";
-    case "event_rejected":
-      return "declined your event request";
-    case "society_role_removed":
-      return "updated your society role";
     case "event_organizer_added":
       return "added you as an event co-organizer";
     case "event_organizer_removed":
       return "removed you as an event co-organizer";
+    case "help_response":
+      return "responded to your help request";
+    case "help_offer_accepted":
+      return "approved your offer to help";
+    case "help_follow":
+      return "is following your help request";
     case "aura_adjusted":
       return "adjusted your Aura score";
     case "leaderboard_top_finish":
@@ -113,99 +86,83 @@ export function notificationActionPhrase(type: string): string {
 }
 
 /**
- * Activity categories used by the Activity panel's filter chips. Each notification
- * type maps to exactly one category; "announcements" bundles all system approvals.
+ * The nine categories the Notifications page is allowed to show. Conversation
+ * traffic, community/society broadcasts and admin announcements have no
+ * category on purpose — they never reach this surface.
  */
 export type ActivityCategory =
-  | "reacts"
-  | "replies"
-  | "matches"
-  | "requests"
-  | "messages"
-  | "announcements"
-  | "other";
+  | "post_reacts"
+  | "comment_reacts"
+  | "comments"
+  | "discover"
+  | "event_decision"
+  | "event_updates"
+  | "help"
+  | "aura"
+  | "moderation";
 
 export const ACTIVITY_CATEGORY_LABEL: Record<ActivityCategory, string> = {
-  reacts: "Reacts",
-  replies: "Replies",
-  matches: "Matches",
-  requests: "Requests",
-  messages: "Messages",
-  announcements: "Announcements",
-  other: "Other",
+  post_reacts: "Post reacts",
+  comment_reacts: "Comment reacts",
+  comments: "Comments and replies",
+  discover: "Matches and Discover",
+  event_decision: "Event decisions",
+  event_updates: "Event updates",
+  help: "Campus Help",
+  aura: "Aura and badges",
+  moderation: "Moderation and appeals",
 };
 
-/** Which Activity filter a notification type belongs to. */
-export function notificationCategory(type: string): ActivityCategory {
+/**
+ * Which category a notification belongs to, or `null` when the type must not
+ * appear on the Notifications page at all.
+ */
+export function notificationCategory(type: string): ActivityCategory | null {
+  if (!isActivityVisibleType(type)) return null;
   switch (type) {
     case "post_like":
+      return "post_reacts";
     case "comment_like":
-    case "message_reaction":
-      return "reacts";
+      return "comment_reacts";
     case "comment":
     case "comment_reply":
     case "mention":
-      return "replies";
+      return "comments";
     case "match":
     case "match_post":
-    case "message_request_accepted":
-      return "matches";
-    case "message_request":
     case "matching_request":
-      return "requests";
     case "matching_accepted":
-    case "smart_match_accepted":
-      return "matches";
     case "smart_match_application":
+    case "smart_match_accepted":
     case "smart_match_mention":
-      return "requests";
-    case "message":
-      return "messages";
-    case "community_approved":
-    case "community_rejected":
+      return "discover";
     case "event_approved":
     case "event_rejected":
-    case "community_post_approved":
-    case "community_post_rejected":
-    case "society_announcement":
-    case "society_role":
-    case "society_role_removed":
+      return "event_decision";
     case "event_organizer_added":
     case "event_organizer_removed":
-    case "content_moderated":
-      return "announcements";
-    case "waitlist_promoted":
     case "event_reminder":
-    case "moderation_warning":
-    case "appeal_result":
-      return "announcements";
+    case "waitlist_promoted":
+      return "event_updates";
+    case "help_response":
+    case "help_offer_accepted":
+    case "help_follow":
+    case "help_thanked":
+    case "help_resolved":
+      return "help";
     case "level_up":
     case "achievement":
     case "aura_adjusted":
     case "leaderboard_top_finish":
-      return "other";
-    case "help_response":
-    case "help_follow":
-    case "help_thanked":
-    case "help_resolved":
-    case "help_offer_accepted":
-      return "other";
-    case "community_message":
-      return "messages";
-    case "community_post":
-      return "announcements";
-    case "community_post_review":
-      return "requests";
-    case "community_join_request":
-      return "requests";
-    case "community_join_approved":
-      return "announcements";
-    case "event_post_request":
-      return "requests";
-    case "event_message":
-      return "messages";
-    default:
-      return "other";
+      return "aura";
+    case "content_moderated":
+    case "moderation_warning":
+    case "appeal_result":
+      return "moderation";
+    default: {
+      const never: never = type;
+      throw new Error(`Uncategorised notification type: ${String(never)}`);
+    }
   }
 }
 

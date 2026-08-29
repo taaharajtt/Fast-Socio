@@ -13,6 +13,7 @@ import type { ChatRoomCardVM } from "@/components/communities/chat-room-card";
 import type { JoinState } from "@/app/(student)/communities/actions";
 import { onlineSinceIso } from "@/lib/time";
 import { ScreenHeader } from "@/components/ui";
+import { markCommunityHubSeen } from "@/lib/community/seen";
 
 type CommunityLite = {
   id: string;
@@ -100,6 +101,13 @@ async function CommunitySubtext() {
 async function CommunitySections() {
   const supabase = await createClient();
   const me = (await getAuthUserId())!;
+
+  // Opening the hub clears the hub-level Community badge items (new spaces,
+  // memberships you were approved into, your own approvals) and the events
+  // mark. It runs in `after()`, so THIS render still shows what was new and the
+  // badge is gone by the next navigation — the same deferral the Notifications
+  // panel uses. Items that live inside a specific space are untouched.
+  markCommunityHubSeen();
 
   const [
     { data: memberRows },

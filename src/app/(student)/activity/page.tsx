@@ -5,6 +5,7 @@ import { getAuthUserId } from "@/lib/auth/user";
 import { timeAgo } from "@/lib/time";
 import { resolveAvatarUrl } from "@/lib/avatar";
 import {
+  activityVisibleTypeList,
   notificationView,
   notificationActionPhrase,
 } from "@/lib/notifications/view";
@@ -15,14 +16,6 @@ import {
 import { AutoMarkRead } from "@/components/notifications/mark-all-read";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const ACTIVITY_EXCLUDED_TYPES = [
-  "message",
-  "message_request",
-  "message_request_accepted",
-  "message_reaction",
-  "announcement",
-];
-
 /** Bucket an item into Today / Earlier (UISpec V3 Screen 4 sections). */
 function bucketOf(latestAt: string): ActivityItem["bucket"] {
   const age = Date.now() - new Date(latestAt).getTime();
@@ -93,16 +86,19 @@ export default async function ActivityPage() {
   // gated this route; RLS scopes every query below).
   const me = (await getAuthUserId())!;
 
-  // Messages and message requests live in Chat, not Activity — they only fire as
-  // mobile push. Admin broadcasts (type 'announcement') are delivered as a
-  // cold-open modal instead (UAT-012), so they're excluded here too.
+  // An allow-list, not a deny-list (ACTIVITY_VISIBLE_TYPES): this page shows the
+  // nine activity categories and nothing else. Conversation traffic — DMs, DM
+  // requests and accepts, DM reactions, community/chatroom and event chat — lives
+  // in Chat with its own dock badge and only fires as push; society/community
+  // broadcasts and admin announcements (delivered as a cold-open modal, UAT-012)
+  // are likewise not rows to read here.
   const { data: rows } = await supabase
     // notifications_live (mig 0132) hides any row whose subject has been
     // deleted, so a notification never outlives the thing it points at.
     .from("notifications_live")
     .select("id, actor_id, type, data, group_count, read_at, created_at")
     .eq("user_id", me)
-    .not("type", "in", `(${ACTIVITY_EXCLUDED_TYPES.join(",")})`)
+    .in("type", activityVisibleTypeList())
     .order("created_at", { ascending: false })
     .limit(80);
   const notifs = (rows as Notif[]) ?? [];
