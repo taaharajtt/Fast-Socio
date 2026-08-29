@@ -115,8 +115,9 @@ export async function sendCommunityMessage(
   if (text.length < 1 || text.length > 2000)
     return { ok: false, error: "Message must be 1–2000 characters." };
 
-  const allowed = await checkRateLimit("community_chat", 60, 60);
-  if (!allowed) return { ok: false, error: "You're sending too fast." };
+  // No send throttle on chat (see the note in (student)/chat/actions.ts): the
+  // limiter fails closed, so any failure to consult it rejected an ordinary
+  // message as "You're sending too fast". Membership is still enforced by RLS.
 
   const { error } = await supabase.rpc("send_community_message", {
     p_community_id: communityId,
@@ -157,8 +158,9 @@ export async function sendCommunityImage(
     return { ok: false, error: "Invalid attachment." };
   }
 
-  const allowed = await checkRateLimit("community_chat", 60, 60);
-  if (!allowed) return { ok: false, error: "You're sending too fast." };
+  // No send throttle on chat (see the note in (student)/chat/actions.ts): the
+  // limiter fails closed, so any failure to consult it rejected an ordinary
+  // message as "You're sending too fast". Membership is still enforced by RLS.
 
   // Server-side MIME check. The accept attribute is a convenience; this asks
   // storage what the object actually is. It matters more now than it did on
@@ -250,8 +252,9 @@ export async function createCommunityPoll(
     return { ok: false, error: "A poll needs 2–6 options." };
 
   // Polls insert a chat message, so they share the chat room's send limit.
-  const allowed = await checkRateLimit("community_chat", 60, 60);
-  if (!allowed) return { ok: false, error: "You're sending too fast." };
+  // No send throttle on chat (see the note in (student)/chat/actions.ts): the
+  // limiter fails closed, so any failure to consult it rejected an ordinary
+  // message as "You're sending too fast". Membership is still enforced by RLS.
 
   const { error } = await supabase.rpc("create_community_poll", {
     p_community_id: communityId,

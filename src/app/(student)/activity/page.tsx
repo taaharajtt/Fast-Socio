@@ -15,6 +15,13 @@ import {
 import { AutoMarkRead } from "@/components/notifications/mark-all-read";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const ACTIVITY_EXCLUDED_TYPES = [
+  "message",
+  "message_request",
+  "message_request_accepted",
+  "message_reaction",
+  "announcement",
+];
 
 /** Bucket an item into Today / Earlier (UISpec V3 Screen 4 sections). */
 function bucketOf(latestAt: string): ActivityItem["bucket"] {
@@ -95,7 +102,7 @@ export default async function ActivityPage() {
     .from("notifications_live")
     .select("id, actor_id, type, data, group_count, read_at, created_at")
     .eq("user_id", me)
-    .not("type", "in", "(message,message_request,announcement)")
+    .not("type", "in", `(${ACTIVITY_EXCLUDED_TYPES.join(",")})`)
     .order("created_at", { ascending: false })
     .limit(80);
   const notifs = (rows as Notif[]) ?? [];

@@ -12,6 +12,7 @@ const ALL_TYPES: { type: string; data: Record<string, unknown> }[] = [
   { type: "mention", data: { post_id: "p" } },
   { type: "community_approved", data: { community_id: "c" } },
   { type: "event_approved", data: { event_id: "e" } },
+  { type: "event_message", data: { event_id: "e", event_title: "Orientation" } },
   { type: "community_post_approved", data: { community_id: "c" } },
   { type: "community_post_rejected", data: { community_id: "c" } },
   { type: "level_up", data: { level: 5 } },

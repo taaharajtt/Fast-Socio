@@ -133,7 +133,9 @@ export async function loadInbox(): Promise<InboxData> {
     convIds.length > 0
       ? supabase
           .from("messages")
-          .select("conversation_id, body, sender_id, created_at, deleted_at")
+          .select(
+            "conversation_id, body, sender_id, created_at, deleted_at, read_at"
+          )
           .in("conversation_id", convIds)
           .eq("hidden", false)
           .order("created_at", { ascending: false })
@@ -180,7 +182,19 @@ export async function loadInbox(): Promise<InboxData> {
   }
 
   const lastMsg = new Map<string, string>();
+  // MY newest message per conversation, for the Sent/Seen status line. Read off
+  // the same descending page as the preview, so it costs no extra query.
+  const lastOutgoing = new Map<
+    string,
+    { createdAt: string; readAt: string | null }
+  >();
   for (const m of lastMsgRows ?? []) {
+    if (m.sender_id === me && !lastOutgoing.has(m.conversation_id)) {
+      lastOutgoing.set(m.conversation_id, {
+        createdAt: m.created_at as string,
+        readAt: (m.read_at as string | null) ?? null,
+      });
+    }
     if (lastMsg.has(m.conversation_id)) continue;
     const prefix = m.sender_id === me ? "You: " : "";
     // A deleted message keeps its row (read receipts reference it) but its body
@@ -217,7 +231,7 @@ export async function loadInbox(): Promise<InboxData> {
     const [{ data: profRows }, { data: presRows }] = await Promise.all([
       supabase
         .from("profiles")
-        .select("id, full_name, avatar_url, gender, department")
+        .select("id, full_name, avatar_url, gender, department, read_receipts")
         .in("id", ids),
       supabase.from("profile_presence").select("id, last_seen_at").in("id", ids),
     ]);
@@ -225,7 +239,13 @@ export async function loadInbox(): Promise<InboxData> {
       (presRows ?? []).map((r) => [r.id as string, r.last_seen_at as string | null])
     );
     for (const p of profRows ?? []) {
-      profiles[p.id] = { ...p, last_seen_at: seen.get(p.id) ?? null };
+      profiles[p.id] = {
+        ...p,
+        last_seen_at: seen.get(p.id) ?? null,
+        // Absent column (older database) is treated as ON, matching the
+        // thread's own default.
+        read_receipts: (p as { read_receipts?: boolean }).read_receipts !== false,
+      };
     }
   }
 
@@ -280,6 +300,7 @@ export async function loadInbox(): Promise<InboxData> {
           otherId: c.user_low === me ? c.user_high : c.user_low,
           preview: lastMsg.get(convId) ?? null,
           unread: unread.get(convId) ?? 0,
+          lastOutgoing: lastOutgoing.get(convId) ?? null,
         };
       }),
     ...[...spaces.values()].map((space): InboxThread => {

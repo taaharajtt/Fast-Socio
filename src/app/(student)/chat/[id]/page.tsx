@@ -11,7 +11,8 @@ import { getAuthUserId } from "@/lib/auth/user";
 import { AppImage } from "@/components/ui/app-image";
 import { resolveAvatarUrl } from "@/lib/avatar";
 import { OnlineDot } from "@/components/ui/badges";
-import { isOnline, presenceLabel } from "@/lib/time";
+import { isOnline } from "@/lib/time";
+import { activityLabel } from "@/lib/chat/status-labels";
 import {
   chatMediaPath,
   CHAT_MEDIA_TTL_SECONDS,
@@ -19,6 +20,7 @@ import {
 } from "@/lib/chat-media";
 import { presignDownload } from "@/lib/s3/sign";
 import { ThreadMenu } from "@/components/chat/thread-menu";
+import type { ReplyPreview } from "@/app/(student)/chat/actions";
 
 export default async function ConversationPage({
   params,
@@ -119,6 +121,38 @@ export default async function ConversationPage({
     }
   }
 
+  // Quoted (replied-to) messages for this page (mig 0167). Most targets are
+  // already in `messages`; only the ones that fall outside the loaded window
+  // cost a query, and it is scoped to this conversation like every other read.
+  const replyPreviews: Record<string, ReplyPreview> = {};
+  const loadedById = new Map(messages.map((m) => [m.id, m]));
+  const missingReplyIds: string[] = [];
+  for (const m of messages) {
+    const target = m.reply_to_id;
+    if (!target || replyPreviews[target]) continue;
+    const local = loadedById.get(target);
+    if (local) {
+      replyPreviews[target] = {
+        id: local.id,
+        sender_id: local.sender_id,
+        body: local.body,
+        attachment_type: local.attachment_type,
+        shared_post_id: local.shared_post_id,
+        deleted_at: local.deleted_at,
+      };
+    } else if (!missingReplyIds.includes(target)) {
+      missingReplyIds.push(target);
+    }
+  }
+  if (missingReplyIds.length > 0) {
+    const { data: replyRows } = await supabase
+      .from("messages")
+      .select("id, sender_id, body, attachment_type, shared_post_id, deleted_at")
+      .eq("conversation_id", id)
+      .in("id", missingReplyIds);
+    for (const r of (replyRows ?? []) as ReplyPreview[]) replyPreviews[r.id] = r;
+  }
+
   const sharedPosts: Record<string, SharedPostPreview> = {};
   if (sharedIds.length > 0) {
     const { data: preRows } = await supabase
@@ -145,7 +179,9 @@ export default async function ConversationPage({
   // viewport (Phase 2 keyboard fix — see use-keyboard-inset.ts); 0 elsewhere.
   return (
     <div className="fixed inset-0 z-40 mx-auto flex h-[calc(100dvh-var(--kb,0px))] max-w-md flex-col overflow-hidden bg-bg px-4">
-      <header className="flex shrink-0 items-center gap-3 border-b border-glass-border py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
+      {/* Back · avatar · name · activity, and the overflow menu. No divider and
+          no extra metadata — the header floats on the thread background. */}
+      <header className="flex shrink-0 items-center gap-3 py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <Link
           href="/chat"
           aria-label="Back"
@@ -179,10 +215,15 @@ export default async function ConversationPage({
             <p className="truncate font-semibold">
               {other?.full_name ?? "Student"}
             </p>
-            <p className="truncate text-[11px] text-fg-muted">
-              {other?.department ? `${other.department} · ` : ""}
-              {presenceLabel(otherPresence?.last_seen_at)}
-            </p>
+            {/* App-wide activity, NOT "they read your message" — and absent
+                entirely for anyone who hides their activity status (RLS
+                returns no presence row, so this is null) or was last seen
+                before yesterday. */}
+            {activityLabel(otherPresence?.last_seen_at) && (
+              <p className="truncate text-[11px] text-fg-muted">
+                {activityLabel(otherPresence?.last_seen_at)}
+              </p>
+            )}
           </div>
         </Link>
         <ThreadMenu conversationId={id} />
@@ -196,6 +237,7 @@ export default async function ConversationPage({
         hasMore={hasMore}
         initialSignedAttachments={signedAttachments}
         initialReactions={reactions}
+        initialReplyPreviews={replyPreviews}
         showReadReceipts={
           (other as { read_receipts?: boolean } | null)?.read_receipts !== false
         }

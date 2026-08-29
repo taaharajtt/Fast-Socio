@@ -13,6 +13,7 @@ import { useInboxData } from "@/lib/chat/inbox-store";
 import { EPOCH, type InboxData, type InboxProfile } from "@/lib/chat/inbox-types";
 import { cn } from "@/lib/utils";
 import { isOnline, timeAgo } from "@/lib/time";
+import { conversationStatusLabel } from "@/lib/chat/status-labels";
 
 /**
  * The inbox itself. Two panels, and the split between them is about whether a
@@ -150,6 +151,16 @@ export function InboxList({
 
             const p = profiles[t.otherId];
             const hasUnread = t.unread > 0;
+            // Instagram's row status: what happened to MY last message if there
+            // is one ("Sent 5m ago" / "Seen just now"), otherwise the other
+            // person's app activity ("Active 25m ago"). `read_receipts` is
+            // THEIR setting, and `last_seen_at` is null for anyone who hides
+            // activity, so both privacy switches are honoured by construction.
+            const status = conversationStatusLabel({
+              lastOutgoing: t.lastOutgoing,
+              showReadReceipts: p?.read_receipts !== false,
+              lastActiveAt: p?.last_seen_at,
+            });
             return (
               <Link
                 key={t.convId}
@@ -178,7 +189,16 @@ export function InboxList({
                   {isOnline(p?.last_seen_at) && <OnlineDot />}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="type-headline truncate text-fg">
+                  {/* Bold is reserved for unread. A read conversation's name
+                      sits at body weight so the few unread rows are the only
+                      thing the eye catches. `type-headline` and `type-body`
+                      are the same 17px; they differ only in weight. */}
+                  <p
+                    className={cn(
+                      "truncate text-fg",
+                      hasUnread ? "type-headline" : "type-body"
+                    )}
+                  >
                     {p?.full_name ?? "Student"}
                   </p>
                   <p
@@ -189,6 +209,11 @@ export function InboxList({
                   >
                     {t.preview ?? "Say hi 👋"}
                   </p>
+                  {status && (
+                    <p className="type-footnote truncate text-fg-subtle">
+                      {status}
+                    </p>
+                  )}
                 </div>
                 <span className="flex shrink-0 flex-col items-end gap-1 self-start">
                   <span

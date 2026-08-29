@@ -17,6 +17,14 @@ type NotifRow = {
   created_at: string;
 };
 
+const BELL_EXCLUDED_TYPES = [
+  "message",
+  "message_request",
+  "message_request_accepted",
+  "message_reaction",
+  "announcement",
+];
+
 /**
  * Bell with an unread-count dot and an inline dropdown of recent notifications
  * (Figma prototype). Data is fetched server-side; the dropdown itself is a
@@ -38,12 +46,12 @@ export async function NotificationBell() {
       .select("id", { count: "exact", head: true })
       .eq("user_id", user!.id)
       .is("read_at", null)
-      .not("type", "in", "(message,message_request)"),
+      .not("type", "in", `(${BELL_EXCLUDED_TYPES.join(",")})`),
     supabase
       .from("notifications_live")
       .select("id, actor_id, type, data, group_count, read_at, created_at")
       .eq("user_id", user!.id)
-      .not("type", "in", "(message,message_request)")
+      .not("type", "in", `(${BELL_EXCLUDED_TYPES.join(",")})`)
       .order("created_at", { ascending: false })
       .limit(6),
   ]);

@@ -232,10 +232,11 @@ describe("limitedMessage", () => {
 });
 
 describe("stronger limits outside ordinary swiping are untouched", () => {
-  it("keeps the message-request, report, chat and post-like quotas", () => {
+  it("keeps the message-request, report and post-like quotas", () => {
     expect(RATE_LIMITS.messageRequest).toEqual({ max: 20, windowSeconds: 3600 });
     expect(RATE_LIMITS.report).toEqual({ max: 20, windowSeconds: 86400 });
-    expect(RATE_LIMITS.chatSend).toEqual({ max: 120, windowSeconds: 60 });
+    // Chat sending has no bucket at all — messaging is not rate limited.
+    expect("chatSend" in RATE_LIMITS).toBe(false);
     expect(RATE_LIMITS.postLike).toEqual({ max: 60, windowSeconds: 60 });
   });
 

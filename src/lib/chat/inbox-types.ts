@@ -15,7 +15,10 @@ export type InboxProfile = {
   avatar_url: string | null;
   gender: string | null;
   department: string | null;
+  /** App-wide activity, or null when they publish none (privacy, RLS). */
   last_seen_at: string | null;
+  /** Their read-receipt setting: false means we never render "Seen" to them. */
+  read_receipts: boolean;
 };
 
 /**
@@ -57,6 +60,12 @@ export type InboxThread =
       otherId: string;
       preview: string | null;
       unread: number;
+      /**
+       * MY newest message in this thread, for the "Sent …/Seen …" status line.
+       * Null when the other person spoke last (or when my last message fell
+       * outside the preview window).
+       */
+      lastOutgoing: { createdAt: string; readAt: string | null } | null;
     }
   | { kind: "space"; ts: string; space: InboxSpace; preview: string | null };
 

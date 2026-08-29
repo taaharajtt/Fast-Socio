@@ -14,6 +14,7 @@ import {
   Pencil,
   Pin,
   PinOff,
+  Reply,
   Send,
   Trash2,
   X,
@@ -40,8 +41,12 @@ import { createClient } from "@/lib/supabase/client";
 import { chatMediaPath } from "@/lib/chat-media";
 import { signChatMedia, signChatMediaMany } from "@/lib/chat-media-sign";
 import { uploadWithProgress } from "@/lib/storage-upload";
-import { clockTime, absoluteTime, timeAgo } from "@/lib/time";
+import { absoluteTime } from "@/lib/time";
+import { deliveryLabel, exactMessageTime } from "@/lib/chat/status-labels";
 import { VoiceNote } from "@/components/chat/voice-note";
+import { SwipeToReply } from "@/components/chat/swipe-to-reply";
+import { QuotedMessage } from "@/components/chat/quoted-message";
+import { replyPreviewText } from "@/lib/chat/reply-preview";
 import { DayDivider } from "@/components/chat/day-divider";
 import { chatDayLabel, dayKey } from "@/lib/chat-day";
 import {
@@ -71,7 +76,9 @@ import {
   forwardMessage,
   togglePinMessage,
   listMatchedFriends,
+  fetchReplyPreviews,
   type MatchedFriend,
+  type ReplyPreview,
 } from "@/app/(student)/chat/actions";
 
 type Reaction = { emoji: string; user_id: string };
@@ -110,6 +117,8 @@ export type ChatMessage = {
   edited_at: string | null;
   deleted_at: string | null;
   pinned_at: string | null;
+  /** The message this one replies to (mig 0167), or null. */
+  reply_to_id?: string | null;
   /** Client-only: object-URL preview for an optimistic image while it uploads. */
   _localSrc?: string;
   /** Client-only: optimistic image lifecycle — drives the in-bubble spinner and
@@ -127,6 +136,7 @@ export function ChatThread({
   hasMore = false,
   initialSignedAttachments = {},
   initialReactions = {},
+  initialReplyPreviews = {},
   showReadReceipts = true,
   otherName = null,
   reportParam = null,
@@ -140,6 +150,8 @@ export function ChatThread({
   initialSignedAttachments?: Record<string, string>;
   /** messageId -> reactions (UAT-005). */
   initialReactions?: Record<string, Reaction[]>;
+  /** messageId -> the quoted row it is a reply to, for the first paint. */
+  initialReplyPreviews?: Record<string, ReplyPreview>;
   /** Whether the other participant reveals read receipts (privacy, Phase 8). */
   showReadReceipts?: boolean;
   /** The other participant's display name, for labelling report evidence. */
@@ -196,6 +208,24 @@ export function ChatThread({
     timestamp: string;
   } | null>(null);
   const [editDraft, setEditDraft] = useState("");
+  /** Quoted rows, keyed by the QUOTED message's id (not the reply's). */
+  const [replyPreviews, setReplyPreviews] =
+    useState<Record<string, ReplyPreview>>(initialReplyPreviews);
+  /** The message the composer is currently replying to, if any. */
+  const [replyTo, setReplyTo] = useState<ReplyPreview | null>(null);
+  /** Briefly ringed after tapping a quote, so the original is findable. */
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  /** The message currently playing the double-tap heart burst. */
+  const [burstId, setBurstId] = useState<string | null>(null);
+  /**
+   * The message whose exact time is revealed by tapping it.
+   *
+   * Times are NOT printed under every bubble any more — a column of clock
+   * stamps is most of the visual noise in a chat thread, and the day separators
+   * already carry the "when". Desktop reveals a time on hover/focus in CSS;
+   * this is the touch equivalent, and one at a time.
+   */
+  const [revealedId, setRevealedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [canLoadOlder, setCanLoadOlder] = useState(hasMore);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -268,6 +298,27 @@ export function ChatThread({
       setError(res.error);
       refreshReactions(messageId);
     }
+  }
+
+  /**
+   * Double-tap to like, Instagram style.
+   *
+   * A double tap only ever ADDS the heart — it never removes one. Tapping a
+   * message twice reads as "I like this", and making the same gesture undo a
+   * like meant an accidental extra tap silently withdrew it. Removing a
+   * reaction stays a deliberate act: tap the chip under the bubble.
+   */
+  function likeMessage(m: ChatMessage) {
+    if (selecting || m.deleted_at || m.id.startsWith("temp-")) return;
+
+    // The burst plays either way, so the gesture always reads as registered
+    // even on a message that already carries my heart. It clears itself in the
+    // effect below — no timer ref, which a render-time caller must not touch.
+    setBurstId(m.id);
+
+    const mineHere = (reactions[m.id] ?? []).find((r) => r.user_id === meId);
+    if (mineHere?.emoji === "❤️") return;
+    void react(m.id, "❤️");
   }
 
   async function togglePin(m: ChatMessage) {
@@ -375,6 +426,113 @@ export function ChatThread({
   });
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPress = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Where a press started, so a press that MOVES can cancel the long-press. */
+  const pressOrigin = useRef<{ x: number; y: number } | null>(null);
+  /** The last tap, for detecting a double tap on the SAME message. */
+  const lastTap = useRef<{ id: string; at: number } | null>(null);
+  /** Pending single-tap action, cancelled if a second tap turns it into a like. */
+  const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** messageId -> its row element, so a quote can scroll to its original. */
+  const rowRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** The quote-able shape of a loaded message. */
+  const toPreview = useCallback(
+    (m: ChatMessage): ReplyPreview => ({
+      id: m.id,
+      sender_id: m.sender_id,
+      body: m.body,
+      attachment_type: m.attachment_type,
+      shared_post_id: m.shared_post_id,
+      deleted_at: m.deleted_at,
+    }),
+    []
+  );
+
+  /**
+   * Resolve the quoted row for every reply on screen.
+   *
+   * Most targets are in `messages` already, so they cost nothing. A reply to a
+   * message older than the loaded page — or one that arrived by realtime while
+   * its target was never loaded — is fetched, once, in a single batched read.
+   */
+  useEffect(() => {
+    const wanted = new Set<string>();
+    for (const m of messages) if (m.reply_to_id) wanted.add(m.reply_to_id);
+    if (wanted.size === 0) return;
+
+    // A target that IS on screen needs no state: it is read straight off the
+    // list at render time. Only the ones outside the loaded window are fetched.
+    const missing: string[] = [];
+    for (const id of wanted) {
+      if (replyPreviews[id]) continue;
+      if (messages.some((m) => m.id === id)) continue;
+      missing.push(id);
+    }
+    if (missing.length === 0) return;
+
+    let active = true;
+    fetchReplyPreviews(conversationId, missing).then((rows) => {
+      if (!active || rows.length === 0) return;
+      setReplyPreviews((prev) => {
+        const next = { ...prev };
+        for (const r of rows) next[r.id] = r;
+        return next;
+      });
+    });
+    return () => {
+      active = false;
+    };
+  }, [messages, replyPreviews, conversationId, toPreview]);
+
+  useEffect(() => {
+    return () => {
+      if (highlightTimer.current) clearTimeout(highlightTimer.current);
+      if (tapTimer.current) clearTimeout(tapTimer.current);
+    };
+  }, []);
+
+  /** Enter reply mode for one message and focus the composer. */
+  const startReply = useCallback(
+    (m: ChatMessage) => {
+      if (m.deleted_at || m.id.startsWith("temp-")) return;
+      setActionsFor(null);
+      setEditing(null);
+      setReplyTo(toPreview(m));
+    },
+    [toPreview]
+  );
+
+  // Entering reply mode moves the caret into the composer, once the reply row
+  // has rendered. In an effect because that is where a ref may be touched.
+  useEffect(() => {
+    if (replyTo) textareaRef.current?.focus();
+  }, [replyTo]);
+
+  // The heart burst is one animation long. Keyed on the message id so a second
+  // double-tap restarts it rather than inheriting the first one's countdown.
+  useEffect(() => {
+    if (!burstId) return;
+    const t = setTimeout(() => setBurstId(null), 850);
+    return () => clearTimeout(t);
+  }, [burstId]);
+
+  /** Tapping a quote scrolls to the original when it is loaded, and rings it. */
+  const jumpToMessage = useCallback((id: string) => {
+    const el = rowRefs.current.get(id);
+    const list = listRef.current;
+    if (!el || !list) return;
+    // Scroll the LIST, not via scrollIntoView: that walks every scrollable
+    // ancestor, including the page behind the fixed chat shell on iOS.
+    const delta =
+      el.getBoundingClientRect().top -
+      list.getBoundingClientRect().top -
+      list.clientHeight / 2;
+    list.scrollTo({ top: list.scrollTop + delta, behavior: "smooth" });
+    setHighlightId(id);
+    if (highlightTimer.current) clearTimeout(highlightTimer.current);
+    highlightTimer.current = setTimeout(() => setHighlightId(null), 1600);
+  }, []);
 
   /**
    * The cursor a catch-up asks for rows after: the newest SERVER-BACKED row on
@@ -638,6 +796,9 @@ export function ChatThread({
   async function onCropped({ blob, extension, mimeType }: CropResult) {
     setPendingFile(null);
     setError(null);
+    const target = replyTo;
+    if (target) setReplyPreviews((prev) => ({ ...prev, [target.id]: target }));
+    setReplyTo(null);
 
     // Optimistic image bubble: the cropped photo renders immediately with an
     // "Uploading…" spinner, so the send has clear feedback instead of the
@@ -656,6 +817,7 @@ export function ChatThread({
       edited_at: null,
       deleted_at: null,
       pinned_at: null,
+      reply_to_id: target?.id ?? null,
       _localSrc: localSrc,
       _uploadStatus: "uploading",
     };
@@ -681,10 +843,12 @@ export function ChatThread({
       }
 
       pendingSendsRef.current += 1;
-      const res = await sendMessage(conversationId, "", {
-        url: path,
-        type: "image",
-      }).finally(() => {
+      const res = await sendMessage(
+        conversationId,
+        "",
+        { url: path, type: "image" },
+        target?.id
+      ).finally(() => {
         pendingSendsRef.current -= 1;
       });
       if (!res.ok) {
@@ -739,6 +903,9 @@ export function ChatThread({
     e.preventDefault();
     const text = draft.trim();
     if (!text || busy) return;
+    // Captured before the composer is cleared, so a reply that fails can be
+    // restored with its target intact.
+    const target = replyTo;
     // Optimistic: the bubble renders NOW; the realtime INSERT swaps in the
     // authoritative row (see the INSERT handler). On failure it is removed and
     // the draft restored. `busy` is not set, so rapid sends each get a bubble.
@@ -754,11 +921,14 @@ export function ChatThread({
       edited_at: null,
       deleted_at: null,
       pinned_at: null,
+      reply_to_id: target?.id ?? null,
     };
+    if (target) setReplyPreviews((prev) => ({ ...prev, [target.id]: target }));
     setMessages((prev) => [...prev, temp]);
     setDraft("");
+    setReplyTo(null);
     pendingSendsRef.current += 1;
-    const res = await sendMessage(conversationId, text).finally(() => {
+    const res = await sendMessage(conversationId, text, undefined, target?.id).finally(() => {
       pendingSendsRef.current -= 1;
     });
     if (!res.ok) {
@@ -767,6 +937,7 @@ export function ChatThread({
       // screen.
       setMessages((prev) => dropOptimistic(prev, temp.id));
       setDraft(text);
+      setReplyTo(target);
       setError(res.error);
       return;
     }
@@ -805,6 +976,12 @@ export function ChatThread({
       recorderRef.current?.stop();
       return;
     }
+    // The reply target is captured when the take STARTS: the composer's reply
+    // row is dismissed for the recording strip, so it must not be read again
+    // once the recording ends.
+    const target = replyTo;
+    if (target) setReplyPreviews((prev) => ({ ...prev, [target.id]: target }));
+    setReplyTo(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mime = MediaRecorder.isTypeSupported("audio/webm")
@@ -829,7 +1006,13 @@ export function ChatThread({
         const blob = new Blob(chunksRef.current, { type: mime });
         const ext = mime === "audio/webm" ? "webm" : "mp4";
         const url = await uploadMedia(blob, ext, mime);
-        if (url) await sendMessage(conversationId, "", { url, type: "voice" });
+        if (url)
+          await sendMessage(
+            conversationId,
+            "",
+            { url, type: "voice" },
+            target?.id
+          );
         setBusy(false);
       };
       recorderRef.current = rec;
@@ -952,15 +1135,60 @@ export function ChatThread({
     // No actions on deleted or still-sending (optimistic) messages.
     if (m.deleted_at || m.id.startsWith("temp-")) return {};
     const open = () => setActionsFor(m);
+    const cancel = () => {
+      if (longPress.current) clearTimeout(longPress.current);
+      longPress.current = null;
+    };
     return {
-      onPointerDown: () => {
+      onPointerDown: (e: React.PointerEvent) => {
+        pressOrigin.current = { x: e.clientX, y: e.clientY };
         longPress.current = setTimeout(open, 450);
       },
-      onPointerUp: () => {
-        if (longPress.current) clearTimeout(longPress.current);
+      // A press that TRAVELS is a swipe (or a scroll), not a long press. Without
+      // this the action sheet opened mid-swipe on any deliberate "hold, then
+      // slide" — the exact gesture the reply affordance asks for — and stole it.
+      onPointerMove: (e: React.PointerEvent) => {
+        const o = pressOrigin.current;
+        if (!o || !longPress.current) return;
+        if (Math.abs(e.clientX - o.x) > 8 || Math.abs(e.clientY - o.y) > 8) {
+          cancel();
+        }
+      },
+      onPointerUp: (e: React.PointerEvent) => {
+        const origin = pressOrigin.current;
+        pressOrigin.current = null;
+        cancel();
+        // A tap, not a swipe or a scroll: the pointer barely moved.
+        const moved =
+          !origin ||
+          Math.abs(e.clientX - origin.x) > 8 ||
+          Math.abs(e.clientY - origin.y) > 8;
+        if (moved) {
+          lastTap.current = null;
+          return;
+        }
+        const now = Date.now();
+        const prev = lastTap.current;
+        if (prev && prev.id === m.id && now - prev.at < 350) {
+          lastTap.current = null;
+          if (tapTimer.current) clearTimeout(tapTimer.current);
+          tapTimer.current = null;
+          likeMessage(m);
+          return;
+        }
+        lastTap.current = { id: m.id, at: now };
+        // A single tap reveals this message's exact time — but only once the
+        // double-tap window has closed, or every like would flash a timestamp
+        // on its way through.
+        if (tapTimer.current) clearTimeout(tapTimer.current);
+        tapTimer.current = setTimeout(() => {
+          tapTimer.current = null;
+          setRevealedId((cur) => (cur === m.id ? null : m.id));
+        }, 360);
       },
       onPointerLeave: () => {
-        if (longPress.current) clearTimeout(longPress.current);
+        pressOrigin.current = null;
+        cancel();
       },
       onContextMenu: (e: React.MouseEvent) => {
         e.preventDefault();
@@ -969,11 +1197,9 @@ export function ChatThread({
     };
   }
 
-  // The last message I sent that the other party has read — the only place a
-  // receipt belongs, IG/WhatsApp style.
-  const lastReadMine = [...messages]
-    .reverse()
-    .find((m) => m.sender_id === meId && m.read_at)?.id;
+  // The newest message I sent — the ONE place a receipt belongs, IG style. It
+  // carries "Seen …" once read and "Sent …" until then, so the status is always
+  // on the same bubble instead of jumping between them.
   const lastMineId = [...messages].reverse().find((m) => m.sender_id === meId)?.id;
 
   // Pinned messages currently loaded in the thread (Phase 10).
@@ -1039,8 +1265,51 @@ export function ChatThread({
 
           const isNew = initialUnread.ids.has(m.id);
 
+          const revealed = revealedId === m.id;
+          const uploading = m._uploadStatus === "uploading";
+          const failedUpload = m._uploadStatus === "error";
+          // The receipt lives on the newest outgoing message only: "Seen …"
+          // once read, "Sent …" until then, and never "Seen" at all when the
+          // recipient has read receipts switched off.
+          const receipt =
+            mine && m.id === lastMineId && !m._uploadStatus
+              ? deliveryLabel(
+                  { createdAt: m.created_at, readAt: m.read_at },
+                  showReadReceipts
+                )
+              : null;
+          const showMeta =
+            !deleted && (revealed || Boolean(receipt) || uploading || failedUpload);
+
+          const quotedLoaded = m.reply_to_id
+            ? (messages.find((x) => x.id === m.reply_to_id) ?? null)
+            : null;
+          const quoted = !m.reply_to_id
+            ? null
+            : quotedLoaded
+              ? toPreview(quotedLoaded)
+              : (replyPreviews[m.reply_to_id] ?? null);
+          const quotedIsMine = quoted?.sender_id === meId;
+          const quoteLabel = !m.reply_to_id
+            ? null
+            : mine
+              ? `You replied to ${quotedIsMine ? "yourself" : (otherName ?? "them")}`
+              : quotedIsMine
+                ? "replied to you"
+                : `replied to ${otherName ?? "themselves"}`;
+
           return (
-            <div key={m.id}>
+            <div
+              key={m.id}
+              // React 19 ref cleanup: the map must not keep rows that have
+              // scrolled out of the list alive.
+              ref={(el) => {
+                rowRefs.current.set(m.id, el);
+                return () => {
+                  rowRefs.current.delete(m.id);
+                };
+              }}
+            >
               {showDay && <DayDivider label={chatDayLabel(m.created_at)} />}
               {/* "New messages" divider above the first message that was still
                   unread when this thread opened (WhatsApp/Slack convention). */}
@@ -1054,9 +1323,18 @@ export function ChatThread({
                   <span className="h-px flex-1 bg-accent/40" aria-hidden />
                 </div>
               )}
+              {/* Press and swipe to reply: theirs drags right, mine drags
+                  left, each away from the edge its bubble sits against.
+                  Disabled in selection mode and on messages there is nothing
+                  to reply to. */}
+              <SwipeToReply
+                onReply={() => startReply(m)}
+                direction={mine ? "left" : "right"}
+                disabled={selecting || deleted || m.id.startsWith("temp-")}
+              >
               <div
                 className={cn(
-                  "flex items-center gap-2",
+                  "flex items-end gap-2",
                   mine ? "justify-end" : "justify-start"
                 )}
               >
@@ -1075,11 +1353,52 @@ export function ChatThread({
                   />
                 )}
                 <div
-                  {...(deleted ? {} : pressHandlers(m))}
-                  onClick={selecting ? () => toggleSelected(m) : undefined}
-                  onDoubleClick={() => !selecting && !deleted && react(m.id, "❤️")}
                   className={cn(
-                    "relative max-w-[78%] text-[15px]",
+                    "group/msg relative flex min-w-0 max-w-[78%] flex-col gap-1",
+                    mine ? "items-end" : "items-start"
+                  )}
+                >
+                  {/* Desktop reveal: hovering or keyboard-focusing a message
+                      floats its exact time beside the bubble. Absolutely
+                      positioned so nothing reserves a row of empty space, and
+                      opacity-only so the layout never shifts. Touch gets the
+                      same time from a single tap (see `revealedId`). */}
+                  {!deleted && (
+                    <span
+                      aria-hidden
+                      className={cn(
+                        "pointer-events-none absolute top-1/2 hidden -translate-y-1/2 whitespace-nowrap text-[11px] text-fg-subtle opacity-0 transition-opacity",
+                        "group-hover/msg:opacity-100 group-focus-within/msg:opacity-100 sm:block",
+                        mine ? "right-full mr-2" : "left-full ml-2"
+                      )}
+                    >
+                      {exactMessageTime(m.created_at)}
+                    </span>
+                  )}
+                {m.reply_to_id && (
+                  <QuotedMessage
+                    preview={quoted}
+                    label={quoteLabel}
+                    // Only clickable when the original is actually in the
+                    // loaded list — there is nowhere to scroll to otherwise.
+                    onClick={
+                      quotedLoaded
+                        ? () => jumpToMessage(quotedLoaded.id)
+                        : undefined
+                    }
+                    className="max-w-full"
+                  />
+                )}
+                <div
+                  {...(deleted ? {} : pressHandlers(m))}
+                  // Focusable so the hover reveal has a keyboard equivalent,
+                  // and titled so the exact time is available to a pointer
+                  // tooltip and to assistive tech without being drawn.
+                  tabIndex={deleted ? undefined : 0}
+                  title={deleted ? undefined : absoluteTime(m.created_at)}
+                  onClick={selecting ? () => toggleSelected(m) : undefined}
+                  className={cn(
+                    "relative max-w-full text-[15px]",
                     // UAT-002 / fix-037: media (image or shared post) already has
                     // its own edge — no outer frame, padding, or background. Text
                     // and voice keep the bubble chrome and inset.
@@ -1092,10 +1411,14 @@ export function ChatThread({
                         ? !mine && "cursor-pointer"
                         : mine
                           ? "gradient-brand rounded-br-md text-white"
-                          : "glass rounded-bl-md cursor-pointer text-fg",
+                          : // Borderless: a soft dark fill, no outline (the
+                            // incoming bubble used to be a bordered card).
+                            "bg-fill rounded-bl-md cursor-pointer text-fg",
                     // Unread-on-open incoming messages get an accent ring so they
                     // stand out from everything already read.
                     isNew && !deleted && "ring-1 ring-accent/50",
+                    // Briefly ringed after jumping here from a quote.
+                    highlightId === m.id && "ring-2 ring-accent",
                     selecting && !canDisclose(m) && "opacity-40",
                     selecting && selectedIds.includes(m.id) && "ring-2 ring-accent"
                   )}
@@ -1197,8 +1520,22 @@ export function ChatThread({
                       )}
                     </span>
                   )}
+
+                  {/* Double-tap heart, the same burst the feed uses. */}
+                  {burstId === m.id && (
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute inset-0 flex items-center justify-center"
+                    >
+                      <span className="animate-like-burst text-4xl drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]">
+                        ❤️
+                      </span>
+                    </span>
+                  )}
+                </div>
                 </div>
               </div>
+              </SwipeToReply>
 
               {/* UAT-005: reaction chips under the bubble. Tap yours to remove. */}
               {chips.length > 0 && (
@@ -1227,61 +1564,65 @@ export function ChatThread({
                 </div>
               )}
 
-              {/* WhatsApp-style meta line under every message: a clock time on
-                  each bubble, plus the send/read status on my own messages.
-                  UAT-004: the receipt says WHEN a message was seen, not just
-                  "Read"; an image still uploading shows its own status. */}
-              {!deleted && (
+              {/* The meta line is now EXCEPTIONAL, not per-message.
+                  Instagram prints no clock under every bubble — the day
+                  separators carry the "when" and an exact time is revealed on
+                  demand — so this renders only for: a time the reader asked
+                  for, an in-flight or failed upload, and the read receipt,
+                  which belongs on the newest outgoing message alone. */}
+              {showMeta && (
                 <p
                   className={cn(
                     "mt-0.5 flex items-center gap-1 text-[11px] text-fg-muted",
                     mine ? "justify-end pr-1" : "justify-start pl-1",
-                    m._uploadStatus === "error" && "text-error"
+                    failedUpload && "text-error"
                   )}
                 >
-                  <time dateTime={m.created_at} title={absoluteTime(m.created_at)}>
-                    {clockTime(m.created_at)}
-                  </time>
-                  {mine &&
-                    (m._uploadStatus === "uploading" ? (
+                  {revealed && (
+                    <time
+                      dateTime={m.created_at}
+                      title={absoluteTime(m.created_at)}
+                    >
+                      {exactMessageTime(m.created_at)}
+                    </time>
+                  )}
+                  {revealed && (receipt || uploading || failedUpload) && (
+                    <span aria-hidden>·</span>
+                  )}
+                  {uploading ? (
+                    <>
+                      <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                      Uploading…
+                    </>
+                  ) : failedUpload ? (
+                    // A failed send is recoverable rather than a stuck temp
+                    // row: retry re-runs the upload and insert, discard drops
+                    // the bubble and releases its object URL.
+                    <>
+                      Failed to send
+                      <button
+                        type="button"
+                        onClick={() => retryFailed(m)}
+                        className="focus-ring rounded font-semibold text-fg underline underline-offset-2"
+                      >
+                        Retry
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => discardFailed(m)}
+                        className="focus-ring rounded text-fg-muted underline underline-offset-2"
+                      >
+                        Discard
+                      </button>
+                    </>
+                  ) : (
+                    receipt && (
                       <>
-                        <span aria-hidden>·</span>
-                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-                        Uploading…
+                        <Check className="h-3 w-3" strokeWidth={3} aria-hidden />
+                        {receipt}
                       </>
-                    ) : m._uploadStatus === "error" ? (
-                      // A failed send is recoverable rather than a stuck temp
-                      // row: retry re-runs the upload and insert, discard drops
-                      // the bubble and releases its object URL.
-                      <>
-                        <span aria-hidden>·</span>
-                        Failed to send
-                        <button
-                          type="button"
-                          onClick={() => retryFailed(m)}
-                          className="focus-ring rounded font-semibold text-fg underline underline-offset-2"
-                        >
-                          Retry
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => discardFailed(m)}
-                          className="focus-ring rounded text-fg-muted underline underline-offset-2"
-                        >
-                          Discard
-                        </button>
-                      </>
-                    ) : (
-                      m.id === (lastReadMine ?? lastMineId) && (
-                        <>
-                          <span aria-hidden>·</span>
-                          <Check className="h-3 w-3" strokeWidth={3} aria-hidden />
-                          {m.read_at && showReadReceipts
-                            ? `Seen ${timeAgo(m.read_at)} ago`
-                            : "Sent"}
-                        </>
-                      )
-                    ))}
+                    )
+                  )}
                 </p>
               )}
             </div>
@@ -1289,7 +1630,7 @@ export function ChatThread({
         })}
         {otherTyping && (
           <div className="flex justify-start">
-            <div className="glass flex items-center gap-1 rounded-2xl rounded-bl-md px-4 py-3">
+            <div className="bg-fill flex items-center gap-1 rounded-2xl rounded-bl-md px-4 py-3">
               {[0, 150, 300].map((delay) => (
                 <span
                   key={delay}
@@ -1458,9 +1799,36 @@ export function ChatThread({
                   onChange={onPickImage}
                 />
 
-                {/* Single rounded pill: textarea + attachment icons live inside
-                    together, matching WhatsApp's composer bar. */}
-                <div className="glass focus-within:ring-accent/40 flex min-w-0 flex-1 items-center gap-2 rounded-2xl px-3 py-1.5 focus-within:ring-2">
+                {/* One rounded composer card: the reply preview (when
+                    replying) and the input row live INSIDE it, separated by a
+                    hairline, so replying grows the composer rather than
+                    floating a second card above it. Neutral border and shadow
+                    only — no accent outline, focused or otherwise. */}
+                <div className="glass flex min-w-0 flex-1 flex-col rounded-2xl">
+                  {replyTo && (
+                    <div className="flex items-start gap-2 border-b border-glass-border px-3 py-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[12px] font-semibold text-fg">
+                          Replying to{" "}
+                          {replyTo.sender_id === meId
+                            ? "yourself"
+                            : (otherName ?? "them")}
+                        </p>
+                        <p className="truncate text-[13px] text-fg-muted">
+                          {replyPreviewText(replyTo)}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setReplyTo(null)}
+                        aria-label="Cancel reply"
+                        className="focus-ring -mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-fg-muted hover:text-fg"
+                      >
+                        <X className="h-4 w-4" aria-hidden />
+                      </button>
+                    </div>
+                  )}
+                  <div className="flex min-w-0 items-center gap-2 px-3 py-1.5">
                   {/* text-base (16px): anything smaller triggers iOS Safari's
                       auto-zoom on focus — the root cause of the chat "jump" on
                       iPhones. rows=1 + the auto-grow effect above own the height. */}
@@ -1478,7 +1846,7 @@ export function ChatThread({
                         e.currentTarget.form?.requestSubmit();
                       }
                     }}
-                    placeholder="Message…"
+                    placeholder="Message..."
                     enterKeyHint="send"
                     className="min-h-[40px] min-w-0 flex-1 resize-none overflow-y-auto border-none bg-transparent text-base text-fg outline-none placeholder:text-fg-muted"
                     style={{ maxHeight: MAX_TEXTAREA_HEIGHT }}
@@ -1506,6 +1874,7 @@ export function ChatThread({
                   >
                     <Paperclip className="h-5 w-5" aria-hidden />
                   </button>
+                  </div>
                 </div>
 
                 {/* Floating action button outside the pill: standalone Mic
@@ -1585,6 +1954,15 @@ export function ChatThread({
                     </button>
                   ))}
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => startReply(a)}
+                  className="glass flex w-full items-center gap-3 rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm text-fg"
+                >
+                  <Reply className="h-4 w-4" aria-hidden />
+                  Reply
+                </button>
 
                 {canForward && (
                   <button

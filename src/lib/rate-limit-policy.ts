@@ -45,7 +45,7 @@ export type RateLimitPolicy = {
  */
 export const RATE_LIMITS = {
   messageRequest: { max: 20, windowSeconds: 60 * 60 },
-  chatSend: { max: 120, windowSeconds: 60 }, // 120 msgs/min
+  // No `chatSend` bucket: sending a chat message is deliberately unthrottled.
   report: { max: 20, windowSeconds: 24 * 60 * 60 },
   // Post-like toggles: cap the notification/push a target can be made to receive
   // (P5-04). Generous for real use, throttles like/unlike spam loops.

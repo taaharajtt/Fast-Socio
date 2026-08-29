@@ -63,6 +63,8 @@ export function notificationActionPhrase(type: string): string {
       return "asked to join your community";
     case "event_post_request":
       return "wants to post in your event";
+    case "event_message":
+      return "sent a message in your event";
     case "help_offer_accepted":
       return "approved your offer to help";
     case "help_follow":
@@ -200,6 +202,8 @@ export function notificationCategory(type: string): ActivityCategory {
       return "announcements";
     case "event_post_request":
       return "requests";
+    case "event_message":
+      return "messages";
     default:
       return "other";
   }

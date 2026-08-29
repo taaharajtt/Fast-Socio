@@ -100,7 +100,9 @@ export function VoiceNote({ src, mine }: { src: string; mine: boolean }) {
   const progress = duration > 0 ? elapsed / duration : 0;
 
   return (
-    <div className="flex w-[180px] items-center gap-2.5">
+    // Play button · waveform · duration, on the bubble's own dark fill — the
+    // row IS the pill, so it carries no border of its own.
+    <div className="flex w-[196px] items-center gap-2.5">
       <audio ref={audioRef} src={src} preload="metadata" className="hidden" />
 
       <button
@@ -115,15 +117,17 @@ export function VoiceNote({ src, mine }: { src: string; mine: boolean }) {
               : "Play voice note"
         }
         className={cn(
-          "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+          "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
           failed && "opacity-40",
-          mine ? "bg-white/25 text-white" : "bg-accent text-white"
+          // Neutral, not accent: the play control is chrome inside a bubble,
+          // and a purple disc on every incoming voice note read as a highlight.
+          mine ? "bg-white/25 text-white" : "bg-fg/20 text-fg"
         )}
       >
         {playing ? (
-          <Pause className="h-3.5 w-3.5 fill-current" aria-hidden />
+          <Pause className="h-4 w-4 fill-current" aria-hidden />
         ) : (
-          <Play className="ml-0.5 h-3.5 w-3.5 fill-current" aria-hidden />
+          <Play className="ml-0.5 h-4 w-4 fill-current" aria-hidden />
         )}
       </button>
 
@@ -146,8 +150,8 @@ export function VoiceNote({ src, mine }: { src: string; mine: boolean }) {
                     ? "bg-white"
                     : "bg-white/35"
                   : played
-                    ? "bg-accent"
-                    : "bg-fg/20"
+                    ? "bg-fg"
+                    : "bg-fg/25"
               )}
             />
           );
@@ -156,7 +160,7 @@ export function VoiceNote({ src, mine }: { src: string; mine: boolean }) {
 
       <span
         className={cn(
-          "shrink-0 text-[11px] tabular-nums",
+          "shrink-0 text-[12px] tabular-nums",
           mine ? "text-white/75" : "text-fg-muted"
         )}
       >

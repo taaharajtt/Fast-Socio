@@ -37,6 +37,7 @@ export const NOTIFICATION_TYPES = [
   "community_rejected",
   "content_moderated",
   "event_approved",
+  "event_message",
   "event_organizer_added",
   "event_organizer_removed",
   "event_post_request",
@@ -193,6 +194,8 @@ export function notificationCopy(
     // — Events ————————————————————————————————————————————————————
     case "event_approved":
       return `Your event ${snippet(str(data, "title"), 34) ?? ""} was approved 🎉`.replace("  ", " ");
+    case "event_message":
+      return `${who} sent a message in ${snippet(str(data, "event_title"), 34) ?? "your event"}`;
     case "event_rejected":
       return `Your event request${data.title ? ` for ${snippet(str(data, "title"), 34)}` : ""} was declined`;
     case "event_post_request":
@@ -345,6 +348,7 @@ export function notificationHref(
 
     // Events.
     case "event_approved":
+    case "event_message":
     case "event_rejected":
     case "event_post_request":
     case "event_organizer_added":

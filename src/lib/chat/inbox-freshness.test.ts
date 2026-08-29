@@ -18,6 +18,7 @@ function inbox(
       otherId: "other",
       preview: null,
       unread: t.unread ?? 0,
+      lastOutgoing: null,
     })),
     newMatches: [],
     profiles: {},

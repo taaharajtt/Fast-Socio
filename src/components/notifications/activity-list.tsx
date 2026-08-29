@@ -53,6 +53,7 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   community_approved: Megaphone,
   community_rejected: Megaphone,
   event_approved: Megaphone,
+  event_message: MessageSquare,
   event_rejected: Megaphone,
   society_role_removed: Megaphone,
   event_organizer_added: Megaphone,
