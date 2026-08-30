@@ -36,18 +36,21 @@ services:
         # different builds sharing an id is worse than having no id at all,
         # because clients would then believe a stale bundle is current.
         #
-        # `:?` NOT `:-` — this is REQUIRED, and a build with it unset or empty
-        # fails immediately with the message below rather than producing an
-        # image. The earlier `${GIT_SHA:-}` default was the wrong call: it made
-        # the single most important deploy-safety mechanism fail SILENTLY. A
-        # forgotten `export` produced a perfectly healthy-looking image with no
-        # skew protection, and the symptom would not appear until the NEXT
-        # deploy stranded live clients on 404ing chunks — far away in time from
-        # the mistake that caused it. Failing the build is loud, immediate, and
-        # costs one retry. next.config.ts carries a second, independent guard
-        # for the same reason (defence in depth: compose is not the only way
-        # someone can invoke this build).
-        NEXT_DEPLOYMENT_ID: ${GIT_SHA:?GIT_SHA is required — run "export GIT_SHA=$(git -C repo rev-parse --short HEAD)" before "docker compose build app". It becomes deploymentId and is what stops a deploy stranding live clients.}
+        # A missing GIT_SHA MUST fail the build — but that guard lives in
+        # next.config.ts, not here, and the distinction is deliberate.
+        #
+        # `${GIT_SHA:?...}` was tried and reverted: Compose interpolates build
+        # args on EVERY command, so it made `docker compose ps`, `logs` and
+        # `restart` all fail when the variable was unset. Requiring an unrelated
+        # build variable before you can read logs during an incident is a worse
+        # failure than the one it was guarding against.
+        #
+        # With `:-` the arg arrives empty, the Dockerfile passes it through, and
+        # next.config.ts throws during `next build` with an explicit message.
+        # The build still fails loudly and immediately; routine operations keep
+        # working. That guard also covers a bare `docker build` that bypasses
+        # Compose entirely, which `:?` never could.
+        NEXT_DEPLOYMENT_ID: ${GIT_SHA:-}
     image: fastsocio-app:phase1
     container_name: fastsocio-app
     restart: unless-stopped
