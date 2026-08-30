@@ -8,12 +8,22 @@
  * roll number ("i" + 6 digits, e.g. i221000@nu.edu.pk). Keep the allow-list
  * here so it is the single place to update if other campuses are onboarded
  * later. This must stay in sync with the DB trigger
- * (0097_allow_legacy_isb_nu_emails.sql), which is the authoritative gate.
+ * (0175_signup_email_exceptions.sql), which is the authoritative gate.
  */
 export const ALLOWED_EMAIL_DOMAINS = ["isb.nu.edu.pk"] as const;
 
 /** Pre-2023 Islamabad address: roll number local-part on the org-wide domain. */
 const LEGACY_ISB_EMAIL_RE = /^i\d{6}@nu\.edu\.pk$/;
+
+/**
+ * Individually approved cross-campus students. Keep this list intentionally
+ * tiny — it is a mirror, not the source of truth: the authoritative list lives
+ * in `private.app_config.signup_allowed_emails` (migration 0175) and can be
+ * amended with one UPDATE. This copy exists only so the signup form's submit
+ * button un-greys without a round trip; an address approved in the DB but
+ * missing here just shows a disabled button until the next deploy.
+ */
+const MANUAL_APPROVED_EMAILS = ["l257838@lhr.nu.edu.pk"] as const;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -32,6 +42,7 @@ const DEV_ALLOWED_EMAILS = (process.env.NEXT_PUBLIC_DEV_ALLOWED_EMAILS ?? "")
 export function isValidFastEmail(email: string): boolean {
   const value = email.trim().toLowerCase();
   if (!EMAIL_RE.test(value)) return false;
+  if ((MANUAL_APPROVED_EMAILS as readonly string[]).includes(value)) return true;
   if (DEV_ALLOWED_EMAILS.includes(value)) return true;
   if (LEGACY_ISB_EMAIL_RE.test(value)) return true;
   const domain = value.slice(value.lastIndexOf("@") + 1);

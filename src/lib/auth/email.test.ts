@@ -18,11 +18,17 @@ describe("isValidFastEmail", () => {
     expect(isValidFastEmail("  I221000@NU.EDU.PK  ")).toBe(true);
   });
 
+  it("accepts individually approved cross-campus exceptions", () => {
+    expect(isValidFastEmail("l257838@lhr.nu.edu.pk")).toBe(true);
+    expect(isValidFastEmail("  L257838@LHR.NU.EDU.PK  ")).toBe(true);
+  });
+
   it("rejects non-Islamabad locals on the bare nu.edu.pk domain and other campuses", () => {
     expect(isValidFastEmail("k21-1234@nu.edu.pk")).toBe(false);
     expect(isValidFastEmail("l221000@nu.edu.pk")).toBe(false);
     expect(isValidFastEmail("i22100@nu.edu.pk")).toBe(false);
     expect(isValidFastEmail("i2210000@nu.edu.pk")).toBe(false);
+    expect(isValidFastEmail("l257839@lhr.nu.edu.pk")).toBe(false);
     expect(isValidFastEmail("student@khi.nu.edu.pk")).toBe(false);
   });
 
