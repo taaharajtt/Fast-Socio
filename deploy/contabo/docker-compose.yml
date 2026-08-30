@@ -77,10 +77,9 @@ services:
       # the entire point, since that recreate is what used to destroy the assets.
       - static_assets:/srv/_next/static
 
-    # WEB_CONCURRENCY drives cluster.js. It must be read together with the cpu
-    # limit below: 3 workers against a 3.0 quota, so a fully busy worker still
-    # has a core to itself and the 4th host core is left for imgproxy, nginx,
-    # Caddy and the kernel.
+    # WEB_CONCURRENCY drives cluster.js. 3 workers on a 4-core host, with no
+    # cpu quota (see below) — they are scheduled against the other services by
+    # WEIGHT rather than fenced off behind a ceiling.
     #
     # Memory, not CPU, is the real ceiling on this number — each worker is a
     # full Next runtime measured at ~450 MB RSS, so 3 workers plus the primary
@@ -93,15 +92,38 @@ services:
     environment:
       WEB_CONCURRENCY: "3"
 
-    # The self-hosted Supabase stack this used to leave room for has been
-    # stopped since 2026-08-16 (all 11 containers exited), so the reservation
-    # that capped this service at 2 vCPU was protecting nothing while the app
-    # queued renders on a single core.
+    # NO CPU QUOTA. This is deliberate and was measured (perf audit Phase 1).
+    #
+    # A `cpus:` limit is a CFS quota: a hard ceiling enforced per 100ms period
+    # across the WHOLE cgroup. When a render burst crosses it the kernel freezes
+    # every thread in the container — including threads that were only waiting
+    # on a socket — until the next period begins. With `cpus: "3.0"` production
+    # had accumulated, over 21 days:
+    #
+    #     nr_periods      343,304
+    #     nr_throttled      9,716    (2.83% of all scheduling periods)
+    #     throttled_usec  568,431,361  (568 seconds frozen)
+    #
+    # That is the p99 tail. It is invisible in average utilisation — the same
+    # container reported 7.8% mean CPU — which is why the earlier rounds of
+    # query optimisation could not find it and moved the average by 10ms.
+    #
+    # Priority is expressed as a WEIGHT instead. `cpu_shares` only applies when
+    # cgroups actually compete, so an idle box is unaffected; under contention
+    # caddy and imgcache keep the docker default of 1024 and therefore outrank
+    # the app, which is what matters — caddy terminates TLS for everything and
+    # uses ~0.00% CPU, so it must never queue behind a render burst. Weighting
+    # caddy this way needs no change to the caddy service, and so costs no TLS
+    # blip from recreating it.
+    #
+    # MEMORY KEEPS ITS HARD LIMIT. It is the real ceiling here (3 workers at
+    # ~450MB RSS, measured at 1.17 GiB of 3G in production) and, unlike CPU,
+    # exceeding it must fail loudly rather than degrade.
+    cpu_shares: 768
     deploy:
       resources:
         limits:
           memory: 3G
-          cpus: "3.0"
 
     # Bounded logs. Without this, json-file logging grows until the disk fills
     # and takes the Supabase stack down with it.
@@ -151,11 +173,20 @@ services:
     # slowest endpoint in the access log; one core meant concurrent renders
     # serialised behind each other. libvips is memory-hungry on large sources
     # (IMGPROXY_MAX_SRC_RESOLUTION is 50 MP), so memory rises with it.
+    #
+    # Trimmed 2.0 -> 1.5 alongside removing the app's quota (perf audit Phase 1):
+    # the app can now burst across all four cores, and 3.0 + 2.0 + 0.5 on a
+    # 4-core host meant the two CPU-hungry services could collide head-on. A
+    # ceiling is still right HERE — a transform is a discrete, retryable unit of
+    # background work, so being throttled costs it latency it can afford, and
+    # every result is cached by imgcache afterwards. The low weight says the same
+    # thing: when the app is rendering, resizing waits.
+    cpu_shares: 256
     deploy:
       resources:
         limits:
           memory: 1G
-          cpus: "2.0"
+          cpus: "1.5"
 
     logging:
       driver: json-file

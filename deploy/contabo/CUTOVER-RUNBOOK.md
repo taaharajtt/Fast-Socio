@@ -413,10 +413,18 @@ clients who have not reloaded yet. Expect at least two entries, newest first:
 docker compose exec app sh -c 'ls -t /srv/_next/static/.builds'
 ```
 
-**6. Reclaim build cache.** Safe at any time; see the dedicated section below.
+**6. Reclaim disk.** Safe at any time; see the dedicated section below. **Do
+not skip this step.** It was documented from the first version of this runbook
+and simply never run: by 31 Aug 2026 the build cache had reached 59.6 GB with
+57.3 GB reclaimable and the root filesystem was 78% full. A deploy step that is
+optional in practice is not a retention policy — if it is being skipped again,
+move it to cron (see the retention section).
 
 ```bash
-docker builder prune --filter until=168h --force
+docker builder prune  --filter until=168h --force
+docker image prune -a --filter until=336h --force
+docker system df                       # confirm it actually came back
+df -h /                                # target: below 70%
 ```
 
 ### Static-asset retention — keep the last 3 builds
@@ -523,6 +531,27 @@ docker compose logs --since 5m caddy | grep -iE '"(cookie|authorization)":\s*\[?
 If it ever prints a real value, revert to `format console` immediately and treat
 it as a credential exposure: auth cookies and magic-link tokens travel in those
 headers.
+
+### Measurement 0 — CPU throttling (read this BEFORE blaming a query)
+
+The app container carries **no cpu quota** (perf audit Phase 1). Before it was
+removed, a `cpus: "3.0"` ceiling had frozen the container 9,716 times for a
+cumulative 568 seconds, and that — not query time — was the p99 tail. Average
+utilisation cannot show this; the same container reported 7.8% mean CPU
+throughout. These counters can:
+
+```bash
+cat /sys/fs/cgroup/system.slice/docker-$(docker inspect -f '{{.Id}}' fastsocio-app).scope/cpu.stat
+```
+
+*Threshold:* `nr_throttled` must stay at **0** and never advance. If it is
+climbing, a quota has been reintroduced somewhere — check `docker inspect
+fastsocio-app --format '{{.HostConfig.CpuQuota}}'`, which must print `0`.
+
+The counters are cumulative and reset only when the container is recreated, so
+compare deltas across a window rather than reading the absolute number. Do this
+check first whenever latency regresses: it is one command, and if it is dirty
+then no amount of query work will fix what you are seeing.
 
 ### Measurements — run these against the JSON access log
 
