@@ -187,18 +187,35 @@ async function CommunitySections() {
     is_official: boolean;
   }[];
 
-  // Second stage: who is in these spaces, and which of them are online. The
-  // roster covers both Your Spaces (for the active dot) and the verified rail
-  // (for its active/members tag), so one query serves both.
+  // Second stage: how many members of these spaces are online right now.
+  //
+  // This used to be TWO more serial round trips on top of the fan-out above —
+  // three stages in all. It pulled every (community_id, user_id) pair in scope
+  // (`.limit(4000)`) to the app server, de-duplicated the user ids, made a
+  // SECOND query for their presence rows, and intersected the two in JS. ~4000
+  // rows crossed the wire to produce roughly twenty integers, and the presence
+  // read could not even start until the roster read had finished.
+  //
+  // `community_active_counts` (migration 0172) does the join and the GROUP BY
+  // in Postgres and returns one row per community, so the third stage is gone
+  // rather than merely moved, and the mutuals query below now runs in parallel
+  // with it instead of after it.
+  //
+  // Visibility is UNCHANGED: the function is SECURITY INVOKER, so RLS on
+  // profile_presence still hides students who have turned show_online off. It
+  // remains an undercount, never a leak — see the note in 0172 on why this is
+  // deliberately not a definer function.
+  //
+  // The online window is passed in from lib/time so the server and the client
+  // dot are computed from one definition.
   const rosterScope = [...new Set([...spaceIds, ...verified.map((v) => v.id)])];
-  const [{ data: rosterRows }, { data: mutualRows }] = await Promise.all([
+  const [{ data: activeRows }, { data: mutualRows }] = await Promise.all([
     rosterScope.length
-      ? supabase
-          .from("community_members")
-          .select("community_id, user_id")
-          .in("community_id", rosterScope)
-          .limit(4000)
-      : Promise.resolve({ data: [] as { community_id: string; user_id: string }[] }),
+      ? supabase.rpc("community_active_counts", {
+          p_community_ids: rosterScope,
+          p_since: onlineSinceIso(),
+        })
+      : Promise.resolve({ data: [] as { cid: string; active_count: number }[] }),
     matchIds.length && chatRooms.length
       ? supabase
           .from("community_members")
@@ -211,25 +228,12 @@ async function CommunitySections() {
       : Promise.resolve({ data: [] as { community_id: string; user_id: string }[] }),
   ]);
 
-  const roster = (rosterRows ?? []) as { community_id: string; user_id: string }[];
-  const rosterIds = [...new Set(roster.map((r) => r.user_id))];
-
-  // profile_presence is RLS-gated on the owner's show_online, so this counts
-  // only students who publish their presence — an undercount, never a leak.
-  const { data: presenceRows } = rosterIds.length
-    ? await supabase
-        .from("profile_presence")
-        .select("id")
-        .in("id", rosterIds)
-        .gt("last_seen_at", onlineSinceIso())
-    : { data: [] as { id: string }[] };
-  const online = new Set((presenceRows ?? []).map((p) => p.id));
-
-  const activeBySpace = new Map<string, number>();
-  for (const r of roster) {
-    if (online.has(r.user_id))
-      activeBySpace.set(r.community_id, (activeBySpace.get(r.community_id) ?? 0) + 1);
-  }
+  const activeBySpace = new Map<string, number>(
+    ((activeRows ?? []) as { cid: string; active_count: number }[]).map((r) => [
+      r.cid,
+      Number(r.active_count ?? 0),
+    ])
+  );
 
   const mutualsByRoom = new Map<string, number>();
   for (const r of (mutualRows ?? []) as { community_id: string }[]) {

@@ -7,8 +7,9 @@ import { FirstRunTour } from "@/components/tour/first-run-tour";
 import { NewFeaturesTour } from "@/components/tour/new-features-tour";
 import { HomeHelpStrip } from "@/components/help/home-help-strip";
 import { createClient } from "@/lib/supabase/server";
-import { activityVisibleTypeList } from "@/lib/notifications/view";
 import { getAuthUserId } from "@/lib/auth/user";
+import { getViewerProfile } from "@/lib/profile/viewer";
+import { getHomeBootstrap } from "@/lib/home/bootstrap";
 import { timed } from "@/lib/perf";
 import { FEED_COLUMNS, FEED_PAGE_SIZE, type FeedPost } from "@/lib/feed/types";
 
@@ -136,14 +137,8 @@ async function loadFeed(): Promise<{
  *  name would be too long for the composer card. */
 async function loadComposerPlaceholder(): Promise<string> {
   const fallback = "What's on your mind?";
-  const supabase = await createClient();
-  const userId = await getAuthUserId();
-  if (!userId) return fallback;
-  const { data: viewer } = await supabase
-    .from("profiles")
-    .select("full_name")
-    .eq("id", userId)
-    .single();
+  // Shares the student layout's read of this row (perf audit 2.5).
+  const viewer = await getViewerProfile();
   const full = viewer?.full_name?.trim();
   if (!full) return fallback;
   const name = full.length > 18 ? full.split(" ")[0] : full;
@@ -181,26 +176,21 @@ function ActivityLink({ unread = 0 }: { unread?: number }) {
 /** UAT-013: the Activity icon carries an unread count. Mirrors the filter on
  *  /activity so the badge can never point at rows that page won't show. */
 async function ActivityLinkWithBadge() {
-  const supabase = await createClient();
-  const userId = (await getAuthUserId())!;
-  const { count } = await supabase
-    // The badge must not count notifications whose subject is gone (mig 0132).
-    .from("notifications_live")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .is("read_at", null)
-    .in("type", activityVisibleTypeList());
-  return <ActivityLink unread={count ?? 0} />;
+  // Shares the student layout's single bootstrap read. The count is still taken
+  // from `notifications_live` with the same type filter — the query moved into
+  // migration 0174, it did not change — so the badge still cannot point at rows
+  // /activity won't show, and still excludes notifications whose subject is
+  // gone (mig 0132).
+  //
+  // This and the layout stream in SEPARATE Suspense boundaries; React `cache`
+  // is what makes them share one call instead of racing two.
+  const { activityUnread } = await getHomeBootstrap();
+  return <ActivityLink unread={activityUnread} />;
 }
 
 /** First-run tour gate: null tour_seen_at = this account hasn't seen it. */
 async function TourGate() {
-  const supabase = await createClient();
-  const userId = (await getAuthUserId())!;
-  const { data: viewer } = await supabase
-    .from("profiles")
-    .select("tour_seen_at")
-    .eq("id", userId)
-    .single();
+  // Shares the student layout's read of this row (perf audit 2.5).
+  const viewer = await getViewerProfile();
   return viewer?.tour_seen_at ? <NewFeaturesTour /> : <FirstRunTour />;
 }

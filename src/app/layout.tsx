@@ -1,8 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
-import { Analytics } from "@vercel/analytics/next";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { APPEARANCE_INIT_SCRIPT } from "@/lib/appearance";
@@ -113,8 +111,21 @@ export default function RootLayout({
             <InstallFunnel />
           </Suspense>
         </ThemeProvider>
-        <Analytics />
-        <SpeedInsights />
+        {/*
+          <Analytics /> and <SpeedInsights /> were removed here (perf audit 2.3).
+          They are Vercel-platform components and this app has not run on Vercel
+          since the Contabo migration — the collector endpoints they inject
+          (/_vercel/insights/script.js, /_vercel/speed-insights/script.js) do not
+          exist on this origin. Worse, those paths are not excluded by the proxy
+          matcher, so each one ran the full auth middleware (JWT verify + a
+          profiles query) and then rendered a 404: two wasted server renders and
+          two wasted Supabase queries on EVERY page load, for telemetry that was
+          never being collected.
+
+          Core Web Vitals are consequently no longer reported. If they are wanted
+          back, the replacement is a `web-vitals` beacon to a route handler we
+          own, or Sentry's browserTracingIntegration — not a Vercel component.
+        */}
       </body>
     </html>
   );

@@ -145,15 +145,17 @@ export async function loadInbox(): Promise<InboxData> {
     // Unread count per conversation: incoming messages the viewer hasn't read.
     // Queried separately (not from the 300-row preview page) so the count is
     // exact even in a very busy thread.
+    //
+    // Aggregated in SQL (migration 0172). This used to select one ROW PER
+    // UNREAD MESSAGE with no limit and count them into a Map here — a query
+    // whose cost grew without bound as threads went unread, on the critical
+    // path of the Chat tab. `conversation_unread_counts()` returns one row per
+    // conversation instead. It takes no arguments: RLS on `messages` scopes it
+    // to the viewer's own conversations, which is exactly `convIds` (the
+    // conversations query above is unfiltered and unlimited), so the result set
+    // is identical.
     convIds.length > 0
-      ? supabase
-          .from("messages")
-          .select("conversation_id")
-          .in("conversation_id", convIds)
-          .neq("sender_id", me)
-          .is("read_at", null)
-          .eq("hidden", false)
-          .then((r) => r.data)
+      ? supabase.rpc("conversation_unread_counts").then((r) => r.data)
       : Promise.resolve(null),
   ]);
 
@@ -205,9 +207,15 @@ export async function loadInbox(): Promise<InboxData> {
     lastMsg.set(m.conversation_id, `${prefix}${text}`);
   }
 
+  // One row per conversation now, already counted (see the RPC above). The
+  // column names are the function's (`conv_id` / `unread_count`) — a `returns
+  // table` output column cannot share a name with the column it selects from.
   const unread = new Map<string, number>();
-  for (const m of unreadRows ?? []) {
-    unread.set(m.conversation_id, (unread.get(m.conversation_id) ?? 0) + 1);
+  for (const r of (unreadRows ?? []) as {
+    conv_id: string;
+    unread_count: number;
+  }[]) {
+    unread.set(r.conv_id, Number(r.unread_count ?? 0));
   }
 
   // Resolve referenced profiles in one query.

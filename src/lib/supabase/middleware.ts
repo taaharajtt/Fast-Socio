@@ -104,10 +104,40 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Router PREFETCHES are exempted from the profile read below (perf audit 2.1).
+  //
+  // Header names are Next's own constants (client/components/app-router-headers:
+  // `next-router-prefetch` for a full prefetch, `next-router-segment-prefetch`
+  // for a per-segment one). Header lookup is case-insensitive.
+  //
+  // Why this is safe, and not merely cheap:
+  //   * A prefetch commits no navigation and renders nothing the user acts on.
+  //     The REAL navigation that follows is a separate request and runs the full
+  //     gate below, unchanged.
+  //   * Under Cache Components every student route is a Partial Prerender (◐ in
+  //     the build output), so what a prefetch returns is the STATIC SHELL — the
+  //     dock, the glow, the loading fallbacks. That shell is identical for every
+  //     student by construction: the (student) layout is deliberately non-async
+  //     precisely so nothing user-specific can reach it. There is no per-user
+  //     data in a prefetch response to leak.
+  //   * The only fully-static (○) routes are public ones (/login, /signup,
+  //     /terms, ...) which never reach this branch anyway.
+  //
+  // Worst case for a banned user is that they prefetch an empty shell and then
+  // get redirected to /banned the moment they actually tap — which is what the
+  // loading state already looks like.
+  //
+  // This is the single biggest win in the audit: prefetches were 7,619 of 15,042
+  // requests in 24h, and each was paying a Frankfurt round trip here for flags
+  // it would never use.
+  const isPrefetch =
+    request.headers.get("next-router-prefetch") === "1" ||
+    request.headers.has("next-router-segment-prefetch");
+
   // For authenticated users on a protected route, read the moderation/role flags
   // once. Banned users are blocked from the entire app (CR-014); non-admins are
   // kept out of /admin (defense-in-depth behind the /admin layout gate).
-  if (userId && !isPublicRoute) {
+  if (userId && !isPublicRoute && !isPrefetch) {
     const { data: profile } = await supabase
       .from("profiles")
       // onboarding_completed rides along on a row we were already reading. The

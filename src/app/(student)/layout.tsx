@@ -13,10 +13,10 @@ import { RouteFallback } from "@/components/ui/route-fallback";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { getMaintenanceState, resolveFlags } from "@/lib/flags";
-import { fetchChatBadge } from "@/lib/chat/badge-count";
-import { fetchCommunityBadge } from "@/lib/community/badge-count";
 import { timed } from "@/lib/perf";
 import { resolveAvatarUrl } from "@/lib/avatar";
+import { getViewerProfile } from "@/lib/profile/viewer";
+import { getHomeBootstrap, type Announcement } from "@/lib/home/bootstrap";
 
 /**
  * Shell for the logged-in student experience. Hosts the bottom dock and reserves
@@ -112,39 +112,29 @@ async function StudentShell() {
   // for a session that expires between the proxy hop and this render.
   if (!userId) redirect("/login");
 
-  const [
-    { data: profile },
-    maintenance,
-    flags,
-    badge,
-    communityBadge,
-    { data: announcements },
-  ] = await timed("layout:shell", () =>
+  const [profile, maintenance, flags, bootstrap] = await timed(
+    "layout:shell",
+    () =>
     Promise.all([
-    supabase
-      .from("profiles")
-      .select("avatar_url, gender, admin_role")
-      .eq("id", userId)
-      .single(),
+    // Request-memoised (perf audit 2.5). The Home page also needs this row for
+    // the composer placeholder and the tour gate; going through the shared
+    // loader means all three share ONE query instead of three.
+    getViewerProfile(),
     getMaintenanceState(),
     resolveFlags(["discover", "events", "leaderboard"]),
-    // ONE call each. Both badges go through the same helper the client would
-    // use, so a server render and a realtime recount can never disagree about
-    // what the number MEANS: chat counts unread conversations + pending
-    // requests (mig 0169), community counts grouped Community/Event/Broadcast
-    // items and never chat messages (mig 0170).
-    fetchChatBadge(supabase, userId),
-    fetchCommunityBadge(supabase),
-    // UAT-012: broadcasts are delivered as a modal on a cold open, not as a row
-    // buried in Activity. Unread = not yet dismissed.
-    supabase
-      .from("notifications")
-      .select("id, data, created_at")
-      .eq("user_id", userId)
-      .eq("type", "announcement")
-      .is("read_at", null)
-      .order("created_at", { ascending: false })
-      .limit(5),
+    // ONE call for both dock badges, the broadcast announcements and the
+    // Activity unread count (migration 0174). These were four separate reads;
+    // they always occur together on the same screen and all key off auth.uid(),
+    // so issuing them in parallel still meant four network legs to Frankfurt.
+    //
+    // The badge SEMANTICS are unchanged and still owned by one definition each:
+    // the RPC calls chat_badge_count()/community_badge_count() rather than
+    // reimplementing them, and the reader runs the results back through the
+    // same toBadge/sumBadge helpers the client uses — so a server render and a
+    // realtime recount still cannot disagree about what the number MEANS
+    // (unread conversations + requests, mig 0169; grouped Community/Event/
+    // Broadcast and never chat, mig 0170).
+    getHomeBootstrap(),
     ])
   );
 
@@ -182,7 +172,7 @@ async function StudentShell() {
     !flags.leaderboard && "/leaderboard",
   ].filter((h): h is string => Boolean(h));
 
-  const chatBadge = badge.total;
+  const chatBadge = bootstrap.chat.total;
 
   return (
     <>
@@ -195,7 +185,7 @@ async function StudentShell() {
           event that arrived meanwhile was lost, with no replay to recover it. */}
       <InboxRealtime userId={userId} />
       <AnnouncementModal
-        announcements={(announcements ?? []).map((a) => ({
+        announcements={bootstrap.announcements.map((a: Announcement) => ({
           id: a.id as string,
           title: String(
             (a.data as Record<string, unknown>)?.title ?? "FAST SOCIO"
@@ -209,7 +199,7 @@ async function StudentShell() {
         // nothing — /events is an adopted route, not a tab — so the events
         // signal now arrives as part of the Community badge, under the key the
         // dock actually renders.
-        badges={{ "/chat": chatBadge, "/communities": communityBadge.total }}
+        badges={{ "/chat": chatBadge, "/communities": bootstrap.community.total }}
         avatarUrl={resolveAvatarUrl(profile?.avatar_url, profile?.gender)}
         viewerId={userId}
         hiddenHrefs={hiddenTabs}

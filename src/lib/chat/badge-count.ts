@@ -45,7 +45,9 @@ type BadgeClient = Pick<SupabaseClient, "rpc" | "from">;
  *  renders as "9+". */
 const FALLBACK_ROW_CAP = 500;
 
-function toBadge(conversations: number, requests: number): ChatBadge {
+/** Exported so the batched `home_bootstrap` reader can build a badge from the
+ *  embedded payload without re-deriving the total rule. One definition. */
+export function toBadge(conversations: number, requests: number): ChatBadge {
   return { conversations, requests, total: conversations + requests };
 }
 

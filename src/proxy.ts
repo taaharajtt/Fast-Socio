@@ -26,8 +26,17 @@ export const config = {
    * `cacheOnFrontEndNav` / `aggressiveFrontEndNavCaching` in next.config.ts —
    * both were switched on but had never actually worked, so every client-side
    * navigation went to the server that the option exists to avoid.
+   *
+   * `monitoring` is the Sentry tunnel (tunnelRoute in next.config.ts), excluded
+   * for TWO reasons (perf audit 2.4). It was falling through to the auth gate,
+   * which meant (a) every browser error report from a signed-in user paid a JWT
+   * verify plus a profiles query before being forwarded, and (b) — the actual
+   * bug — a report from a SIGNED-OUT user was answered with `307 -> /login` and
+   * silently discarded. Errors on /login and /signup, i.e. exactly the ones that
+   * explain why someone could not get into the app, were never reaching Sentry.
+   * It is an ingest endpoint, not a page: it has no session to refresh.
    */
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|robots.txt|manifest.webmanifest|sw.js|swe-worker-.*|workbox-.*|icons/.*|apple-touch-icon.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|robots.txt|manifest.webmanifest|sw.js|swe-worker-.*|workbox-.*|monitoring|icons/.*|apple-touch-icon.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
