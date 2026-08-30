@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import AdminLoading from "@/app/admin/loading";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { TableBrowser } from "@/components/admin/table-browser";
@@ -20,7 +22,35 @@ type TableMeta = {
 
 const PAGE_SIZE = 50;
 
-export default async function TablePage({
+/**
+ * PERF/CORRECTNESS (perf audit Phase 4) — this default export is deliberately
+ * NOT async and never awaits `params`/`searchParams`. Under Cache Components,
+ * reading request data (or calling `notFound()`) at the top level makes the
+ * route dynamic while Next is still building its fallback shell; resuming that
+ * shell then throws
+ *
+ *   InvariantError: postponed state should not be provided when fallback
+ *   params are provided        (E592)
+ *
+ * which surfaces as a 500. The request-scoped work lives in the async body
+ * below, behind a Suspense boundary. Same shape as /post/[id], which hit this
+ * exact bug first and documents it.
+ */
+export default function TablePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ table: string }>;
+  searchParams: Promise<{ page?: string; q?: string; sort?: string; dir?: string }>;
+}) {
+  return (
+    <Suspense fallback={<AdminLoading />}>
+      <TablePageBody params={params} searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+async function TablePageBody({
   params,
   searchParams,
 }: {

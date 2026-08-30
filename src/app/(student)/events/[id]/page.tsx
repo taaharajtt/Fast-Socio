@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import PageLoading from "./loading";
 import { notFound } from "next/navigation";
 import { EventShell, type EventShellTab } from "@/components/events/event-shell";
 import { EventOverviewTab } from "@/components/events/tabs/event-overview-tab";
@@ -32,7 +34,33 @@ type AttendeeRow = {
   user: { id: string; full_name: string | null; username: string | null; avatar_url: string | null; gender: string | null } | null;
 };
 
-export default async function EventPage({
+/**
+ * PERF/CORRECTNESS (perf audit Phase 4) — this default export is deliberately
+ * NOT async and never awaits `params`/`searchParams`. Under Cache Components,
+ * reading request data (or calling `notFound()`) at the top level makes the
+ * route dynamic while Next is still building its fallback shell; resuming that
+ * shell then throws
+ *
+ *   InvariantError: postponed state should not be provided when fallback
+ *   params are provided        (E592)
+ *
+ * which surfaces as a 500. The request-scoped work lives in the async body
+ * below, behind a Suspense boundary. Same shape as /post/[id], which hit this
+ * exact bug first and documents it.
+ */
+export default function EventPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <EventPageBody params={params} />
+    </Suspense>
+  );
+}
+
+async function EventPageBody({
   params,
 }: {
   params: Promise<{ id: string }>;

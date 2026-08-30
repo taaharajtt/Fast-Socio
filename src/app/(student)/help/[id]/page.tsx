@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import PageLoading from "./loading";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { MessageSquare, Zap, VenetianMask } from "lucide-react";
@@ -31,7 +33,33 @@ import { HelpResponseCard } from "@/components/help/help-response-card";
 import { HelpRequestReportButton } from "@/components/help/help-request-report-button";
 import { HelpAnonBadge } from "@/components/help/help-anon-badge";
 
-export default async function HelpDetailPage({
+/**
+ * PERF/CORRECTNESS (perf audit Phase 4) — this default export is deliberately
+ * NOT async and never awaits `params`/`searchParams`. Under Cache Components,
+ * reading request data (or calling `notFound()`) at the top level makes the
+ * route dynamic while Next is still building its fallback shell; resuming that
+ * shell then throws
+ *
+ *   InvariantError: postponed state should not be provided when fallback
+ *   params are provided        (E592)
+ *
+ * which surfaces as a 500. The request-scoped work lives in the async body
+ * below, behind a Suspense boundary. Same shape as /post/[id], which hit this
+ * exact bug first and documents it.
+ */
+export default function HelpDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <HelpDetailPageBody params={params} />
+    </Suspense>
+  );
+}
+
+async function HelpDetailPageBody({
   params,
 }: {
   params: Promise<{ id: string }>;

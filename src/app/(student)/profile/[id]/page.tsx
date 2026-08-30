@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import PageLoading from "./loading";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, Check } from "lucide-react";
@@ -22,7 +24,35 @@ import { FEED_COLUMNS, type FeedPost } from "@/lib/feed/types";
 import { semesterLabel } from "@/lib/profile/constants";
 import { deriveSemester } from "@/lib/profile/semester";
 
-export default async function PublicProfilePage({
+/**
+ * PERF/CORRECTNESS (perf audit Phase 4) — this default export is deliberately
+ * NOT async and never awaits `params`/`searchParams`. Under Cache Components,
+ * reading request data (or calling `notFound()`) at the top level makes the
+ * route dynamic while Next is still building its fallback shell; resuming that
+ * shell then throws
+ *
+ *   InvariantError: postponed state should not be provided when fallback
+ *   params are provided        (E592)
+ *
+ * which surfaces as a 500. The request-scoped work lives in the async body
+ * below, behind a Suspense boundary. Same shape as /post/[id], which hit this
+ * exact bug first and documents it.
+ */
+export default function PublicProfilePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <PublicProfilePageBody params={params} searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+async function PublicProfilePageBody({
   params,
   searchParams,
 }: {

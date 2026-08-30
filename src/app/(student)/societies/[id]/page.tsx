@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import PageLoading from "./loading";
 import { SocietyShell, type SocietyShellTab } from "@/components/societies/society-shell";
 import { BroadcastTab } from "@/components/societies/tabs/broadcast-tab";
 import { EventsTab } from "@/components/societies/tabs/events-tab";
@@ -19,6 +21,32 @@ import type { CommunityMemberVM } from "@/components/communities/member-row";
 import type { PendingPost } from "@/components/communities/review-post-row";
 
 /**
+ * PERF/CORRECTNESS (perf audit Phase 4) — this default export is deliberately
+ * NOT async and never awaits `params`/`searchParams`. Under Cache Components,
+ * reading request data (or calling `notFound()`) at the top level makes the
+ * route dynamic while Next is still building its fallback shell; resuming that
+ * shell then throws
+ *
+ *   InvariantError: postponed state should not be provided when fallback
+ *   params are provided        (E592)
+ *
+ * which surfaces as a 500. The request-scoped work lives in the async body
+ * below, behind a Suspense boundary. Same shape as /post/[id], which hit this
+ * exact bug first and documents it.
+ */
+export default function SocietyPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <SocietyPageBody params={params} />
+    </Suspense>
+  );
+}
+
+/**
  * A society's single page — Broadcast / Events / Members, plus Manage for
  * officers. Conversation does NOT live here at all: a verified community
  * broadcasts to its followers and has no chat surface — chat belongs to chat
@@ -29,7 +57,7 @@ import type { PendingPost } from "@/components/communities/review-post-row";
  * client SocietyShell as fully-loaded content — so switching tabs is an instant
  * client state change with a frozen header, never a route navigation.
  */
-export default async function SocietyPage({
+async function SocietyPageBody({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -55,7 +83,12 @@ export default async function SocietyPage({
       getSocietyAnnouncements(id, 50),
       supabase
         .from("community_members")
-        .select("user_id, profile:profiles(id, full_name, username, avatar_url, gender)")
+        .select(
+          // See the note in /communities/[id]: migration 0170 added
+          // community_members.approved_by -> profiles, so this embed must name
+          // the FK it means or PostgREST returns PGRST201 and the list is empty.
+          "user_id, profile:profiles!community_members_user_id_fkey(id, full_name, username, avatar_url, gender)"
+        )
         .eq("community_id", id)
         .limit(200),
       canManage

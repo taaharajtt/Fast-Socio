@@ -1,11 +1,26 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
+import { SkeletonRows } from "@/components/ui/skeleton";
 import { MatchRow, type MatchListRow } from "@/components/profile/match-row";
 
 /**
+ * PERF/CORRECTNESS — the default export is deliberately NOT async and never
+ * awaits `params`. See the same note on /post/[id]: under Cache Components,
+ * awaiting params (or calling notFound()) at the top level makes the route
+ * dynamic while Next is still building its fallback shell, and the resume of
+ * that shell then throws
+ *
+ *   InvariantError: postponed state should not be provided when fallback
+ *   params are provided        (E592)
+ *
+ * which surfaces as a 500 on the page. Keeping the shell request-free lets the
+ * fallback prerender on its own; everything request-scoped lives in the async
+ * body behind the Suspense boundary.
+ *
  * Second degree (fix-056): the matches of someone YOU have matched with.
  *
  * One hop, not arbitrary browsing. The rule is enforced inside
@@ -17,7 +32,31 @@ import { MatchRow, type MatchListRow } from "@/components/profile/match-row";
  * Note the deliberate omission: these rows carry NO match percentage. The score
  * between two other people is not the viewer's to see.
  */
-export default async function SecondDegreeMatchesPage({
+export default function SecondDegreeMatchesPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  return (
+    <div className="mx-auto w-full max-w-md pb-24">
+      <header className="flex items-center gap-2 px-4 py-3">
+        <Link
+          href="/profile/matches"
+          aria-label="Back to your matches"
+          className="glass flex h-9 w-9 items-center justify-center rounded-full text-fg-muted"
+        >
+          <ChevronLeft className="h-5 w-5" aria-hidden />
+        </Link>
+      </header>
+
+      <Suspense fallback={<SkeletonRows />}>
+        <SecondDegreeMatchesBody params={params} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function SecondDegreeMatchesBody({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -38,24 +77,15 @@ export default async function SecondDegreeMatchesPage({
   const name = (owner as { full_name: string | null } | null)?.full_name ?? "They";
 
   return (
-    <div className="mx-auto w-full max-w-md pb-24">
-      <header className="flex items-center gap-2 px-4 py-3">
-        <Link
-          href="/profile/matches"
-          aria-label="Back to your matches"
-          className="glass flex h-9 w-9 items-center justify-center rounded-full text-fg-muted"
-        >
-          <ChevronLeft className="h-5 w-5" aria-hidden />
-        </Link>
-        <div className="min-w-0">
-          <h1 className="truncate text-lg font-bold tracking-tight">
-            {name}&rsquo;s matches
-          </h1>
-          <p className="text-xs text-fg-muted">
-            {rows.length} {rows.length === 1 ? "person" : "people"}
-          </p>
-        </div>
-      </header>
+    <>
+      <div className="min-w-0 px-4 pb-3">
+        <h1 className="truncate text-lg font-bold tracking-tight">
+          {name}&rsquo;s matches
+        </h1>
+        <p className="text-xs text-fg-muted">
+          {rows.length} {rows.length === 1 ? "person" : "people"}
+        </p>
+      </div>
 
       {rows.length === 0 ? (
         <div className="mt-10 flex flex-col items-center gap-2 px-8 text-center">
@@ -75,6 +105,6 @@ export default async function SecondDegreeMatchesPage({
           ))}
         </div>
       )}
-    </div>
+    </>
   );
 }

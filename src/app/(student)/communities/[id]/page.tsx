@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import PageLoading from "./loading";
 import { notFound, redirect } from "next/navigation";
 import { ChatRoomShell, type ChatRoomShellTab } from "@/components/communities/chat-room-shell";
 import { RoomOverviewTab } from "@/components/communities/tabs/room-overview-tab";
@@ -21,6 +23,32 @@ const ROLE_RANK: Record<CommunityMemberVM["role"], number> = {
 };
 
 /**
+ * PERF/CORRECTNESS (perf audit Phase 4) — this default export is deliberately
+ * NOT async and never awaits `params`/`searchParams`. Under Cache Components,
+ * reading request data (or calling `notFound()`) at the top level makes the
+ * route dynamic while Next is still building its fallback shell; resuming that
+ * shell then throws
+ *
+ *   InvariantError: postponed state should not be provided when fallback
+ *   params are provided        (E592)
+ *
+ * which surfaces as a 500. The request-scoped work lives in the async body
+ * below, behind a Suspense boundary. Same shape as /post/[id], which hit this
+ * exact bug first and documents it.
+ */
+export default function CommunityPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <CommunityPageBody params={params} />
+    </Suspense>
+  );
+}
+
+/**
  * A chat room — Overview / Chat, plus Manage for the owner. Society/Event
  * OS-registered communities have their own richer shell at /societies/[id];
  * this page redirects there so a society is never rendered as a plain room.
@@ -37,7 +65,7 @@ const ROLE_RANK: Record<CommunityMemberVM["role"], number> = {
  * Every tab's data is fetched here in parallel and handed to the client shell
  * as ready content, so switching tabs never touches the network.
  */
-export default async function CommunityPage({
+async function CommunityPageBody({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -78,7 +106,13 @@ export default async function CommunityPage({
   const { data: memberData } = !pending
     ? await supabase
         .from("community_members")
-        .select("user_id, role, profile:profiles(id, full_name, username, avatar_url, gender)")
+        .select(
+          // Disambiguated FK: `community_members` gained a SECOND reference to
+          // `profiles` in migration 0170 (`approved_by`), so a bare `profiles(...)`
+          // embed is ambiguous and PostgREST rejects it with PGRST201 — which
+          // surfaced as an empty roster. Name the FK we mean.
+          "user_id, role, profile:profiles!community_members_user_id_fkey(id, full_name, username, avatar_url, gender)"
+        )
         .eq("community_id", id)
         .limit(200)
     : { data: [] };
