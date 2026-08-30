@@ -3,32 +3,37 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * REGRESSION GUARD for Next.js invariant E592:
+ * GUARD: every dynamic route renders a request-free shell.
+ *
+ * WHAT THIS IS FOR. Under Cache Components, a page whose default export awaits
+ * `params`/`searchParams` or calls `notFound()` cannot be prerendered at all —
+ * the very first thing it does is request-scoped, so there is no shell to
+ * stream ahead of the data. Keeping the export synchronous and passing the
+ * params promise into an async child behind `<Suspense>` means the header,
+ * title and skeleton paint the instant the route is entered, and only the
+ * query streams. That is a perceived-performance property and it is why this
+ * test exists.
+ *
+ * WHAT THIS IS *NOT* FOR — and this correction matters, because 15 pages were
+ * rewritten on the strength of the claim. This file used to assert that the
+ * above shape prevents Next invariant E592:
  *
  *   InvariantError: postponed state should not be provided when fallback
  *   params are provided
  *
- * WHAT CAUSES IT. Under Cache Components (`cacheComponents: true`), a dynamic
- * route with no `generateStaticParams` builds a FALLBACK SHELL whose params are
- * unknown at build time. If the page's default export also reads request data —
- * `await params`, `await searchParams`, or `notFound()` — the route turns
- * dynamic while that shell is still being produced, and resuming the shell then
- * throws. It surfaces as a 500 on the page.
+ * It does not. The guard that throws is
+ * node_modules/next/dist/server/app-render/app-render.js:1591 —
+ * `if (typeof renderOpts.postponed === 'string') { if (fallbackRouteParams) throw }`
+ * — and neither value is influenced by page code. Production confirmed it:
+ * after all 16 routes were given this shape, E592 was still firing 222 times a
+ * day, 100% of them on /post/[id], the route the others had been copied FROM.
  *
- * This is not a hypothesis. `/post/[id]` hit it in production and carries a
- * comment describing the exact failure; the fix there was to make the default
- * export synchronous and move every request-scoped read into an async child
- * behind `<Suspense>`. A later audit found 15 of the other 16 dynamic pages
- * still had the broken shape. This test is what stops that recurring.
+ * The 15 rewrites were harmless and are worth keeping on streaming grounds.
+ * They were not, however, the fix, and this comment should not be allowed to
+ * imply otherwise the next time someone reads it.
  *
- * It is deliberately a STATIC test over the source tree rather than a runtime
- * one: reproducing E592 needs a production build, a populated prerender cache
- * and a resumed fallback shell, which is far past what a unit test can stage.
- * The shape is the thing we actually control, so the shape is what is asserted.
- *
- * WHEN THIS FAILS, the fix is never `await connection()` or disabling PPR —
- * both make the route MORE dynamic, which is the cause. Follow /post/[id]:
- * keep the default export synchronous and move the reads into the body.
+ * It is deliberately a STATIC test over the source tree: the shape is the thing
+ * we control, so the shape is what is asserted.
  */
 
 const APP_DIR = join(process.cwd(), "src", "app");
@@ -61,7 +66,7 @@ function defaultExportBody(src: string): { isAsync: boolean; body: string } | nu
 
 const pages = dynamicRoutePages();
 
-describe("dynamic route shells (Next.js E592 guard)", () => {
+describe("dynamic route shells", () => {
   it("finds the dynamic routes to check", () => {
     // If this drops to zero the rest of the suite silently passes for the wrong
     // reason, so assert the corpus is real. 16 at the time of writing.
@@ -76,10 +81,10 @@ describe("dynamic route shells (Next.js E592 guard)", () => {
 
     expect(
       isAsync,
-      `${rel}: the default export is async. Under Cache Components that makes ` +
-        `the route dynamic while its fallback shell is being built and can ` +
-        `throw E592 on resume. Keep it synchronous and move the awaits into an ` +
-        `async child behind <Suspense> — see src/app/(student)/post/[id]/page.tsx.`
+      `${rel}: the default export is async, so the route cannot prerender a ` +
+        `shell and nothing paints until its query resolves. Keep it ` +
+        `synchronous and move the awaits into an async child behind ` +
+        `<Suspense>.`
     ).toBe(false);
 
     expect(
@@ -94,9 +99,8 @@ describe("dynamic route shells (Next.js E592 guard)", () => {
 
     expect(
       /\bnotFound\(\)/.test(body),
-      `${rel}: the shell calls notFound(). Move it into the async body — calling ` +
-        `it during the fallback-shell pass is the documented trigger in ` +
-        `src/app/(student)/post/[id]/page.tsx.`
+      `${rel}: the shell calls notFound(), which is request-scoped and so ` +
+        `collapses the shell. Move it into the async body.`
     ).toBe(false);
   });
 
@@ -111,10 +115,17 @@ describe("dynamic route shells (Next.js E592 guard)", () => {
     ).toBe(true);
   });
 
-  it("keeps /post/[id] as the reference implementation", () => {
-    const ref = pages.find((p) => p.includes("post") && p.includes("[id]"));
+  it("keeps the E592 evidence attached to the route that hit it", () => {
+    // The invariant is a framework bug we are working around, not a rule we
+    // can re-derive later. If the workaround is ever reverted, the reader
+    // needs the measurement that justified it, not just a git blame line.
+    const ref = pages.find((p) => p.replace(/\\/g, "/").includes("post/[id]"));
     expect(ref, "the route that documents E592 must still exist").toBeTruthy();
     const src = readFileSync(join(process.cwd(), ref!), "utf8");
     expect(src).toMatch(/postponed state should not be provided/);
+    expect(
+      src,
+      "the opt-out must carry its reason: cite the guard in Next's source"
+    ).toMatch(/app-render\.js:1591/);
   });
 });

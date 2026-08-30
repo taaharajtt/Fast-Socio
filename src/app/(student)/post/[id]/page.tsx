@@ -14,19 +14,46 @@ import { FEED_COLUMNS, type FeedPost } from "@/lib/feed/types";
  * The page itself is a STATIC shell: it never awaits `params` and never reads
  * a request. Everything request-dependent lives in `PostBody` behind a
  * Suspense boundary, and the params promise is passed down rather than awaited
- * here.
+ * here. That is worth keeping on its own merits — the header and the comment
+ * skeleton paint immediately and only the query streams.
  *
- * This shape is required under Cache Components (`cacheComponents: true` in
- * next.config.ts). Awaiting params at the top level made the whole route
- * dynamic while Next was still building a fallback shell for it, and the
- * `notFound()` below then threw during that shell pass:
+ * ---------------------------------------------------------------------------
+ * ON E592, AND WHAT THIS COMMENT USED TO CLAIM.
+ *
+ * It used to say this shape was REQUIRED under Cache Components, that awaiting
+ * params here caused
  *
  *   InvariantError: postponed state should not be provided when fallback
  *   params are provided
  *
- * which surfaced as a 500 on individual post pages. Keeping the shell free of
- * request data means the fallback can prerender on its own, and the dynamic
- * half streams in afterwards.
+ * and that the invariant "surfaced as a 500 on individual post pages". Fifteen
+ * other dynamic routes were rewritten to match. Measured on production
+ * 2026-08-31, all three claims are false:
+ *
+ *  - NOT FIXED. This route was still throwing it 222 times in 24 hours, while
+ *    already having the shape above. 100% of the app's occurrences are here.
+ *  - NOT A 500. All 162 /post/ responses in that same window were 200, and
+ *    zero 5xx were served. Next catches the invariant and re-renders.
+ *  - NOT CAUSED BY PAGE CODE. The guard is
+ *    node_modules/next/dist/server/app-render/app-render.js:1591 —
+ *      if (typeof renderOpts.postponed === 'string')
+ *        if (fallbackRouteParams) throw
+ *    Neither value is derived from this file. Both are true for all 16 dynamic
+ *    routes (see .next/prerender-manifest.json), which is why rewriting the
+ *    other fifteen changed nothing.
+ *
+ * `await connection()` was tried here and REVERTED: it does not remove the
+ * postponed state. Under `cacheComponents: true` PPR is not optional per
+ * route, the shell is produced from the layout/loading boundary ABOVE this
+ * page, and the route stays PARTIALLY_STATIC with a 4,253-byte postponed
+ * entry either way. Verified in the build output — the marker never left `◐`.
+ *
+ * The trigger is still unknown, and the next person should start from this
+ * measurement rather than the source: the errors fire with ZERO incoming
+ * /post/ requests in the access log (2 within 12 minutes of a container start
+ * during which Caddy logged no /post traffic at all), so it is background
+ * render work, not a user request. Do not "fix" this route again without a
+ * before/after count from `docker logs fastsocio-app | grep -c "postponed state"`.
  */
 export default function PostDetailPage({
   params,
