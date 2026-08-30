@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import Link from "next/link";
+import { RowLink } from "@/components/ui/row-link";
 import { StatusDot, Tag, ctrl, ctrlDanger } from "@/components/admin/kit";
 import { updateReportStatus } from "@/app/admin/reports/actions";
 
@@ -45,9 +45,9 @@ export function ReportRow({ report }: { report: AdminReport }) {
             <span aria-hidden>·</span>
             <span>{report.age} old</span>
             {report.targetHref && (
-              <Link href={report.targetHref} className="text-fg-muted underline hover:text-fg">
+              <RowLink href={report.targetHref} className="text-fg-muted underline hover:text-fg">
                 view target →
-              </Link>
+              </RowLink>
             )}
           </p>
         </div>

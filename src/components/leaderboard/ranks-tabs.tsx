@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import Link from "next/link";
+import { RowLink } from "@/components/ui/row-link";
 import { CalendarDays, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -212,7 +212,7 @@ function StudentBoard({
           return (
             // Tapping a row opens that student's profile (your own row goes to
             // your profile) — avatars are tappable everywhere else in the app.
-            <Link
+            <RowLink
               key={r.user_id}
               href={isMe ? "/profile" : `/profile/${r.user_id}`}
               className={cn(
@@ -265,7 +265,7 @@ function StudentBoard({
                 <AuraIcon className="h-4 w-4" />
                 {r.weekly_aura.toLocaleString()}
               </span>
-            </Link>
+            </RowLink>
           );
         })}
       </div>

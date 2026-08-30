@@ -11,3 +11,4 @@ export { SectionHeader } from "./section-header";
 export { AuraIcon } from "./aura-icon";
 export { ComposerAction, AnonymousToggle } from "./composer-action";
 export { likeToneClass, likeGlyphClass } from "./like-style";
+export { RowLink } from "./row-link";

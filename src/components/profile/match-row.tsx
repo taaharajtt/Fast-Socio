@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { RowLink } from "@/components/ui/row-link";
 import { ChevronRight } from "lucide-react";
 import { AppImage } from "@/components/ui/app-image";
 import { OpenChatButton } from "@/components/chat/open-chat-button";
@@ -63,13 +64,13 @@ export function MatchRow({
       <div className="flex shrink-0 items-center gap-2">
         {showChat && <OpenChatButton otherId={row.id} />}
         {hopHref && (
-          <Link
+          <RowLink
             href={hopHref}
             aria-label={`See who ${row.full_name ?? "they"} matched with`}
             className="glass flex h-8 w-8 items-center justify-center rounded-full text-fg-muted"
           >
             <ChevronRight className="h-4 w-4" aria-hidden />
-          </Link>
+          </RowLink>
         )}
       </div>
     </div>

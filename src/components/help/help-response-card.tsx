@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { RowLink } from "@/components/ui/row-link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
@@ -107,9 +107,9 @@ export function HelpResponseCard({
         <div className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5">
             {author.href ? (
-              <Link href={author.href} className="block truncate text-sm font-semibold text-fg">
+              <RowLink href={author.href} className="block truncate text-sm font-semibold text-fg">
                 {author.name}
-              </Link>
+              </RowLink>
             ) : (
               <span className="block truncate text-sm font-semibold text-fg">
                 {author.name}

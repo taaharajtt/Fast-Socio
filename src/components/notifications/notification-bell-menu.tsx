@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { RowLink } from "@/components/ui/row-link";
 import {
   Bell,
   Heart,
@@ -138,7 +139,7 @@ export function NotificationBellMenu({
               items.map((n) => {
                 const Icon = TYPE_ICON[n.type] ?? Bell;
                 return (
-                  <Link
+                  <RowLink
                     key={n.id}
                     href={n.href}
                     onClick={() => setOpen(false)}
@@ -172,7 +173,7 @@ export function NotificationBellMenu({
                         {n.timeAgo}
                       </p>
                     </div>
-                  </Link>
+                  </RowLink>
                 );
               })
             )}

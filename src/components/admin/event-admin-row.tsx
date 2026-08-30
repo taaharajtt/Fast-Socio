@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
+import { RowLink } from "@/components/ui/row-link";
 import { StatusDot, Tag, ctrl, ctrlDanger } from "@/components/admin/kit";
 import { moderateEvent, deleteEvent } from "@/app/admin/events/actions";
 
@@ -64,9 +64,9 @@ export function EventAdminRow({ event, isSuper }: { event: AdminEvent; isSuper: 
             </button>
           </>
         )}
-        <Link href={`/events/${event.id}`} className={ctrl}>
+        <RowLink href={`/events/${event.id}`} className={ctrl}>
           View →
-        </Link>
+        </RowLink>
         {isSuper && (
           <button
             className={`${ctrlDanger} ml-auto`}

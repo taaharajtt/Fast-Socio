@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { RowLink } from "@/components/ui/row-link";
 import {
   BookOpen,
   Building2,
@@ -260,14 +260,14 @@ export function IntentCardBody({
               )}
 
               {isSports && post.place && (
-                <Link
+                <RowLink
                   href={`/map?place=${encodeURIComponent(post.placeId ?? mapPlace?.id ?? post.place)}`}
                   onPointerDownCapture={(e) => e.stopPropagation()}
                   className="type-caption inline-flex w-fit items-center gap-1.5 rounded-full bg-fill px-3 py-1.5 font-semibold text-fg-muted"
                 >
                   <MapPin className="h-3.5 w-3.5" aria-hidden />
                   Show on map 📍
-                </Link>
+                </RowLink>
               )}
 
               <MetaRows rows={rows} />

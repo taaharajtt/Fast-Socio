@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { RowLink } from "@/components/ui/row-link";
 import { Calendar, Compass, ShieldCheck } from "lucide-react";
 import { AppImage } from "@/components/ui/app-image";
 import { SectionHeader, VerifiedBadge } from "@/components/ui";
@@ -89,7 +89,7 @@ function EmptyState({
 function SpaceTile({ s }: { s: YourSpaceVM }) {
   const image = s.avatar_url ?? s.cover_url;
   return (
-    <Link
+    <RowLink
       href={s.isSociety ? `/societies/${s.id}` : `/communities/${s.id}`}
       className="flex w-[68px] shrink-0 flex-col items-center gap-1.5 text-center"
     >
@@ -115,7 +115,7 @@ function SpaceTile({ s }: { s: YourSpaceVM }) {
         </span>
         {s.isSociety && s.isOfficial && <VerifiedBadge size={11} className="shrink-0" />}
       </span>
-    </Link>
+    </RowLink>
   );
 }
 
@@ -127,7 +127,7 @@ function SpaceTile({ s }: { s: YourSpaceVM }) {
 function SquareTile({ t }: { t: TileVM }) {
   const active = t.activeNow ?? 0;
   return (
-    <Link href={t.href} className="w-[156px] shrink-0">
+    <RowLink href={t.href} className="w-[156px] shrink-0">
       <span className="relative block h-[156px] w-[156px]">
         <span className="glass relative flex h-full w-full items-center justify-center overflow-hidden rounded-[22px]">
           {t.image ? (
@@ -161,7 +161,7 @@ function SquareTile({ t }: { t: TileVM }) {
           {t.meta}
         </span>
       )}
-    </Link>
+    </RowLink>
   );
 }
 

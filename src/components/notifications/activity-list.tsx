@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { RowLink } from "@/components/ui/row-link";
 import {
   Heart,
   MessageSquare,
@@ -144,7 +144,7 @@ function ActivityRow({ item }: { item: ActivityItem }) {
       : null;
 
   return (
-    <Link
+    <RowLink
       href={item.href}
       className="pressable-subtle focus-ring -mx-2 flex items-center gap-3 rounded-[10px] px-2 py-3.5"
     >
@@ -204,6 +204,6 @@ function ActivityRow({ item }: { item: ActivityItem }) {
         )}
         <span className="type-caption text-fg-muted">{item.timeAgo}</span>
       </div>
-    </Link>
+    </RowLink>
   );
 }
