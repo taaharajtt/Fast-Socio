@@ -93,6 +93,17 @@ RUN apt-get update \
 ARG NEXT_DEPLOYMENT_ID
 ENV NEXT_DEPLOYMENT_ID=$NEXT_DEPLOYMENT_ID
 
+# Pre-create the shared-static mount point AS ROOT, owned by node.
+#
+# This is load-bearing and was missed the first time: Docker initialises an
+# EMPTY named volume from the image's directory at the mount point, copying its
+# ownership with it. With no /srv in the image the volume was created
+# root:root, the container runs as node (uid 1000), and every mkdir/cp into it
+# failed with EACCES — so the static-retention feature was completely inert
+# while the app looked perfectly healthy, because each step is `|| true` and
+# Caddy's pass_thru quietly served the assets from the app instead.
+RUN mkdir -p /srv/_next/static/.builds && chown -R node:node /srv
+
 # Run unprivileged. The node image ships a `node` user (uid 1000) already.
 # A container escape is a much smaller problem when the process was never root.
 USER node
@@ -141,4 +152,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
 # keep". Pruning by age alone (the earlier `-mtime +7`) was wrong: a quiet week
 # with no deploys would have deleted the CURRENT build's assets, and a burst of
 # five deploys in an hour would have retained none of the previous ones.
-CMD ["sh", "-c", "mkdir -p /srv/_next/static/.builds && cp -r /app/.next/static/. /srv/_next/static/ 2>/dev/null || true; touch \"/srv/_next/static/.builds/${NEXT_DEPLOYMENT_ID:-unknown}\" 2>/dev/null || true; exec node cluster.js"]
+CMD ["sh", "-c", "mkdir -p /srv/_next/static/.builds 2>/dev/null || true; cp -r /app/.next/static/. /srv/_next/static/ 2>/dev/null || true; touch \"/srv/_next/static/.builds/${NEXT_DEPLOYMENT_ID:-unknown}\" 2>/dev/null || true; exec node cluster.js"]
