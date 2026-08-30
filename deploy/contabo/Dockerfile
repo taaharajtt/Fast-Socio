@@ -41,7 +41,18 @@ ARG NEXT_PUBLIC_SENTRY_DSN
 ARG NEXT_PUBLIC_CONTABO_PUBLIC_BASE_URL
 ARG NEXT_PUBLIC_IMGPROXY_URL
 ARG NEXT_PUBLIC_SITE_URL
-ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
+# Version-skew protection. Must be present AT BUILD TIME: next.config.ts reads
+# it into `deploymentId`, which inlines the value into the client bundle and
+# stamps it onto every static asset URL. Passing it only at runtime would leave
+# the server advertising a deployment id that no client ever echoes back, so the
+# mismatch could never be detected. Not a secret — it is a commit SHA, and it is
+# already published to every browser in the page markup.
+#
+# Unset is a valid state: the build succeeds and skew protection is simply off,
+# which is what a bare `docker build` outside compose does.
+ARG NEXT_DEPLOYMENT_ID
+ENV NEXT_DEPLOYMENT_ID=$NEXT_DEPLOYMENT_ID \
+    NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
     NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY \
     NEXT_PUBLIC_VAPID_PUBLIC_KEY=$NEXT_PUBLIC_VAPID_PUBLIC_KEY \
     NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN \
@@ -74,6 +85,14 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends curl \
  && rm -rf /var/lib/apt/lists/*
 
+# Re-declared: a build ARG is scoped to ONE stage, so the builder's copy is not
+# visible here. The runtime needs it only to name this build's retention marker
+# in the shared static volume (see CMD), which is what lets the prune step keep
+# "the last N builds" instead of guessing from file timestamps. Not a secret —
+# it is a short commit SHA and is already published in every page's markup.
+ARG NEXT_DEPLOYMENT_ID
+ENV NEXT_DEPLOYMENT_ID=$NEXT_DEPLOYMENT_ID
+
 # Run unprivileged. The node image ships a `node` user (uid 1000) already.
 # A container escape is a much smaller problem when the process was never root.
 USER node
@@ -100,4 +119,26 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
 # installed in this stage). This is the documented way to run standalone output.
 # cluster.js is a thin supervisor around that same server.js — with
 # WEB_CONCURRENCY unset or 1 it simply requires it in-process.
-CMD ["node", "cluster.js"]
+#
+# The `cp` in front of it publishes THIS build's client assets into the shared
+# static volume so Caddy can keep serving the PREVIOUS build's chunks after this
+# container replaces it (perf audit 6.3 — see the /_next/static block in the
+# Caddyfile). Chunks are content-hashed, so builds accumulate side by side and
+# can never collide; pruning is a periodic chore, not a correctness concern.
+#
+# Every part of it is deliberately non-fatal. `|| true` means a missing mount,
+# a read-only volume or a partial copy can never stop the app from booting —
+# Caddy's `pass_thru` then just proxies those assets here as it does today. An
+# app that refuses to start because a CACHE could not be warmed would be a far
+# worse failure than the one this is preventing.
+#
+# `exec` matters: it replaces the shell so node becomes PID 1 and still receives
+# the SIGTERM that cluster.js forwards to its workers for a graceful drain.
+# The marker file is what makes retention countable. Plain `cp` (no -p) stamps
+# every copied file with the CURRENT time, and chunks shared with the previous
+# build are re-copied and so re-stamped on each deploy — so "files older than
+# the Nth-newest marker" is precisely "files belonging to builds we no longer
+# keep". Pruning by age alone (the earlier `-mtime +7`) was wrong: a quiet week
+# with no deploys would have deleted the CURRENT build's assets, and a burst of
+# five deploys in an hour would have retained none of the previous ones.
+CMD ["sh", "-c", "mkdir -p /srv/_next/static/.builds && cp -r /app/.next/static/. /srv/_next/static/ 2>/dev/null || true; touch \"/srv/_next/static/.builds/${NEXT_DEPLOYMENT_ID:-unknown}\" 2>/dev/null || true; exec node cluster.js"]

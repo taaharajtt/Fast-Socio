@@ -1,98 +1,82 @@
-# Fast Socio — production origin (fastsocio.online) + temporary test origin.
+# Fast Socio — production origin (fastsocio.online).
 #
-# Two site blocks are served during the cutover:
+# Certificates for the apex and www are obtained and renewed over HTTP-01 with
+# no manual provisioning. www redirects to the apex so there is exactly one
+# canonical origin: two live origins would split auth cookies and make the
+# Server Actions origin check harder to reason about.
 #
-#   fastsocio.online / www.fastsocio.online — the production domain. Caddy
-#     obtains and renews Let's Encrypt certificates for BOTH over HTTP-01, so
-#     nothing has to be provisioned by hand. www redirects to the apex so there
-#     is exactly one canonical origin: two live origins would split auth cookies
-#     and make the Server Actions origin check harder to reason about.
-#
-#   169-58-149-230.sslip.io — the pre-DNS test origin. Kept ONLY so the box
-#     stays reachable if the domain is misconfigured mid-cutover; it is the
-#     rollback path for reaching the app directly. REMOVE IT once the domain is
-#     verified (see the cleanup step in the cutover runbook).
-#
-# Certificates are only issued once the domain actually resolves here, so this
-# file can be deployed BEFORE the DNS change: the fastsocio.online block simply
-# fails to obtain a certificate and the sslip.io origin keeps serving.
+# The pre-DNS test origin (169-58-149-230.sslip.io) was REMOVED in perf audit
+# 6.2, per the cleanup step this file always carried. It was a second live
+# origin serving the whole app, holding its own certificate, and splitting
+# cookies with the real domain. `next.config.ts` no longer allow-lists it for
+# Server Actions either — the two must be removed together, or writes would
+# still be accepted from a host we no longer serve.
 
 {
-	# Fail loudly at startup rather than silently serving plaintext.
 	# Let's Encrypt expiry notices. Must be a real mailbox.
 	email admin@fastsocio.online
 
 	# Access logs go to stdout so `docker compose logs` is the single place to
 	# look, and Docker's json-file rotation (set in compose) bounds them.
+	#
+	# JSON, not `console` (perf audit 6.1). The console format writes prose with
+	# no latency field, so per-route p50/p95 could not be computed at all — the
+	# audit had to reason about the 8.8s Home tail from application code instead
+	# of measuring it. JSON emits `duration`, `status`, `size`, `uri` and the
+	# request headers as structured fields, which is what makes the monitoring
+	# in §11 of the audit a `jq` one-liner instead of guesswork.
+	#
+	# ON CREDENTIALS IN LOGS — this is the reason the old comment forbade header
+	# logging, and it still governs. Caddy redacts `Cookie`, `Set-Cookie`,
+	# `Authorization` and `Proxy-Authorization` from access logs UNLESS the
+	# `servers { log_credentials }` global option is switched on. It is NOT set
+	# here and MUST NOT BE: auth cookies and magic-link tokens travel in those
+	# headers and must never reach disk. Verify after deploying by grepping one
+	# log line for `sb-` (the Supabase cookie prefix) — see the runbook.
 	log {
 		output stdout
-		format console
+		format filter {
+			wrap json
+			fields {
+				# Explicitly deleted, not merely relied upon. Caddy already
+				# redacts these unless `servers { log_credentials }` is set —
+				# which is NOT set and must never be — but auth cookies and
+				# magic-link tokens are exactly the thing that must never reach
+				# disk, so the guarantee is made twice rather than inherited.
+				request>headers>Cookie delete
+				request>headers>Authorization delete
+				resp_headers>Set-Cookie delete
+				# Noise: high-cardinality and never used in any query below.
+				request>headers>Accept delete
+				request>headers>Accept-Encoding delete
+				request>headers>Accept-Language delete
+				request>tls delete
+			}
+		}
 	}
 }
 
-# Canonical production origin.
 fastsocio.online {
 	encode zstd gzip
 
+	# Inherits the global filter above (credentials deleted, noise dropped) and
+	# keeps `duration`, `status`, `size`, `uri`, `method` plus the two headers
+	# the measurements rely on: Next-Router-Prefetch (RSC/prefetch share) and
+	# RSC (navigation classification).
 	log {
 		output stdout
-		format console
-		# Do NOT add request/response header logging here. Auth cookies and
-		# magic-link tokens travel in those, and they must never reach disk.
-	}
-
-	# Image transforms — see the note in the sslip.io block below. This points
-	# at the imgcache (nginx) container, NOT imgproxy directly: imgproxy has no
-	# result cache, so every cold viewer re-rendered the same derivative.
-	handle_path /img/* {
-		reverse_proxy imgcache:80 {
-			transport http {
-				read_timeout 30s
-				write_timeout 30s
+		format filter {
+			wrap json
+			fields {
+				request>headers>Cookie delete
+				request>headers>Authorization delete
+				resp_headers>Set-Cookie delete
+				request>headers>Accept delete
+				request>headers>Accept-Encoding delete
+				request>headers>Accept-Language delete
+				request>tls delete
 			}
 		}
-		header Cache-Control "public, max-age=31536000, immutable"
-	}
-
-	reverse_proxy app:3000 {
-		# Streaming is not optional: Cache Components/PPR ships a static shell
-		# and streams the rest. Buffering here silently destroys that.
-		flush_interval -1
-
-		header_up Host {host}
-		header_up X-Forwarded-Host {host}
-		header_up X-Forwarded-Proto {scheme}
-		header_up X-Real-IP {remote_host}
-
-		transport http {
-			read_timeout 300s
-			write_timeout 300s
-		}
-	}
-
-	# No X-Robots-Tag here: this origin IS meant to be indexed. The app sets its
-	# own CSP/HSTS via next.config.ts — do not duplicate them here.
-	header -Server
-}
-
-# www redirects to the apex rather than serving a second copy. Caddy still
-# obtains a certificate for it, so https://www.fastsocio.online is valid and
-# does not warn before redirecting.
-www.fastsocio.online {
-	redir https://fastsocio.online{uri} permanent
-}
-
-169-58-149-230.sslip.io {
-	# Automatic HTTPS: Caddy obtains and renews the Let's Encrypt certificate
-	# over HTTP-01 with no configuration, and redirects :80 -> :443 itself.
-
-	encode zstd gzip
-
-	log {
-		output stdout
-		format console
-		# Do NOT add request/response header logging here. Auth cookies and
-		# magic-link tokens travel in those, and they must never reach disk.
 	}
 
 	# Image transforms. Served from our own origin rather than exposing the
@@ -103,6 +87,10 @@ www.fastsocio.online {
 	# handle_path strips the /img prefix, so /img/insecure/rs:fit:… arrives at
 	# imgproxy as /insecure/rs:fit:… — which is the URL shape lib/image.ts and
 	# the next/image loader build.
+	#
+	# This points at the imgcache (nginx) container, NOT imgproxy directly:
+	# imgproxy has no result cache, so every cold viewer re-rendered the same
+	# derivative. See imgcache.conf.
 	handle_path /img/* {
 		reverse_proxy imgcache:80 {
 			# Renders are deterministic and content-addressed by their options,
@@ -117,11 +105,57 @@ www.fastsocio.online {
 		header Cache-Control "public, max-age=31536000, immutable"
 	}
 
+	# Build assets, served from disk across deploys (perf audit 6.3).
+	#
+	# THE PROBLEM THIS SOLVES: a deploy is `docker compose up -d app`, which
+	# REPLACES the container. `.next/static` lives inside the image, so the
+	# previous build's chunks stop existing the instant the new container binds
+	# — and any client mid-session 404s on the assets its already-loaded HTML
+	# references. `deploymentId` (Phase 1) turns that into a hard reload rather
+	# than a broken page; this closes the window itself.
+	#
+	# The app container copies `.next/static` into this shared volume on start
+	# (see the CMD in Dockerfile), so it accumulates the last few builds. Chunks
+	# are content-hashed, so old and new coexist with no possibility of
+	# collision. Pruning is a periodic chore, not a correctness concern — see
+	# the runbook.
+	#
+	# `handle`, NOT `handle_path`: the prefix must survive, because if the file
+	# is absent the request falls through to the app and the app needs the
+	# original URL. `root * /srv` therefore resolves /_next/static/chunks/x.js
+	# to /srv/_next/static/chunks/x.js, which is where the volume is mounted.
+	#
+	# `route` forces the directives to run in written order. Without it Caddy
+	# applies its own directive ordering, in which reverse_proxy sorts BEFORE
+	# file_server, and every request would skip the disk entirely.
+	#
+	# `pass_thru` is the safety valve and the reason this change is safe to ship
+	# without being able to test it here: if the volume is empty, unmounted, or
+	# the copy failed, file_server declines instead of returning 404 and the
+	# request is proxied to the app exactly as it is today. The worst case is
+	# the current behaviour, not an outage.
+	handle /_next/static/* {
+		route {
+			root * /srv
+			file_server {
+				pass_thru
+			}
+			reverse_proxy app:3000 {
+				flush_interval -1
+				header_up Host {host}
+				header_up X-Forwarded-Host {host}
+				header_up X-Forwarded-Proto {scheme}
+				header_up X-Real-IP {remote_host}
+			}
+		}
+		# Next sets this itself when IT serves the file; when Caddy serves it
+		# from disk nothing else would, and these URLs are content-hashed.
+		header Cache-Control "public, max-age=31536000, immutable"
+	}
+
 	reverse_proxy app:3000 {
-		# Streaming is not optional for this app: Cache Components/PPR means
-		# every route ships a static shell and streams the rest behind Suspense.
-		# Any buffering in this hop silently destroys that and the shell stops
-		# painting first. -1 disables response buffering entirely.
+		# Streaming is not optional: Cache Components/PPR ships a static shell
+		# and streams the rest. Buffering here silently destroys that.
 		flush_interval -1
 
 		# Preserve what Next.js needs to reconstruct absolute URLs. Caddy sets
@@ -141,18 +175,19 @@ www.fastsocio.online {
 		}
 	}
 
-	# Phase 1 origin protection. This box is publicly reachable and the app is
-	# not yet meant to receive real traffic, so keep it out of search results
-	# and off the radar of casual scanners. Removed at cutover.
-	header {
-		X-Robots-Tag "noindex, nofollow, noarchive"
-		# The app sets its own CSP/HSTS/etc via next.config.ts; do not duplicate
-		# or override them here or they will conflict at cutover.
-		-Server
-	}
+	# No X-Robots-Tag here: this origin IS meant to be indexed. The app sets its
+	# own CSP/HSTS via next.config.ts — do not duplicate them here.
+	header -Server
+}
+
+# www redirects to the apex rather than serving a second copy. Caddy still
+# obtains a certificate for it, so https://www.fastsocio.online is valid and
+# does not warn before redirecting.
+www.fastsocio.online {
+	redir https://fastsocio.online{uri} permanent
 }
 
 # No catch-all site block is defined on purpose. Caddy only answers for the
-# hostname above; a request arriving by raw IP or an unexpected Host has no
+# hostnames above; a request arriving by raw IP or an unexpected Host has no
 # matching site and no certificate, so it is refused. Adding an explicit
 # `:443` block here would fight Automatic HTTPS for the TLS handshake.

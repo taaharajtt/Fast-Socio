@@ -17,12 +17,31 @@ playwright/.cache
 !.env.example
 .vercel
 
+# Generated service-worker artifacts. These are gitignored but DO exist in a
+# developer's working tree, and the build context is the working tree, not the
+# git index — so without this they are copied in and then overwritten by the
+# build. The dangerous one is `swe-worker-<hash>.js`: the hash is part of the
+# filename, so a stale copy from an older build is not overwritten by the new
+# one, it simply accumulates in public/ and is served forever.
+public/sw.js
+public/sw.js.map
+public/workbox-*.js
+public/workbox-*.js.map
+public/swe-worker-*.js
+public/swe-worker-*.js.map
+
 # Local scratch / docs / assets that have no business in a runtime image.
 *.md
 !README.md
 Refactor/
 responsive/
 tests/
+output/
+tmp/
+promo/
+FS/
+tab-animation/
+lint.log
 *.png
 *.jpg
 *.jpeg

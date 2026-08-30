@@ -26,6 +26,28 @@ services:
         NEXT_PUBLIC_CONTABO_PUBLIC_BASE_URL: ${NEXT_PUBLIC_CONTABO_PUBLIC_BASE_URL}
         NEXT_PUBLIC_IMGPROXY_URL: ${NEXT_PUBLIC_IMGPROXY_URL}
         NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
+        # Version-skew protection (perf audit Phase 1). The deploying commit
+        # SHA, exported by the deploy step:
+        #
+        #   export GIT_SHA=$(git -C repo rev-parse --short HEAD)
+        #   docker compose build app && docker compose up -d app
+        #
+        # It MUST change on every build or the mechanism is inert — two
+        # different builds sharing an id is worse than having no id at all,
+        # because clients would then believe a stale bundle is current.
+        #
+        # `:?` NOT `:-` — this is REQUIRED, and a build with it unset or empty
+        # fails immediately with the message below rather than producing an
+        # image. The earlier `${GIT_SHA:-}` default was the wrong call: it made
+        # the single most important deploy-safety mechanism fail SILENTLY. A
+        # forgotten `export` produced a perfectly healthy-looking image with no
+        # skew protection, and the symptom would not appear until the NEXT
+        # deploy stranded live clients on 404ing chunks — far away in time from
+        # the mistake that caused it. Failing the build is loud, immediate, and
+        # costs one retry. next.config.ts carries a second, independent guard
+        # for the same reason (defence in depth: compose is not the only way
+        # someone can invoke this build).
+        NEXT_DEPLOYMENT_ID: ${GIT_SHA:?GIT_SHA is required — run "export GIT_SHA=$(git -C repo rev-parse --short HEAD)" before "docker compose build app". It becomes deploymentId and is what stops a deploy stranding live clients.}
     image: fastsocio-app:phase1
     container_name: fastsocio-app
     restart: unless-stopped
@@ -42,6 +64,15 @@ services:
 
     networks:
       - fastsocio-net
+
+    volumes:
+      # Shared build assets (perf audit 6.3). The container copies this build's
+      # .next/static here on start; Caddy serves the directory directly and so
+      # keeps answering for the PREVIOUS build's chunks after this container has
+      # replaced it. Read-write here (the app is the only writer), read-only in
+      # caddy. Named, so it survives `up -d` recreating the container — which is
+      # the entire point, since that recreate is what used to destroy the assets.
+      - static_assets:/srv/_next/static
 
     # WEB_CONCURRENCY drives cluster.js. It must be read together with the cpu
     # limit below: 3 workers against a 3.0 quota, so a fully busy worker still
@@ -193,6 +224,11 @@ services:
       # re-issuing certificates and burning Let's Encrypt rate limit.
       - caddy_data:/data
       - caddy_config:/config
+      # Build assets written by the app container (perf audit 6.3). READ-ONLY:
+      # Caddy serves these and must never be able to modify them. The Caddyfile
+      # sets `root * /srv`, so the mount path here is what makes a request for
+      # /_next/static/chunks/x.js resolve to /srv/_next/static/chunks/x.js.
+      - static_assets:/srv/_next/static:ro
 
     networks:
       - fastsocio-net
@@ -216,3 +252,7 @@ volumes:
     name: fastsocio-caddy-config
   imgcache_data:
     name: fastsocio-imgcache-data
+  # Written by app, read by caddy. Holds several builds' worth of client chunks
+  # so a deploy cannot strand a client mid-session (perf audit 6.3).
+  static_assets:
+    name: fastsocio-static-assets
