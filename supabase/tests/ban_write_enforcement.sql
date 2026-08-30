@@ -82,25 +82,39 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- 3. Appeals and reports MUST still work — a ban must stay appealable.
+-- 3. Appeals MUST still work — a ban must stay appealable. This is the single
+--    most important exclusion in 0173: gating it would make a ban unappealable.
+--
+--    The column list and values are NOT arbitrary. `appeals` is (user_id,
+--    subject, explanation) — an earlier draft of this test used a `message`
+--    column that does not exist, and its exception handler treated ANY error as
+--    a pass, so the check reported green while never exercising the trigger at
+--    all. `subject` must be one of the appeals_subject_check values and
+--    `explanation` must be >= 10 characters, or the insert fails on a CHECK
+--    constraint (23514) and tells you nothing about the ban guard.
+--
+--    Only 42501 means the ban trigger blocked it. Anything else is a schema
+--    problem with this test, and is reported as such rather than swallowed.
 -- ---------------------------------------------------------------------------
 do $$
-declare uid uuid := (select id from subject);
+declare uid uuid := (select id from subject); st text := 'INSERTED OK';
 begin
   perform set_config('request.jwt.claims',
     json_build_object('sub', uid, 'role','authenticated')::text, true);
   set local role authenticated;
   begin
-    insert into public.appeals (user_id, message) values (uid, 'ban enforcement probe');
-    raise notice 'OK: banned user can still file an appeal';
-  exception
-    when insufficient_privilege then
-      raise exception 'FAIL: banned user cannot appeal — the ban is unappealable';
-    when others then
-      -- Column drift in `appeals` should not fail the whole run; report it.
-      raise notice 'SKIP appeals probe (schema differs): % %', SQLSTATE, SQLERRM;
+    insert into public.appeals (user_id, subject, explanation)
+    values (uid, 'ban', 'I believe this suspension was applied in error; please review.');
+  exception when others then st := SQLSTATE || ' ' || SQLERRM;
   end;
   reset role;
+
+  if st like '42501%' then
+    raise exception 'FAIL: banned user cannot appeal — the ban is unappealable';
+  elsif st <> 'INSERTED OK' then
+    raise exception 'FAIL: appeal probe could not run (fix this test, not the migration): %', st;
+  end if;
+  raise notice 'OK: banned user can still file an appeal';
 end $$;
 
 -- ---------------------------------------------------------------------------
