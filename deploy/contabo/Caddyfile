@@ -158,6 +158,27 @@ fastsocio.online {
 		# and streams the rest. Buffering here silently destroys that.
 		flush_interval -1
 
+		# RIDE OUT A DEPLOY INSTEAD OF 502-ing THROUGH IT.
+		#
+		# `docker compose up -d app` replaces the container, and for the ~9
+		# seconds until its healthcheck passes there is nothing listening on
+		# app:3000. Without this, every request in that window is answered 502.
+		# Measured on 2026-08-31: 78 of the day's 502s fell inside the single
+		# hour in which the app container was recreated four times, and none
+		# outside it — i.e. essentially all of them were deploy-induced and
+		# avoidable.
+		#
+		# `lb_try_duration` makes Caddy keep retrying the upstream for up to 15s
+		# before giving up, so a client mid-deploy waits a moment instead of
+		# seeing an error. 15s comfortably covers the observed 9s restart while
+		# staying well under the 300s transport timeouts below, so a genuinely
+		# dead upstream still fails rather than hanging.
+		#
+		# This only affects establishing the connection. A request already being
+		# streamed is not retried, so it cannot duplicate a Server Action.
+		lb_try_duration 15s
+		lb_try_interval 250ms
+
 		# Preserve what Next.js needs to reconstruct absolute URLs. Caddy sets
 		# X-Forwarded-For/Proto/Host by default; Host is made explicit because
 		# the auth routes build redirects from the request origin.

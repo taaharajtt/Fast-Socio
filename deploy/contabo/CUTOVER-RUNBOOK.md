@@ -596,6 +596,77 @@ select (select count(*) from realtime.subscription) as subs,
 
 If the rate ever starts tracking concurrency, the conclusion above is stale.
 
+### Maintenance automation — PREPARED, NOT INSTALLED
+
+Two things are ready in the repo and deliberately not switched on. Both need a
+decision, not just a deploy.
+
+**1. `scripts/maintenance-cleanup.sh` — scheduled disk reclaim.**
+
+`docker builder prune` has been step 6 of every routine deploy since the first
+version of this runbook and was never actually run; the cache reached 59.6 GB
+and the disk 78%. A step that is optional in practice is not a retention policy.
+
+```bash
+# ALWAYS dry-run first. This is the default; it deletes nothing.
+ssh -i ~/.ssh/fastsocio_vps fastsocio@169.58.149.230 'bash -s' < scripts/maintenance-cleanup.sh
+
+# Apply, once the dry run looks right:
+ssh -i ~/.ssh/fastsocio_vps fastsocio@169.58.149.230 'bash -s -- --apply' < scripts/maintenance-cleanup.sh
+```
+
+To schedule it (weekly, Sunday 04:00 UTC — deliberately not during a deploy
+window), copy the script to the VPS and add ONE crontab line:
+
+```bash
+scp -i ~/.ssh/fastsocio_vps scripts/maintenance-cleanup.sh fastsocio@169.58.149.230:~/maintenance-cleanup.sh
+ssh -i ~/.ssh/fastsocio_vps fastsocio@169.58.149.230   '(crontab -l 2>/dev/null; echo "0 4 * * 0 bash \$HOME/maintenance-cleanup.sh --apply >> \$HOME/maintenance.log 2>&1") | crontab -'
+```
+
+**Rollback:** `crontab -e` and delete the line, or
+`crontab -l | grep -v maintenance-cleanup | crontab -`. The script itself has no
+persistent state, so removing the schedule is the whole rollback.
+
+*What makes it safe to schedule*, and what to re-check if it is ever edited:
+
+- Dry run is the default; deleting needs `--apply`.
+- It aborts if a build is running. Note the guard deliberately excludes its own
+  process ancestry — `pgrep -f` otherwise matches the ssh command that launched
+  it and reports a build every time. The same self-match bug in an ad-hoc wait
+  loop left an orphan process spinning on this VPS for four and a half hours.
+- Retention is counted in BUILDS and `KEEP` is refused below 2, so the current
+  and previous deployments' chunks always survive.
+- It refuses to prune if the cut build is the live deployment, and after
+  applying it verifies the live build's marker still exists.
+- It never runs `docker system prune -a` (that would evict the Supabase
+  project's images) and never prunes volumes (`caddy_data` holds the
+  certificates; losing it burns Let's Encrypt rate limit).
+
+**2. Caddy `lb_try_duration` — stop deploys returning 502.**
+
+`deploy/contabo/Caddyfile` now carries `lb_try_duration 15s` /
+`lb_try_interval 250ms` on the app upstream. It is in the repo but **not on the
+VPS** — the live Caddyfile is a separate file, like `docker-compose.yml`.
+
+Why: `docker compose up -d app` replaces the container and for ~9 seconds
+nothing listens on `app:3000`. Measured 2026-08-31, 78 of the day's 502s fell
+inside the one hour containing four container recreations, and none outside it.
+With a retry the client waits instead of failing. It only affects establishing
+the connection, so a request already streaming is never retried and a Server
+Action cannot be duplicated.
+
+To apply — **validate first, always**:
+
+```bash
+scp -i ~/.ssh/fastsocio_vps deploy/contabo/Caddyfile fastsocio@169.58.149.230:/tmp/Caddyfile.new
+ssh -i ~/.ssh/fastsocio_vps fastsocio@169.58.149.230 '
+  docker run --rm -v /tmp/Caddyfile.new:/etc/caddy/Caddyfile:ro caddy:2-alpine     caddy validate --config /etc/caddy/Caddyfile || exit 1
+  cd ~/fastsocio-app && cp Caddyfile Caddyfile.bak-$(date +%s) && cp /tmp/Caddyfile.new Caddyfile
+  docker compose up -d caddy'
+```
+
+**Rollback:** `cp Caddyfile.bak-<timestamp> Caddyfile && docker compose up -d caddy`.
+
 ### The weekly operational read
 
 Four commands. Run them weekly, and FIRST whenever anything feels slow — every
