@@ -3,13 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Camera,
   Check,
   CornerUpRight,
   Flag,
   Loader2,
   Mic,
-  Paperclip,
   Pause,
   Pencil,
   Pin,
@@ -34,6 +32,7 @@ import { AppImage } from "@/components/ui/app-image";
 import { resolveAvatarUrl } from "@/lib/avatar";
 import { ImageCropper, type CropResult } from "@/components/ui/image-cropper";
 import { PhotoViewer } from "@/components/ui/photo-viewer";
+import { ComposerInput } from "@/components/chat/composer-input";
 import { cn } from "@/lib/utils";
 import { useKeyboardInset } from "@/lib/use-keyboard-inset";
 import { renderLinkifiedText } from "@/lib/linkify";
@@ -83,10 +82,6 @@ import {
 
 type Reaction = { emoji: string; user_id: string };
 const QUICK_EMOJIS = ["❤️", "😂", "🔥", "👍", "😮", "😢", "🙏"];
-// Single-line pill height (min-h-[40px]); the textarea grows past this and
-// caps at ~5-6 lines before it scrolls internally.
-const MIN_TEXTAREA_HEIGHT = 40;
-const MAX_TEXTAREA_HEIGHT = 144;
 /**
  * At most one `mark_conversation_read` RPC per this many ms. The RPC marks the
  * WHOLE conversation, so calling it once per inbound message — as this
@@ -164,7 +159,6 @@ export function ChatThread({
   const [signedAttachments, setSignedAttachments] = useState<
     Record<string, string>
   >(initialSignedAttachments);
-  const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [otherTyping, setOtherTyping] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -235,15 +229,6 @@ export function ChatThread({
   // shrinks and this sticky composer stays visible (Phase 2 keyboard fix).
   useKeyboardInset();
 
-  // Auto-grow the composer textarea with its content, capped at MAX_TEXTAREA_
-  // HEIGHT (~5-6 lines) where it starts scrolling internally instead.
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    const next = Math.min(el.scrollHeight, MAX_TEXTAREA_HEIGHT);
-    el.style.height = `${Math.max(next, MIN_TEXTAREA_HEIGHT)}px`;
-  }, [draft]);
 
   // Live "0:00" timer for the recording strip — ticks every second while
   // recording and not paused. recordingSeconds is reset to 0 where recording
@@ -385,8 +370,6 @@ export function ChatThread({
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   /** tempId -> how to retry that failed optimistic send. Keyed by the bubble on
    *  screen, so a discarded bubble takes its retry with it. */
@@ -503,11 +486,6 @@ export function ChatThread({
     [toPreview]
   );
 
-  // Entering reply mode moves the caret into the composer, once the reply row
-  // has rendered. In an effect because that is where a ref may be touched.
-  useEffect(() => {
-    if (replyTo) textareaRef.current?.focus();
-  }, [replyTo]);
 
   // The heart burst is one animation long. Keyed on the message id so a second
   // double-tap restarts it rather than inheriting the first one's countdown.
@@ -899,10 +877,14 @@ export function ChatThread({
     void retry();
   }
 
-  async function onSendText(e: React.FormEvent) {
-    e.preventDefault();
-    const text = draft.trim();
-    if (!text || busy) return;
+  /**
+   * Send a text message. Returns FALSE when the send failed and the composer
+   * should put the text back — the optimistic-clear/restore contract that used
+   * to live inline here now crosses the <ComposerInput/> boundary as this
+   * return value (perf audit Phase 5). Everything else is unchanged.
+   */
+  async function sendText(text: string): Promise<boolean> {
+    if (!text || busy) return false;
     // Captured before the composer is cleared, so a reply that fails can be
     // restored with its target intact.
     const target = replyTo;
@@ -925,7 +907,6 @@ export function ChatThread({
     };
     if (target) setReplyPreviews((prev) => ({ ...prev, [target.id]: target }));
     setMessages((prev) => [...prev, temp]);
-    setDraft("");
     setReplyTo(null);
     pendingSendsRef.current += 1;
     const res = await sendMessage(conversationId, text, undefined, target?.id).finally(() => {
@@ -936,10 +917,9 @@ export function ChatThread({
       // send is retried by pressing send again — nothing unsendable is left on
       // screen.
       setMessages((prev) => dropOptimistic(prev, temp.id));
-      setDraft(text);
       setReplyTo(target);
       setError(res.error);
-      return;
+      return false;
     }
     // Reconciled by id, not by body text: sending the same short message twice
     // used to pair the second row with the first bubble and leave a duplicate.
@@ -949,6 +929,7 @@ export function ChatThread({
         created_at: res.message.created_at,
       })
     );
+    return true;
   }
 
   /** Discard the take: stop the recorder but skip the upload in onstop. */
@@ -1717,192 +1698,111 @@ export function ChatThread({
             </GlassButton>
           </div>
         </form>
-      ) : (
-        <form
-          onSubmit={onSendText}
-          className="sticky bottom-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2"
-        >
-          {/* items-end keeps the side buttons anchored to the textarea's last
-              line as it grows, matching the WhatsApp composer feel. */}
+      ) : recording ? (
+        <div className="sticky bottom-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
+          {/* No <form> here: every control in the recording strip is a
+              type="button", so it never needed one. The text branch owns its
+              own form inside <ComposerInput/> (perf audit Phase 5). */}
           <div className="flex items-end gap-2">
-            {recording ? (
-              <>
-                {/* State 3 (Recording) — left: discard the take entirely. */}
-                <button
-                  type="button"
-                  aria-label="Discard voice note"
-                  onClick={cancelRecording}
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-error/20 text-error transition-colors hover:bg-error hover:text-white"
-                >
-                  <Trash2 className="h-5 w-5" aria-hidden />
-                </button>
+            {/* State 3 (Recording) — left: discard the take entirely. */}
+            <button
+              type="button"
+              aria-label="Discard voice note"
+              onClick={cancelRecording}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-error/20 text-error transition-colors hover:bg-error hover:text-white"
+            >
+              <Trash2 className="h-5 w-5" aria-hidden />
+            </button>
 
-                {/* Center: live timer + waveform preview + pause/resume. */}
-                <div className="glass flex h-11 min-w-0 flex-1 items-center gap-2 rounded-full px-4">
-                  <span
-                    className={cn(
-                      "h-2.5 w-2.5 shrink-0 rounded-full bg-error",
-                      !recordingPaused && "animate-pulse"
-                    )}
-                    aria-hidden
-                  />
-                  <span className="shrink-0 text-sm font-medium tabular-nums text-fg">
-                    {formatRecordingTime(recordingSeconds)}
-                  </span>
-                  <span
-                    className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden"
-                    aria-hidden
-                  >
-                    {WAVEFORM_BARS.map((h, i) => (
-                      <span
-                        key={i}
-                        className={cn(
-                          "w-0.5 shrink-0 rounded-full bg-accent/70",
-                          recordingPaused ? "opacity-30" : "animate-pulse"
-                        )}
-                        style={{ height: h, animationDelay: `${i * 80}ms` }}
-                      />
-                    ))}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label={recordingPaused ? "Resume recording" : "Pause recording"}
-                    onClick={togglePauseRecording}
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-fg-muted hover:text-fg"
-                  >
-                    {recordingPaused ? (
-                      <Mic className="h-4 w-4" aria-hidden />
-                    ) : (
-                      <Pause className="h-4 w-4" aria-hidden />
-                    )}
-                  </button>
-                </div>
-
-                {/* Right: finalize + submit the voice note. */}
-                <button
-                  type="button"
-                  aria-label="Send voice note"
-                  onClick={toggleRecording}
-                  disabled={busy}
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-white transition-colors hover:bg-accent-light disabled:opacity-40"
-                >
-                  <Send className="h-5 w-5" aria-hidden />
-                </button>
-              </>
-            ) : (
-              <>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/*"
-                  hidden
-                  onChange={onPickImage}
-                />
-
-                {/* One rounded composer card: the reply preview (when
-                    replying) and the input row live INSIDE it, separated by a
-                    hairline, so replying grows the composer rather than
-                    floating a second card above it. Neutral border and shadow
-                    only — no accent outline, focused or otherwise. */}
-                <div className="glass flex min-w-0 flex-1 flex-col rounded-2xl">
-                  {replyTo && (
-                    <div className="flex items-start gap-2 border-b border-glass-border px-3 py-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[12px] font-semibold text-fg">
-                          Replying to{" "}
-                          {replyTo.sender_id === meId
-                            ? "yourself"
-                            : (otherName ?? "them")}
-                        </p>
-                        <p className="truncate text-[13px] text-fg-muted">
-                          {replyPreviewText(replyTo)}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setReplyTo(null)}
-                        aria-label="Cancel reply"
-                        className="focus-ring -mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-fg-muted hover:text-fg"
-                      >
-                        <X className="h-4 w-4" aria-hidden />
-                      </button>
-                    </div>
-                  )}
-                  <div className="flex min-w-0 items-center gap-2 px-3 py-1.5">
-                  {/* text-base (16px): anything smaller triggers iOS Safari's
-                      auto-zoom on focus — the root cause of the chat "jump" on
-                      iPhones. rows=1 + the auto-grow effect above own the height. */}
-                  <textarea
-                    ref={textareaRef}
-                    rows={1}
-                    value={draft}
-                    onChange={(e) => {
-                      setDraft(e.target.value);
-                      broadcastTyping();
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        e.currentTarget.form?.requestSubmit();
-                      }
-                    }}
-                    placeholder="Message..."
-                    enterKeyHint="send"
-                    className="min-h-[40px] min-w-0 flex-1 resize-none overflow-y-auto border-none bg-transparent text-base text-fg outline-none placeholder:text-fg-muted"
-                    style={{ maxHeight: MAX_TEXTAREA_HEIGHT }}
-                  />
-
-                  {/* Camera only shows idle (no draft) — matches WhatsApp,
-                      both icons open the same file picker. */}
-                  {draft.trim() === "" && (
-                    <button
-                      type="button"
-                      aria-label="Take photo"
-                      onClick={() => fileRef.current?.click()}
-                      disabled={busy}
-                      className="flex h-7 w-7 shrink-0 items-center justify-center text-fg-muted disabled:opacity-40"
-                    >
-                      <Camera className="h-5 w-5" aria-hidden />
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    aria-label="Attach image"
-                    onClick={() => fileRef.current?.click()}
-                    disabled={busy}
-                    className="flex h-7 w-7 shrink-0 items-center justify-center text-fg-muted disabled:opacity-40"
-                  >
-                    <Paperclip className="h-5 w-5" aria-hidden />
-                  </button>
-                  </div>
-                </div>
-
-                {/* Floating action button outside the pill: standalone Mic
-                    (idle) morphs into Send once text is entered (typing). */}
-                {draft.trim().length > 0 ? (
-                  <button
-                    type="submit"
-                    aria-label="Send"
-                    disabled={busy}
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-white transition-colors hover:bg-accent-light disabled:opacity-40"
-                  >
-                    <Send className="h-5 w-5" aria-hidden />
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    aria-label="Record voice note"
-                    onClick={toggleRecording}
-                    disabled={busy}
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-white transition-colors hover:bg-accent-light disabled:opacity-40"
-                  >
-                    <Mic className="h-5 w-5" aria-hidden />
-                  </button>
+            {/* Center: live timer + waveform preview + pause/resume. */}
+            <div className="glass flex h-11 min-w-0 flex-1 items-center gap-2 rounded-full px-4">
+              <span
+                className={cn(
+                  "h-2.5 w-2.5 shrink-0 rounded-full bg-error",
+                  !recordingPaused && "animate-pulse"
                 )}
-              </>
-            )}
+                aria-hidden
+              />
+              <span className="shrink-0 text-sm font-medium tabular-nums text-fg">
+                {formatRecordingTime(recordingSeconds)}
+              </span>
+              <span
+                className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden"
+                aria-hidden
+              >
+                {WAVEFORM_BARS.map((h, i) => (
+                  <span
+                    key={i}
+                    className={cn(
+                      "w-0.5 shrink-0 rounded-full bg-accent/70",
+                      recordingPaused ? "opacity-30" : "animate-pulse"
+                    )}
+                    style={{ height: h, animationDelay: `${i * 80}ms` }}
+                  />
+                ))}
+              </span>
+              <button
+                type="button"
+                aria-label={recordingPaused ? "Resume recording" : "Pause recording"}
+                onClick={togglePauseRecording}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-fg-muted hover:text-fg"
+              >
+                {recordingPaused ? (
+                  <Mic className="h-4 w-4" aria-hidden />
+                ) : (
+                  <Pause className="h-4 w-4" aria-hidden />
+                )}
+              </button>
+            </div>
+
+            {/* Right: finalize + submit the voice note. */}
+            <button
+              type="button"
+              aria-label="Send voice note"
+              onClick={toggleRecording}
+              disabled={busy}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-white transition-colors hover:bg-accent-light disabled:opacity-40"
+            >
+              <Send className="h-5 w-5" aria-hidden />
+            </button>
           </div>
-        </form>
+        </div>
+      ) : (
+        /* Owns the draft, so typing re-renders only the composer and never
+           the message list above it. See composer-input.tsx. */
+        <ComposerInput
+          busy={busy}
+          replyActive={Boolean(replyTo)}
+          onSend={sendText}
+          onTyping={broadcastTyping}
+          onFilePicked={onPickImage}
+          onRecord={toggleRecording}
+          replyPreview={
+            replyTo ? (
+              <div className="flex items-start gap-2 border-b border-glass-border px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[12px] font-semibold text-fg">
+                    Replying to{" "}
+                    {replyTo.sender_id === meId
+                      ? "yourself"
+                      : (otherName ?? "them")}
+                  </p>
+                  <p className="truncate text-[13px] text-fg-muted">
+                    {replyPreviewText(replyTo)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReplyTo(null)}
+                  aria-label="Cancel reply"
+                  className="focus-ring -mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-fg-muted hover:text-fg"
+                >
+                  <X className="h-4 w-4" aria-hidden />
+                </button>
+              </div>
+            ) : null
+          }
+        />
       )}
 
       {pendingFile && (
