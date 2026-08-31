@@ -8,6 +8,7 @@ import { MigrationWelcome } from "@/components/pwa/migration-welcome";
 import { InstallFunnel } from "@/components/pwa/install-funnel";
 import { INSTALL_CAPTURE_SCRIPT } from "@/lib/pwa/install-store";
 import { AppleSplashScreens } from "./apple-splash-screens";
+import { WebVitals } from "@/components/telemetry/web-vitals";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -91,7 +92,10 @@ export default function RootLayout({
           {/* One-time hello for arrivals from the previous address. Mounted at
               the root (not the student layout) because they land on /login as
               often as /home, and it must render before they sign in. */}
-          <MigrationWelcome />
+          {/* Core Web Vitals + long tasks -> Sentry, sampled and route-templated
+            (perf audit Phase 7). Renders nothing. */}
+        <WebVitals />
+        <MigrationWelcome />
           {/* The install funnel. Mounted HERE, not in the student layout, so it
               exists before an account does — on /login, /signup and the
               onboarding wizard, which is where an Instagram arrival decides

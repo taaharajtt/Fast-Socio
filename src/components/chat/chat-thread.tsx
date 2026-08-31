@@ -56,6 +56,7 @@ import {
   useRealtimeChannel,
   useVisibilityRefresh,
 } from "@/lib/realtime/use-realtime-channel";
+import { reportMessageLatency } from "@/lib/realtime/telemetry";
 import {
   dropOptimistic,
   mergeMessage,
@@ -599,6 +600,11 @@ export function ChatThread({
         cursorRef.current
       )) as ChatMessage[];
       if (rows.length === 0) return;
+      // Recovered rather than delivered: reported under its own source so a
+      // long gap cannot masquerade as slow socket delivery.
+      for (const m of rows) {
+        if (m.sender_id !== meId) reportMessageLatency(m.created_at, "catch-up");
+      }
       setMessages((prev) => mergeMessages(prev, rows));
       for (const m of rows) if (m.attachment_url) signAttachment(m);
       // Recovered messages from the other side are unread by definition, and
@@ -640,6 +646,11 @@ export function ChatThread({
             // of my sends is still out, its row is left to that response rather
             // than merged here alongside the bubble it belongs to.
             if (m.sender_id === meId && pendingSendsRef.current > 0) return;
+            // Delivery latency, measured only on messages from the OTHER side:
+            // our own arrive from our own optimistic path and would report ~0,
+            // flattering the percentile with samples that never crossed a
+            // socket (perf audit Phase 7).
+            if (m.sender_id !== meId) reportMessageLatency(m.created_at, "realtime");
             setMessages((prev) => mergeMessage(prev, m));
             if (m.attachment_url) signAttachment(m);
             if (m.sender_id !== meId) scheduleMarkRead();

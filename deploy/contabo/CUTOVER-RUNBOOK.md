@@ -553,6 +553,48 @@ compare deltas across a window rather than reading the absolute number. Do this
 check first whenever latency regresses: it is one command, and if it is dirty
 then no amount of query work will fix what you are seeing.
 
+### The weekly operational read
+
+Four commands. Run them weekly, and FIRST whenever anything feels slow — every
+one of them was, at some point during the performance audit, the thing that
+turned a plausible wrong answer into a measured right one.
+
+```bash
+# 1. Is the app being frozen by the scheduler? Must stay 0.
+cat /sys/fs/cgroup/system.slice/docker-$(docker inspect -f '{{.Id}}' fastsocio-app).scope/cpu.stat
+
+# 2. Is the disk filling again? Target below 70%.
+df -h / | tail -1 && docker system df
+
+# 3. What is the database actually spending its time on?
+#    (Management API, or psql. Read-only.)
+#    select calls, round(total_exec_time::numeric/1000,0) total_s,
+#           round(mean_exec_time::numeric,1) mean_ms,
+#           left(regexp_replace(query,'\s+',' ','g'),90) q
+#      from pg_stat_statements order by total_exec_time desc limit 15;
+
+# 4. How much of that is Realtime rather than the product?
+#    select round((sum(total_exec_time) filter (where query like '%wal->>%')
+#                  / sum(total_exec_time) * 100)::numeric, 1) as realtime_pct
+#      from pg_stat_statements;
+```
+
+**Known-unexplained, do not re-derive from scratch.** `SELECT name FROM
+pg_timezone_names` runs about **84 times a day at ~644 ms each** — 1,073 s of
+database CPU over 19.9 days, roughly 4.5% of the total. It is PostgREST
+reloading its schema cache, and each reload also stalls PostgREST briefly.
+Three explanations have been checked and eliminated:
+
+- the three `pg_cron` jobs contain no DDL (`sweep_event_reminders` and the two
+  weekly snapshots are pure inserts), so `pgrst_ddl_watch` is not being fired
+  by cron;
+- applying four DDL statements by hand in one session moved the counter by
+  ~20 in seven hours, i.e. the background rate, so DDL is not the driver;
+- it is steady rather than bursty, so it does not track deploys.
+
+Whatever it is sits on the Supabase side of the boundary. Worth a support
+question rather than more guessing from here.
+
 ### Measurement 0b — image cache hit rate and delivered widths
 
 `imgcache` logs the cache verdict per request (perf audit Phase 6). Before that

@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
-import { reportRealtimeIssue } from "@/lib/realtime/telemetry";
+import { reportRealtimeIssue, reportRealtimeEvent } from "@/lib/realtime/telemetry";
 import { pollDelayMs, shouldPoll } from "@/lib/realtime/poll-backoff";
 
 /**
@@ -163,6 +163,11 @@ export function useRealtimeChannel({
           return;
         }
         pollAttempt += 1;
+        // The fallback engaging at all means realtime is not working for this
+        // client right now. Reported on the FIRST attempt only: a long outage
+        // would otherwise emit on every backoff tick and drown the signal in
+        // repeats of the same fact.
+        if (pollAttempt === 1) reportRealtimeEvent(label, "poll-engaged");
         // A poll IS the catch-up: the same authoritative read, driven by a timer
         // instead of an event. Forced past the throttle, which exists to damp
         // user gestures rather than to skip scheduled recovery.
@@ -186,6 +191,11 @@ export function useRealtimeChannel({
         if (status === "SUBSCRIBED") {
           subscribed = true;
           stopPolling();
+          // A resubscribe after a failure is the socket recovering. Counting
+          // the RATE of these is the field health signal for realtime — a step
+          // change means sockets have started dying, which otherwise only ever
+          // surfaces as "chat feels broken sometimes" (perf audit Phase 7).
+          if (recovering) reportRealtimeEvent(label, "recovered");
           // First subscribe or a recovery: either way this is the moment the
           // stream is live, and anything published before it is recoverable
           // only by re-reading. A recovery forces past the throttle.
