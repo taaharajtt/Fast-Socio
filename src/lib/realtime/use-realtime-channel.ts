@@ -104,10 +104,13 @@ export function useRealtimeChannel({
   const lastCatchUpAt = useRef(0);
   const channelRef = useRef<RealtimeChannel | null>(null);
 
-  // Written in an effect rather than during render: the React Compiler (enabled
-  // in this repo) rejects a render-phase ref write, and every reader of these
-  // refs — the subscribe callback, the event handlers, the timers — runs after
-  // commit anyway.
+  // Written in an effect rather than during render: a render-phase ref write is
+  // a Rules-of-React violation, and every reader of these refs — the subscribe
+  // callback, the event handlers, the timers — runs after commit anyway.
+  //
+  // This matters more than it used to: `reactCompiler` is now genuinely enabled
+  // in next.config.ts, and the compiler only auto-memoizes components it can
+  // prove safe. A render-phase ref write would make it bail on this hook.
   useEffect(() => {
     buildRef.current = build;
     catchUpRef.current = onCatchUp;

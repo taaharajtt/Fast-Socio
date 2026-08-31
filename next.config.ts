@@ -325,6 +325,27 @@ const nextConfig: NextConfig = {
   // monitoring the launch audit requires (LR-05). The shells are verified
   // instead by the build output — every route reports ◐ (Partial Prerender).
   // Revisit if the instant API gains a way to declare an ambient header read.
+  // React Compiler (Next 16 `reactCompiler`, backed by babel-plugin-react-compiler).
+  //
+  // It auto-memoizes component render output and hook results, which is the
+  // same thing hand-written `memo`/`useMemo`/`useCallback` does — but applied
+  // everywhere rather than only where somebody remembered.
+  //
+  // WHY IT IS ON. `chat-thread.tsx` is 2,122 lines with 34 `useState` hooks,
+  // renders every message inline, and contains ZERO memoization, so any state
+  // change — a typing indicator arriving, a sheet opening, a reaction landing —
+  // re-rendered every message row in the thread. The alternative was extracting
+  // and hand-memoizing a ~300-line row with 19 parent-scope dependencies, on
+  // the app's most critical surface, with no component-test safety net. The
+  // compiler does the same job for that file AND for swipe-deck, community-chat
+  // and everything else, and it BAILS on any component it cannot prove safe
+  // rather than miscompiling it.
+  //
+  // Three source comments already claimed the compiler was "enabled in this
+  // repo" (use-realtime-channel.ts, use-push-signal.ts, chat-thread.ts). It was
+  // not — no config, no package, no lint rule. Those files were nonetheless
+  // written to its rules, which is part of why turning it on is low risk.
+  reactCompiler: true,
   cacheComponents: true,
   // Self-hosted (Contabo) builds only. `standalone` emits a minimal server plus
   // a pruned node_modules, which is what makes the container image small and

@@ -19,8 +19,9 @@ import { useEffect, useRef } from "react";
  */
 export function usePushSignal(onPush: () => void) {
   const handler = useRef(onPush);
-  // Written in an effect, not during render — the React Compiler (enabled in
-  // this repo) rejects a render-phase ref write.
+  // Written in an effect, not during render: a render-phase ref write is a
+  // Rules-of-React violation, and would make the React Compiler (enabled via
+  // `reactCompiler` in next.config.ts) bail on this hook rather than memoize it.
   useEffect(() => {
     handler.current = onPush;
   });

@@ -555,7 +555,8 @@ export function ChatThread({
   }, []);
 
   /** Mirrors `messages` for callbacks that must not resubscribe the channel.
-   *  Written in an effect: the React Compiler rejects a ref write in render. */
+   *  Written in an effect: a ref write during render is a Rules-of-React
+   *  violation and makes the React Compiler bail on this component. */
   const messagesRef = useRef(messages);
   useEffect(() => {
     messagesRef.current = messages;
