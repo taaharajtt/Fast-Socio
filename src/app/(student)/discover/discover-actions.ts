@@ -1,5 +1,6 @@
 "use server";
 
+import { cache } from "react";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -44,8 +45,29 @@ type Result = { ok: true } | { ok: false; error: string };
 // own untouched path: get_discover_candidates + discover/actions.ts.
 // ---------------------------------------------------------------------------
 
-/** The viewer facts scoring needs from their own profile. Server-only. */
-async function getDiscoverViewer(): Promise<SmartMatchViewer | null> {
+/**
+ * The viewer facts scoring needs from their own profile. Server-only.
+ *
+ * REQUEST-MEMOISED (perf audit Phase 4). /discover renders two independent
+ * Suspense slots — <DeckSlot/> and <PostButtonSlot/> — and both need the
+ * viewer, so this ran TWICE per page load. It is two sequential round trips
+ * each (the profile row, then `current_semester`), so the page was paying four
+ * legs to Frankfurt for one viewer. React `cache()` collapses that to two for
+ * the whole request; the two slots still stream independently, they just share
+ * the read instead of racing it.
+ *
+ * The `current_semester` RPC is deliberately KEPT rather than reimplemented in
+ * TypeScript. It is a second network leg to turn a roll number into an integer,
+ * which is tempting to inline — but there is no TS mirror of it today, and
+ * adding one would create a second definition of "which semester is this
+ * student in" that can silently drift from the SQL. `get_discover_candidates`
+ * scores on the SQL value, so a drifted client would show a compatibility
+ * number the deck did not use. One definition is worth one round trip.
+ *
+ * Not exported, so wrapping it here does not violate the module's "use server"
+ * contract (every EXPORT must be an async function).
+ */
+const getDiscoverViewer = cache(async (): Promise<SmartMatchViewer | null> => {
   const uid = await getAuthUserId();
   if (!uid) return null;
   const supabase = await createClient();
@@ -73,7 +95,7 @@ async function getDiscoverViewer(): Promise<SmartMatchViewer | null> {
     skills: (prof.skills as string[] | null) ?? [],
     degree: (prof.degree as string | null) ?? null,
   };
-}
+});
 
 type PostRow = {
   id: string;
@@ -270,6 +292,45 @@ const MAX_SOCIO_EXCLUDE = 500;
  * the gender-balanced pacing migration 0158 applies for female viewers (2
  * female : 1 other, mirrored and unit-tested in `lib/discover/gender-pacing.ts`)
  * arrives here already applied — the client must not re-sort SOCIO cards.
+ */
+/*
+ * PERFORMANCE NOTE (perf audit Phase 4, 2026-08-31). `get_discover_candidates`
+ * is the most expensive thing this app does — 8,168 calls at a 249ms mean and
+ * a 7.5s max over 19.6 days. Measured on production before changing anything:
+ *
+ *   warm, same connection            20 ms  (viewer with 55 eligible candidates)
+ *                                    70 ms  (viewer with ~480 eligible)
+ *   cold, fresh pooled connection   146 ms  (~480 eligible)
+ *   same viewer, seconds apart       44 ms and 393 ms
+ *
+ * So cost tracks the size of the ELIGIBLE SET (0158 ranks and paces the whole
+ * set before LIMIT, deliberately), plus per-connection planning, plus a lot of
+ * contention. The slowest experience belongs to a brand new account: the
+ * emptiest deck is the most expensive one.
+ *
+ * THREE OPTIMISATIONS WERE TRIED AND REJECTED ON MEASUREMENT, so please do not
+ * re-derive them from reading the SQL:
+ *
+ *  1. `scored as materialized`, to stop the shared-interests lateral being
+ *     evaluated 4x per row (EXPLAIN really does show SubPlans 11/17/18/19).
+ *     It was written, applied and REVERTED. A first A/B showed 126ms -> 71ms,
+ *     but that A/B ran the old version cold and the new one warm in the same
+ *     transaction. Re-run with both plans pre-warmed and the order reversed:
+ *     73.5 vs 75.5, 67.4 vs 71.3, 20.6 vs 20.3 ms — i.e. nothing. Output was
+ *     byte-identical (md5 of the full result set) in both directions, so it
+ *     was safe; it simply was not a win.
+ *  2. A partial index on the eligibility predicate. The plan shows the profiles
+ *     scan is 50 buffers / 0.88 ms of a 146 ms query. On ~650 rows a seq scan
+ *     is already right.
+ *  3. Pre-filtering before the window functions. The windows run over 55-480
+ *     rows and quicksort in ~48 kB. Not the bottleneck, and cutting the set
+ *     early would risk the pacing and recycling behaviour 0158 exists to
+ *     provide.
+ *
+ * What is left, and unmeasured: planning cost (the body has ~20 CTEs and four
+ * window functions; the inlined plan reported 27.9 ms of PLANNING alone) and
+ * contention from other work on the same instance. Both need a different kind
+ * of change than tuning this query.
  */
 export async function getSocioSwipeCandidates(
   limit = 20,
