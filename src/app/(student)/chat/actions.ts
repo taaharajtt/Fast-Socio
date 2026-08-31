@@ -223,7 +223,7 @@ export async function sendMessage(
   // here, and that is a considered choice rather than an omission. It would
   // re-render a server tree on the hottest path in the app, to fix one list on
   // a route the sender is not even looking at. It is also unnecessary now: the
-  // sender's own INSERT reaches <InboxRealtime/> in the student layout, which is
+  // sender's own INSERT reaches <ChatRealtime/> in the student layout, which is
   // subscribed from every screen INCLUDING inside this thread, re-reads just the
   // inbox and publishes it to the shared store. That also fixes the RECIPIENT's
   // inbox, which no amount of cache invalidation on the sender's request could.

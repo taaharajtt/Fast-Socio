@@ -33,8 +33,8 @@ import { isOnline, timeAgo } from "@/lib/time";
  * reuses page segments on back/forward navigation — so the list came back
  * showing data from the last full reload.
  *
- * The subscription now lives in <InboxRealtime/>, mounted from the student
- * layout beside <DockRealtime/>, and writes into a shared store. This component
+ * The subscription now lives in <ChatRealtime/>, mounted from the student
+ * layout, and writes into a shared store. This component
  * renders whichever of {server payload, store snapshot} is actually fresher —
  * `pickFreshestInbox` decides on the payloads' own watermarks, because object
  * identity cannot tell a genuinely new server render from a replayed one.

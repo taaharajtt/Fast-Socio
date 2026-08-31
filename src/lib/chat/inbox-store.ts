@@ -18,7 +18,7 @@ import { pickFreshestInbox } from "@/lib/chat/inbox-freshness";
  * the RSC payload from the previous render on a back/forward navigation, so the
  * list remounted holding the same `initial` it had before.
  *
- * Moving the snapshot here fixes both halves at once: <InboxRealtime/> lives in
+ * Moving the snapshot here fixes both halves at once: <ChatRealtime/> lives in
  * the student layout and keeps listening from anywhere in the app (including
  * inside /chat/[id]), and whatever it last wrote renders immediately on the
  * next mount of the list — cached page payload or not.
@@ -51,7 +51,7 @@ function emit() {
 }
 
 /**
- * Claim the store for a viewer. Called by <InboxRealtime/> when it mounts for a
+ * Claim the store for a viewer. Called by <ChatRealtime/> when it mounts for a
  * user id. If the store currently holds someone else's inbox it is dropped
  * first, so no frame can ever render the previous account's threads.
  */

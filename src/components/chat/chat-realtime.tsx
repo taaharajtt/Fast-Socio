@@ -7,26 +7,46 @@ import {
   clearInboxSnapshot,
   setInboxSnapshot,
 } from "@/lib/chat/inbox-store";
+import { setChatBadge } from "@/lib/chat/badge-store";
+import { deriveChatBadge } from "@/lib/chat/badge-count";
 import { useRealtimeChannel } from "@/lib/realtime/use-realtime-channel";
 import { reportRealtimeIssue } from "@/lib/realtime/telemetry";
 import { usePushSignal } from "@/lib/push/use-push-signal";
 
 /**
- * The DM inbox's realtime listener, hoisted out of <InboxList/> and mounted
- * from the student layout so it stays alive on EVERY screen — crucially,
- * including inside /chat/[id].
+ * The signed-in student's ONE realtime listener, mounted from the student
+ * layout so it stays alive on every screen — crucially, including inside
+ * /chat/[id].
  *
- * That relocation is the whole fix. Previously the subscription lived on the
- * /chat page, so the moment a student tapped a conversation the channel was
- * removed; a message that arrived while they were reading was delivered to
- * nothing, and `postgres_changes` cannot replay it afterwards. Coming back to
- * Messages then rendered whatever the Client Cache had — Next 16 reuses page
- * segments on back/forward navigation — which is why the list kept showing the
- * preview from the last full reload.
+ * That relocation (from <InboxList/>, which only exists while /chat is on
+ * screen) is what fixed the original bug: tapping a conversation used to remove
+ * the channel, so a message arriving while you were reading was delivered to
+ * nothing, and `postgres_changes` cannot replay it afterwards.
  *
- * Now the events land here, the re-read goes into the shared store, and
- * <InboxList/> renders that store the instant it mounts.
+ * ---------------------------------------------------------------------------
+ * WHY THIS IS ONE COMPONENT AND NOT TWO (perf audit Phase 3a)
  *
+ * This replaces <DockRealtime/> and <InboxRealtime/>, which were both mounted
+ * in the layout, both subscribed, and overlapped almost exactly:
+ *
+ *     DockRealtime    messages(*)  message_requests(*)
+ *     InboxRealtime   messages(*)  message_requests(*)  conversations(*)
+ *                     community_chat_messages(INSERT)
+ *
+ * So every signed-in student opened SIX postgres_changes subscriptions, two of
+ * them exact duplicates, and every inbound message did TWO server round trips
+ * per open tab — `refreshInbox()` for the list and `chat_badge_count()` for the
+ * number — to render two things that are functions of the same rows.
+ *
+ * That matters more than it looks, because `postgres_changes` evaluates RLS
+ * once PER SUBSCRIBER for every write to a published table. Its cost is
+ * `write rate x subscription count`, and measured over 19.6 days on this
+ * database `realtime.apply_rls` was 3.70 of 6.50 hours of total database time —
+ * 57%, ahead of every query the product actually runs. Cutting subscriptions
+ * per user from six to four takes a third off that term directly, and the
+ * badge derivation halves the follow-on query load it causes.
+ *
+ * ---------------------------------------------------------------------------
  * COST CONTROL. The handler does not fetch per event. A burst — a message
  * INSERT, plus the `conversations.last_message_at` trigger UPDATE, plus a read
  * receipt UPDATE — is coalesced into a single `refreshInbox()`, which is one
@@ -42,18 +62,41 @@ import { usePushSignal } from "@/lib/push/use-push-signal";
  * messages. The debounced read is ~350ms slower and always correct, and
  * correctness is the thing this work is for. (The optimistic path that DOES
  * exist is in the thread itself, where the send action returns the row.)
+ *
+ * ONE FAILURE MODE IS NEW AND IS ACCEPTED KNOWINGLY. The dock badge used to be
+ * recounted by its own RPC, so it could still update when the inbox read
+ * failed. Now a failed read leaves both stale. That is the right trade: the two
+ * numbers can no longer disagree with each other, a stale badge is strictly
+ * better than a badge that contradicts the list under it, the failure is
+ * reported, and every recovery trigger the channel has — resubscribe, focus,
+ * online, poll — retries it.
  */
 
 /** Coalescing window for a burst of related events. */
 const DEBOUNCE_MS = 350;
 
-export function InboxRealtime({ userId }: { userId: string }) {
+export function ChatRealtime({
+  userId,
+  initialBadge,
+}: {
+  userId: string;
+  /** The count the server rendered with, so a recount that returns the same
+   *  value doesn't cause a pointless re-render. */
+  initialBadge?: number;
+}) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inFlight = useRef(false);
   const queued = useRef(false);
 
+  // The store outlives any single render (it is module state), so re-seed it
+  // whenever the server hands us a freshly computed count. Otherwise a stale
+  // realtime value from an earlier session would keep overriding the server's.
+  useEffect(() => {
+    if (initialBadge !== undefined) setChatBadge(initialBadge);
+  }, [initialBadge]);
+
   /**
-   * Read the inbox and publish it.
+   * Read the inbox once and publish BOTH things that depend on it.
    *
    * Guarded against overlap: two reads in flight together would race to write
    * the store, and the loser could be the newer one. Instead a request arriving
@@ -77,7 +120,17 @@ export function InboxRealtime({ userId }: { userId: string }) {
       do {
         queued.current = false;
         try {
-          setInboxSnapshot(await refreshInbox());
+          const data = await refreshInbox();
+          setInboxSnapshot(data);
+          // Derived, not fetched. `deriveChatBadge` is exact rather than an
+          // approximation — see the note on it for the three properties of
+          // loadInbox() that make it so, and migration 0176 for why the two
+          // SQL definitions of "unread" had to be reconciled first.
+          //
+          // Ordered AFTER the snapshot deliberately: both stores notify
+          // synchronously, and publishing a badge that the list has not caught
+          // up to yet is the one visibly-wrong intermediate state available.
+          setChatBadge(deriveChatBadge(data).total);
         } catch {
           reportRealtimeIssue({ label: "chat inbox", status: "REFRESH_FAILED" });
           break;
@@ -94,8 +147,8 @@ export function InboxRealtime({ userId }: { userId: string }) {
   }, [readInbox]);
 
   useRealtimeChannel({
-    name: `chat-inbox:${userId}`,
-    label: "chat inbox",
+    name: `chat:${userId}`,
+    label: "chat",
     // Fires on first subscribe, on every recovery from CHANNEL_ERROR/TIMED_OUT/
     // CLOSED, on focus/visibility resume, on `online`, and from the polling
     // fallback — the moments where events may have been missed. Immediate, not

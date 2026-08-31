@@ -5,8 +5,7 @@ import { after } from "next/server";
 import { FloatingDock } from "@/components/floating-dock";
 import { PushAutoEnable } from "@/components/push/push-auto-enable";
 import { PresenceHeartbeat } from "@/components/presence/heartbeat";
-import { DockRealtime } from "@/components/chat/dock-realtime";
-import { InboxRealtime } from "@/components/chat/inbox-realtime";
+import { ChatRealtime } from "@/components/chat/chat-realtime";
 import { AnnouncementModal } from "@/components/notifications/announcement-modal";
 import { ExternalLinkInterceptor } from "@/components/ui/external-link-interceptor";
 import { RouteFallback } from "@/components/ui/route-fallback";
@@ -176,14 +175,21 @@ async function StudentShell() {
 
   return (
     <>
-      {/* Keeps the dock's chat badge (unread DMs + pending requests) live on
-          every student screen, not just after a navigation. */}
-      <DockRealtime userId={userId} initialBadge={chatBadge} />
-      {/* The DM inbox's listener. It lives HERE, not on /chat, so it keeps
-          receiving while the student is inside a conversation or anywhere else
-          in the app — the channel used to be torn down on navigation and every
-          event that arrived meanwhile was lost, with no replay to recover it. */}
-      <InboxRealtime userId={userId} />
+      {/* The student's ONE realtime listener: it keeps both the DM inbox and
+          the dock's chat badge live on every screen, not just after a
+          navigation. It lives HERE, not on /chat, so it keeps receiving while
+          the student is inside a conversation or anywhere else in the app —
+          the channel used to be torn down on navigation and every event that
+          arrived meanwhile was lost, with no replay to recover it.
+
+          It was TWO components until the perf audit's Phase 3a. Both were
+          mounted here, and they overlapped: six postgres_changes subscriptions
+          per signed-in student, two of them exact duplicates, plus two server
+          round trips per inbound message to render a list and a number that are
+          both functions of the same rows. Realtime evaluates RLS once per
+          subscriber per published write, and was measured at 57% of this
+          database's total CPU, so those duplicates were not free. */}
+      <ChatRealtime userId={userId} initialBadge={chatBadge} />
       <AnnouncementModal
         announcements={bootstrap.announcements.map((a: Announcement) => ({
           id: a.id as string,
