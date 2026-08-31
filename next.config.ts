@@ -274,7 +274,36 @@ const nextConfig: NextConfig = {
   // widest thing we lay out is a full-bleed cover on a large phone, so 1080
   // is the real ceiling; imageSizes covers avatars and thumbnails.
   images: {
-    deviceSizes: [640, 750, 828, 1080],
+    // CAPPED AT 828 (perf audit Phase 6). 1080 was dropped, and it was the
+    // single largest source of mobile bytes in the app: measured on the
+    // production access log, 6,022 of 13,631 avatar renders were requested at
+    // 1080 — 44% of ALL image traffic — because `sizes="(max-width:448px)
+    // 100vw, 448px"` on a 393px phone at DPR 2.75 resolves to 1080, which is
+    // arithmetically correct and a waste of a student's data plan.
+    //
+    // Measured on the same avatar through imgproxy at q=70 (WebP):
+    //
+    //     640px   30,186 bytes
+    //     750px   40,238 bytes
+    //     828px   47,782 bytes
+    //    1080px   75,146 bytes     <- dropped
+    //
+    // So the cap saves ~36% on every full-width image, and more on a feed page
+    // that loads several.
+    //
+    // WHY 828 IS ENOUGH HERE, specifically. This app is a phone-shaped PWA:
+    // `max-w-md` (448px) appears in 77 places and the widest `sizes` anywhere
+    // in the codebase is `(max-width: 448px) 100vw, 448px`. Nothing is ever
+    // displayed wider than 448 CSS px, so 828 still serves ~1.9x DPR at the
+    // widest slot and ~2.1x on a typical 393px phone. Beyond ~2x, extra pixels
+    // in a lossy photograph are not perceptible at arm's length, but they are
+    // fully paid for in bytes and in imgproxy CPU.
+    //
+    // The one place full resolution still matters is the full-screen photo
+    // viewer, where people pinch-zoom. That is deliberately unaffected:
+    // `components/ui/photo-viewer.tsx` renders a plain <img> with the original
+    // (or signed) URL and never goes through next/image or this list.
+    deviceSizes: [640, 750, 828],
     imageSizes: [32, 48, 64, 96, 128, 256, 384],
   },
   // Cache Components (Next 16) — dynamic-by-default with PPR: every route emits
