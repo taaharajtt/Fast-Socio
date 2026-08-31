@@ -553,6 +553,37 @@ compare deltas across a window rather than reading the absolute number. Do this
 check first whenever latency regresses: it is one command, and if it is dirty
 then no amount of query work will fix what you are seeing.
 
+### Measurement 0b — image cache hit rate and delivered widths
+
+`imgcache` logs the cache verdict per request (perf audit Phase 6). Before that
+it logged nothing useful and the hit rate could only be guessed at.
+
+```bash
+docker logs fastsocio-imgcache --since 24h | grep -oE 'cache=[A-Z-]+' | sort | uniq -c | sort -rn
+```
+
+*Threshold:* HIT should dominate once the cache is warm. Expect a MISS-heavy
+window right after any `imgcache` restart or purge — the cache is a named
+volume, but a config change that alters `$img_fmt` or the cache key invalidates
+it by definition.
+
+Delivered widths, which is how you catch a `sizes` regression:
+
+```bash
+docker logs fastsocio-imgcache --since 24h | grep -oE 'rs:fit:[0-9]+' | sort | uniq -c | sort -rn
+```
+
+*Threshold:* no `rs:fit:1080` from current clients — `images.deviceSizes` is
+capped at 828 in next.config.ts. Some 1080 traffic is normal for a few hours
+after a deploy while clients on the previous bundle migrate; it should decay to
+zero, and if it does not, a client is stuck on a stale service-worker page.
+
+**Do not measure the hit rate with `curl` alone.** The cache key includes the
+negotiated format, so `curl -H "Accept: image/webp"` addresses a different
+entry than a browser sending `image/avif` — a MISS from curl says nothing about
+what browsers get. The `X-Img-Cache` response header is still the right tool
+for checking one specific URL.
+
 ### Measurements — run these against the JSON access log
 
 Everything below reads `docker compose logs caddy`; nothing writes. Set the
