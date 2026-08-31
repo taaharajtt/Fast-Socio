@@ -553,6 +553,49 @@ compare deltas across a window rather than reading the absolute number. Do this
 check first whenever latency regresses: it is one command, and if it is dirty
 then no amount of query work will fix what you are seeing.
 
+### Realtime cost — why it is 57% and what does NOT fix it
+
+`realtime.apply_rls` is the single largest consumer of this database, ahead of
+every query the product runs. It is worth knowing what that number is before
+anyone spends a week trying to move it.
+
+It is **not** proportional to how many people are online. Two windows on the
+same instance:
+
+| window | live subscriptions | call rate | mean cost |
+|---|---|---|---|
+| idle | 0 | 6,917 / hour | 7.93 ms |
+| real traffic | up to 13 | 6,920 / hour | 8.34 ms |
+
+The call rate is flat to within 0.04% between nobody connected and thirteen
+live subscriptions. That is a timer-driven poll of the replication slot, about
+one every 520ms, running whether the app has users on it or not. Only the ~5%
+rise in mean cost is per-subscriber work.
+
+Consequences:
+
+- **Replacing `postgres_changes` with private Broadcast is not worth it here.**
+  It targets the ~5%, i.e. about 3% of database CPU, and costs a security
+  boundary (channel topics become authorization) plus new triggers and dedup.
+  Rejected on this evidence; the reasoning is recorded next to the code in
+  `src/components/chat/chat-realtime.tsx`.
+- **Shaving subscription counts is not worth it either**, for the same reason.
+- The levers that WOULD move it are the Realtime poll interval and the instance
+  size, both on Supabase's side. Raising the poll interval trades delivery
+  latency for CPU; that is a product decision, not a tuning one.
+
+Re-check by taking this twice at different concurrency and comparing the call
+RATE, not the total:
+
+```sql
+select (select count(*) from realtime.subscription) as subs,
+       sum(calls) as calls,
+       round((sum(total_exec_time)/sum(calls))::numeric, 2) as mean_ms
+  from pg_stat_statements where query like '%wal->>%';
+```
+
+If the rate ever starts tracking concurrency, the conclusion above is stale.
+
 ### The weekly operational read
 
 Four commands. Run them weekly, and FIRST whenever anything feels slow — every

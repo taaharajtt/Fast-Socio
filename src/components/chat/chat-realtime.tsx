@@ -38,13 +38,19 @@ import { usePushSignal } from "@/lib/push/use-push-signal";
  * per open tab — `refreshInbox()` for the list and `chat_badge_count()` for the
  * number — to render two things that are functions of the same rows.
  *
- * That matters more than it looks, because `postgres_changes` evaluates RLS
- * once PER SUBSCRIBER for every write to a published table. Its cost is
- * `write rate x subscription count`, and measured over 19.6 days on this
- * database `realtime.apply_rls` was 3.70 of 6.50 hours of total database time —
- * 57%, ahead of every query the product actually runs. Cutting subscriptions
- * per user from six to four takes a third off that term directly, and the
- * badge derivation halves the follow-on query load it causes.
+ * The merge is still worth it on its own terms — half the server round trips
+ * per inbound message, and two fewer sockets per student — but the DATABASE
+ * saving originally claimed for it was overstated, and the correction is worth
+ * stating plainly because it is the same mistake this audit kept making.
+ *
+ * The claim was that `postgres_changes` evaluates RLS once per subscriber per
+ * published write, so cost is `write rate x subscription count` and cutting
+ * six subscriptions to four takes a third off it. The first half is true; the
+ * conclusion is not. Measured afterwards, the per-subscriber term is only
+ * about 5% of `realtime.apply_rls` — the rest is a fixed poll that runs with
+ * nobody connected. See the Broadcast evaluation below for the numbers.
+ *
+ * So: fewer round trips, yes; a third off 57% of the database, no.
  *
  * ---------------------------------------------------------------------------
  * COST CONTROL. The handler does not fetch per event. A burst — a message
@@ -70,6 +76,60 @@ import { usePushSignal } from "@/lib/push/use-push-signal";
  * better than a badge that contradicts the list under it, the failure is
  * reported, and every recovery trigger the channel has — resubscribe, focus,
  * online, poll — retries it.
+ */
+
+/*
+ * ---------------------------------------------------------------------------
+ * WHY THIS STILL USES `postgres_changes` AND NOT PRIVATE BROADCAST
+ *
+ * Replacing these subscriptions with Supabase's private Broadcast (a trigger
+ * calling `realtime.send()` onto a per-conversation topic) was evaluated and
+ * REJECTED on measurement. Do not re-open it without new numbers.
+ *
+ * The case for Broadcast rests on `postgres_changes` evaluating RLS once per
+ * subscriber per published write, so that cost should scale with concurrency.
+ * On this database it does not, and the reason is that almost all of the cost
+ * is not per-subscriber at all.
+ *
+ * `realtime.apply_rls` is 57% of total database time (pg_stat_statements,
+ * 20-day window). Split across two windows on the same instance:
+ *
+ *     window            subscribers   call rate      mean cost
+ *     idle              0             6,917 / hour   7.93 ms
+ *     real traffic      up to 13      6,920 / hour   8.34 ms
+ *
+ * The CALL RATE IS FLAT — 0.04% apart with nobody connected versus thirteen
+ * live subscriptions. That is a timer-driven poll of the replication slot
+ * (roughly one every 520ms), and it runs whether the app has users on it or
+ * not. Only the ~5% rise in mean cost is per-subscriber work.
+ *
+ * So Broadcast would recover about 5% of 57% — call it 3% of database CPU —
+ * in exchange for the highest-risk change available here: moving authorization
+ * onto channel topics, which makes a topic name a security boundary and a
+ * loose policy on `realtime.messages` a cross-conversation message leak. It
+ * would also need new triggers, its own dedup, and it still could not replace
+ * the catch-up reads, because Broadcast has no durable replay either.
+ *
+ * Bad trade. The lever that WOULD move the 57% is the poll interval or the
+ * instance size, and both live on Supabase's side of the boundary, not in this
+ * repo.
+ *
+ * FOR THE SAME REASON, the subscription count here is not worth shaving. The
+ * chat thread opens a separate subscription for `messages` INSERT and UPDATE,
+ * and merging them into one `event: "*"` handler would remove one of the eight
+ * or nine a student holds with a thread open — about 0.4% of database CPU,
+ * bought by rewriting the optimistic-reconciliation path. Not worth touching
+ * chat correctness for.
+ *
+ * Re-measure with:
+ *
+ *   select (select count(*) from realtime.subscription) as subs,
+ *          sum(calls), sum(total_exec_time)/sum(calls) as mean_ms
+ *     from pg_stat_statements where query like '%wal->>%';
+ *
+ * taken twice, at different concurrency, and compare the call RATE between the
+ * two. If the rate ever starts tracking concurrency, this conclusion is stale.
+ * ---------------------------------------------------------------------------
  */
 
 /** Coalescing window for a burst of related events. */
