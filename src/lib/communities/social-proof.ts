@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { resolveAvatarUrl } from "@/lib/avatar";
+import { getViewerProfile } from "@/lib/profile/viewer";
 import {
   batchOf,
   firstName,
@@ -51,16 +52,16 @@ export async function getSocialProof(
   if (candidates.length === 0) return { people: [], others: Math.max(0, withoutMe) };
 
   const supabase = await createClient();
-  const [{ data: matchRows }, { data: mine }, { data: profiles }] = await Promise.all([
+  // `mine` is the VIEWER's own row. It used to be its own query here; it now
+  // comes from the request-memoised shared loader (caching plan, Phase 2).
+  // Every caller passes the authenticated viewer as `me`, and the student
+  // layout has already read this row, so this is free.
+  const [{ data: matchRows }, mine, { data: profiles }] = await Promise.all([
     supabase
       .from("matches")
       .select("user_low, user_high")
       .or(`user_low.eq.${me},user_high.eq.${me}`),
-    supabase
-      .from("profiles")
-      .select("department, degree, username")
-      .eq("id", me)
-      .single(),
+    getViewerProfile(),
     supabase
       .from("profiles")
       .select("id, full_name, username, avatar_url, gender, department, degree")

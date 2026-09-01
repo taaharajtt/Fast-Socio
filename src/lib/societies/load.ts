@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { getCommunityRelationship } from "@/lib/communities/relationship";
+import { getViewerProfile } from "@/lib/profile/viewer";
 import type { SocietyRole } from "@/lib/societies/logic";
 import type { SocietyRow } from "@/lib/societies/types";
 import type { JoinState } from "@/app/(student)/communities/actions";
@@ -46,7 +47,11 @@ export async function getSocietyContext(id: string): Promise<SocietyContext> {
     .single();
   if (!c || !c.is_society) notFound();
 
-  const [rel, { data: roleRow }, { data: prof }] = await Promise.all([
+  // `prof` is the viewer's own row via the request-memoised shared loader
+  // (caching plan, Phase 2). getCommunityRelationship() below reads the same
+  // loader, so the two now share ONE query instead of issuing two identical
+  // `select admin_role where id = me` round trips on every society page.
+  const [rel, { data: roleRow }, prof] = await Promise.all([
     getCommunityRelationship(id, me, c.owner_id, true),
     supabase
       .from("society_roles")
@@ -54,7 +59,7 @@ export async function getSocietyContext(id: string): Promise<SocietyContext> {
       .eq("society_id", id)
       .eq("user_id", me)
       .maybeSingle(),
-    supabase.from("profiles").select("admin_role").eq("id", me).single(),
+    getViewerProfile(),
   ]);
 
   const role: SocietyRole | null = rel.isOwner

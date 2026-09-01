@@ -224,6 +224,50 @@ const csp = [
   "form-action 'self'",
 ].join("; ");
 
+// Cache headers for files served out of `public/` (caching plan, Phase 0).
+//
+// THE PROBLEM. Next cannot content-hash `public/` files, so it serves every one
+// of them with `Cache-Control: public, max-age=0`. Verified in production:
+//
+//     /icons/icon-192.png   public, max-age=0
+//     /map.png              public, max-age=0     <- 6,327,805 bytes
+//
+// So every PWA icon, splash screen and brand image is revalidated on each load,
+// and the campus map — the single largest asset in the app — is re-downloaded
+// in full by any client whose service worker has not already cached it. One
+// user waited 36.7s for it in a 24h window.
+//
+// WHY NOT `immutable`. These filenames are stable, not content-addressed, so an
+// updated logo or map has to be able to propagate. `stale-while-revalidate`
+// gives the best of both: served instantly from cache, refreshed in the
+// background, and a changed file reaches everyone within a day of their next
+// visit rather than being pinned for a year.
+//
+// WHAT IS DELIBERATELY EXCLUDED, and why it must stay excluded:
+//
+//   * `sw.js`, `push-sw.js`, `workbox-*.js` — service worker scripts. Caching a
+//     service worker is how you permanently lose the ability to ship an update.
+//     `push-sw.js` is the sharp one: it is pulled in via `importScripts` (see
+//     workboxOptions above), which DOES consult the HTTP cache, unlike the
+//     top-level worker fetch that browsers revalidate on their own.
+//   * `manifest.webmanifest` — left at `must-revalidate`. Its revalidations are
+//     cheap 304s, and the PWA install funnel reads it; not worth the risk for
+//     the bytes involved.
+const PUBLIC_ASSET_CACHE =
+  "public, max-age=604800, stale-while-revalidate=86400";
+const assetCacheHeaders = [
+  "/icons/:file*",
+  "/splash/:file*",
+  "/brand/:file*",
+  "/apple-touch-icon.png",
+  // Still a 6.3MB uncompressed PNG. Caching it is the immediate fix; routing it
+  // through imgproxy like every other image in the app is the real one.
+  "/map.png",
+].map((source) => ({
+  source,
+  headers: [{ key: "Cache-Control", value: PUBLIC_ASSET_CACHE }],
+}));
+
 const securityHeaders = [
   { key: "Content-Security-Policy", value: csp },
   { key: "X-Frame-Options", value: "DENY" },
@@ -354,6 +398,43 @@ const nextConfig: NextConfig = {
   // migration must not be able to change the deployment that serves real users.
   ...(process.env.DOCKER_BUILD === "1" ? { output: "standalone" as const } : {}),
   experimental: {
+    // Client Cache TTL (caching plan, Phase 1). THE single change aimed at
+    // "tab switching is slow".
+    //
+    // Unset, `dynamic` defaults to 0 (staleTimes.md version history: changed
+    // from 30s to 0s in v15) — so the router treats every dynamic page segment
+    // as stale the instant it lands, and bouncing between the six dock tabs
+    // refetches the RSC payload from Frankfurt every single time, even if you
+    // left the tab three seconds ago. Measured: real RSC navigations are p50
+    // 639ms / p95 1,944ms server-side, before the ~280ms round trip a student
+    // in Pakistan pays on top.
+    //
+    // `static` is deliberately left at its 5-minute default: PPR shells and
+    // loading boundaries are already handled by it, and this app's shells are
+    // identical for every student by construction.
+    //
+    // WHY 30s IS SAFE HERE, given staleness has been a complaint before:
+    //
+    //  1. WRITES CLEAR IT ENTIRELY. Per cacheLife.md, calling revalidateTag /
+    //     revalidatePath / updateTag / refresh from a Server Action clears the
+    //     WHOLE client cache immediately, bypassing the stale time. This repo
+    //     has 146 such calls across 26 files, so any action a student takes
+    //     resets the window rather than reading through it.
+    //  2. THE LIVE DATA DOES NOT COME THROUGH THIS CACHE. The DM inbox, the
+    //     chat badge and the thread are fed by the layout-level realtime island
+    //     (components/chat/chat-realtime.tsx) and its module stores, which
+    //     re-read on subscribe, resubscribe, focus, visibilitychange, `online`
+    //     and a polling fallback — all independent of navigation. That
+    //     architecture did not exist when this knob was last considered, and it
+    //     is precisely the safety net that makes a stale window affordable.
+    //  3. It does not change back/forward behaviour (staleTimes.md), which is
+    //     already reuse-based, so nothing regresses there.
+    //
+    // Start at 30. Raise only with a measurement, and lower it immediately if
+    // stale-inbox reports return.
+    staleTimes: {
+      dynamic: 30,
+    },
     // Next DevTools → "Instant Navs": freeze the UI at the static shell to see
     // exactly what a tab switch paints before any data arrives.
     instantNavigationDevToolsToggle: true,
@@ -383,7 +464,11 @@ const nextConfig: NextConfig = {
   // run on Turbopack without conflict (the SW is disabled in dev anyway).
   turbopack: {},
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    // Order matters: "the last header key will override the first" for two rules
+    // matching the same path and the same key (headers.md). The asset rules run
+    // second so their Cache-Control wins, and they set no key that the security
+    // headers also set, so nothing above is weakened.
+    return [{ source: "/:path*", headers: securityHeaders }, ...assetCacheHeaders];
   },
   async redirects() {
     // The Notifications panel was rebranded to Activity (UAT-002). Keep old

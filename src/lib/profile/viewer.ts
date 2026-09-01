@@ -38,6 +38,15 @@ export type ViewerProfile = {
   admin_role: string | null;
   full_name: string | null;
   tour_seen_at: string | null;
+  // Added for the caching plan's Phase 2. `department`/`degree`/`username` are
+  // what social proof ranks the viewer's closeness by (programme mate, then
+  // batchmate via the roll number in `username`), and they used to be a SECOND
+  // read of this same row inside getSocialProof(). Widening the select here
+  // costs nothing — it is the same indexed primary-key lookup either way — and
+  // removes a whole round trip from every surface that shows a cover.
+  department: string | null;
+  degree: string | null;
+  username: string | null;
 };
 
 export const getViewerProfile = cache(async (): Promise<ViewerProfile | null> => {
@@ -47,7 +56,9 @@ export const getViewerProfile = cache(async (): Promise<ViewerProfile | null> =>
   const supabase = await createClient();
   const { data } = await supabase
     .from("profiles")
-    .select("avatar_url, gender, admin_role, full_name, tour_seen_at")
+    .select(
+      "avatar_url, gender, admin_role, full_name, tour_seen_at, department, degree, username"
+    )
     .eq("id", userId)
     .single();
 

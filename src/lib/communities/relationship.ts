@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { isOfficerRole } from "@/lib/societies/logic";
+import { getViewerProfile } from "@/lib/profile/viewer";
 import type { JoinState } from "@/app/(student)/communities/actions";
 
 /** A student waiting for an owner/moderator to let them participate. */
@@ -97,7 +98,12 @@ export async function getCommunityRelationship(
 ): Promise<CommunityRelationship> {
   const supabase = await createClient();
 
-  const [{ data: member }, { data: follower }, { data: request }, { data: officer }, { data: prof }] =
+  // `prof` is the VIEWER's own row, and it is deliberately not a query here any
+  // more (caching plan, Phase 2). Every caller of this function derives `me`
+  // from getAuthUserId(), and getViewerProfile() already selects `admin_role`
+  // on a request-memoised read that the student layout has issued before this
+  // ever runs — so this was a second round trip for a row we were holding.
+  const [{ data: member }, { data: follower }, { data: request }, { data: officer }, prof] =
     await Promise.all([
       supabase
         .from("community_members")
@@ -123,7 +129,7 @@ export async function getCommunityRelationship(
         .eq("society_id", communityId)
         .eq("user_id", me)
         .maybeSingle(),
-      supabase.from("profiles").select("admin_role").eq("id", me).single(),
+      getViewerProfile(),
     ]);
 
   const isOwner = ownerId === me;
