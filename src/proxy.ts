@@ -19,6 +19,18 @@ export const config = {
    * exact opposite of what src/app/robots.ts says, and silently undid the
    * VULN-14 fix.
    *
+   * `push-sw.js` is the THIRD instance of this same bug, found 2026-09-01, and
+   * the one the two fixes below kept missing: the exclusion list already held
+   * `sw.js`, but that alternative is anchored at the start of the path, so it
+   * never matched `push-sw.js`. Our Web Push handlers live in that file and the
+   * generated worker pulls them in with `importScripts("/push-sw.js")` (see
+   * workboxOptions in next.config.ts) — a fetch that DOES follow the auth gate.
+   * Signed out, it answered `307 -> /login`, the import threw, and the whole
+   * service worker install failed, costing that client every runtime cache the
+   * worker provides. Measured in production over 24h before the fix: 40x 200,
+   * 54x 304 and 9x 307, i.e. roughly one install in eleven was failing — the
+   * ones that happened before the visitor signed in.
+   *
    * `swe-worker-*.js` is the same class of bug, found 2026-08-28: next-pwa
    * emits it alongside sw.js, but only sw.js and workbox-* were excluded, so
    * the worker answered `307 -> /login` and the browser refused to execute it
@@ -37,6 +49,6 @@ export const config = {
    * It is an ingest endpoint, not a page: it has no session to refresh.
    */
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|robots.txt|manifest.webmanifest|sw.js|swe-worker-.*|workbox-.*|monitoring|icons/.*|apple-touch-icon.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|robots.txt|manifest.webmanifest|push-sw.js|sw.js|swe-worker-.*|workbox-.*|monitoring|icons/.*|apple-touch-icon.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
