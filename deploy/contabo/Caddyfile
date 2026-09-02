@@ -167,10 +167,29 @@ fastsocio.online {
 		# and streams the rest. Buffering here silently destroys that.
 		flush_interval -1
 
-		# Ride out a deploy instead of 502-ing through it. `docker compose up -d
-		# app` replaces the container, and for the ~9s until its healthcheck
-		# passes nothing is listening on app:3000. Present in the repo since the
-		# perf audit but never actually applied to this live file — added 2026-09-02.
+		# RIDE OUT A DEPLOY INSTEAD OF 502-ing THROUGH IT.
+		#
+		# `docker compose up -d app` replaces the container, and for the ~9
+		# seconds until its healthcheck passes there is nothing listening on
+		# app:3000. Without this, every request in that window is answered 502.
+		# Measured on 2026-08-31: 78 of the day's 502s fell inside the single
+		# hour in which the app container was recreated four times, and none
+		# outside it — i.e. essentially all of them were deploy-induced and
+		# avoidable.
+		#
+		# `lb_try_duration` makes Caddy keep retrying the upstream for up to 15s
+		# before giving up, so a client mid-deploy waits a moment instead of
+		# seeing an error. 15s comfortably covers the observed 9s restart while
+		# staying well under the 300s transport timeouts below, so a genuinely
+		# dead upstream still fails rather than hanging.
+		#
+		# This only affects establishing the connection. A request already being
+		# streamed is not retried, so it cannot duplicate a Server Action.
+		#
+		# CARRIED IN THIS FILE SINCE THE PERF AUDIT BUT NEVER APPLIED TO THE LIVE
+		# ~/fastsocio-app/Caddyfile until 2026-09-02 — a diff of the two during the
+		# Cloudflare cutover found them absent there, so every deploy in between
+		# was unprotected. Check both files, not just this one.
 		lb_try_duration 15s
 		lb_try_interval 250ms
 
