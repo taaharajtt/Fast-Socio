@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { resolveAnonymity } from "@/lib/feed/composer-state";
 import { getAuthUserId } from "@/lib/auth/user";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { isAppStorageUrl } from "@/lib/url-safety";
@@ -124,10 +125,15 @@ export async function createPost(input: {
   if (risk.action === "block")
     return { ok: false, error: blockMessage(risk) };
 
-  // UAT-005: community Main-panel posts are always attributed — anonymity moved
-  // to the community chat room. The composer hides the toggle, but the flag is
-  // client-supplied, so it is enforced here rather than trusted.
-  const isAnonymous = input.communityId ? false : input.isAnonymous;
+  // UAT-005 / UAT-13: community Main-panel posts are always attributed —
+  // anonymity moved to the community chat room. The composer hides the toggle,
+  // but the flag is client-supplied, so it is enforced here rather than trusted.
+  //
+  // `resolveAnonymity` also insists on a LITERAL `true`. A server action's
+  // argument is whatever the caller serialised, and every falsy-looking string
+  // ("false", "0") is truthy in JavaScript — so a post must never become
+  // anonymous because a value was merely present.
+  const isAnonymous = resolveAnonymity(input.isAnonymous, input.communityId);
 
   // A poll post: create the poll + options first (definer RPC), then attach it.
   // Done after the moderation gate so a blocked question never mints a poll.

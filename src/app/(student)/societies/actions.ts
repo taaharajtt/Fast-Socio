@@ -166,16 +166,29 @@ export async function createSocietyAnnouncement(
 }
 
 /**
- * Post an announcement from the chat-style composer (fix-049).
+ * Post into the society's broadcast channel (fix-049, reshaped by UAT-04).
  *
  * Body-only — no title. `society_announcements.title` became nullable in mig
  * 0147 precisely so a one-field composer could write a row without inventing a
- * title nobody typed. Who may post is unchanged: the RPC is officer/admin gated.
+ * title nobody typed.
+ *
+ * WHO MAY POST CHANGED. This used to be officer/admin only, and the surface was
+ * a one-way notice board. UAT-04 makes it a role-aware SHARED channel: an
+ * ordinary member may post, reply and post anonymously; officers keep every
+ * power they had on top of that. The rule lives in `society_capabilities`
+ * (mig 0178) and is enforced by the RPC — this action does not re-implement it,
+ * because two copies of an authorization rule is one copy too many.
  */
 export async function postSocietyAnnouncement(
   societyId: string,
   body: string,
-  opts?: { attachmentPath?: string }
+  opts?: {
+    attachmentPath?: string;
+    /** UAT-04: post without your name attached. Masked by the feed view. */
+    anonymous?: boolean;
+    /** The announcement this one replies to; must be in the same channel. */
+    replyTo?: string | null;
+  }
 ): Promise<Result> {
   const supabase = await createClient();
   const uid = await getAuthUserId();
@@ -207,6 +220,11 @@ export async function postSocietyAnnouncement(
     p_visibility: "public",
     p_attachment_url: opts?.attachmentPath ?? null,
     p_attachment_type: opts?.attachmentPath ? "image" : null,
+    // UAT-04: members may speak here, and may do so anonymously. `=== true`
+    // rather than a truthy check for the same reason the feed composer uses
+    // one — anonymity must never be conferred by a value merely being present.
+    p_is_anonymous: opts?.anonymous === true,
+    p_reply_to: opts?.replyTo ?? null,
   });
   if (error) return { ok: false, error: error.message };
   revalidatePath(`/societies/${societyId}`);
@@ -320,4 +338,111 @@ export async function searchStudents(query: string): Promise<StudentHit[]> {
     .or(search)
     .limit(8);
   return (data as StudentHit[]) ?? [];
+}
+
+
+/**
+ * The viewer's capabilities in a society, straight from the database (UAT-04).
+ *
+ * The UI reads this to decide what to RENDER. It is deliberately NOT the
+ * authorization boundary: every privileged RPC re-checks the caller's rank, so
+ * a stale or forged capability set buys nothing but a button that fails.
+ */
+export type SocietyCapabilities = {
+  rank: number;
+  is_admin: boolean;
+  can_post: boolean;
+  can_react: boolean;
+  can_reply: boolean;
+  can_post_anonymously: boolean;
+  can_moderate_members: boolean;
+  can_reveal_anonymous: boolean;
+  can_manage_events: boolean;
+  can_assign_moderator: boolean;
+  can_assign_officers: boolean;
+  can_remove_members: boolean;
+};
+
+const NO_CAPABILITIES: SocietyCapabilities = {
+  rank: 0,
+  is_admin: false,
+  can_post: false,
+  can_react: false,
+  can_reply: false,
+  can_post_anonymously: false,
+  can_moderate_members: false,
+  can_reveal_anonymous: false,
+  can_manage_events: false,
+  can_assign_moderator: false,
+  can_assign_officers: false,
+  can_remove_members: false,
+};
+
+export async function getSocietyCapabilities(
+  societyId: string
+): Promise<SocietyCapabilities> {
+  const supabase = await createClient();
+  const uid = await getAuthUserId();
+  if (!uid) return NO_CAPABILITIES;
+  const { data, error } = await supabase.rpc("society_capabilities", {
+    p_society: societyId,
+  });
+  // Fail CLOSED. A capability read that errors must not be mistaken for "you
+  // may do everything"; the worst case is a hidden button, not a granted power.
+  if (error || !data) return NO_CAPABILITIES;
+  return { ...NO_CAPABILITIES, ...(data as Partial<SocietyCapabilities>) };
+}
+
+/** Toggle the caller's reaction on a broadcast message (UAT-04). */
+export async function toggleBroadcastReaction(
+  announcementId: string,
+  emoji: string
+): Promise<{ ok: true; reacted: boolean } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const uid = await getAuthUserId();
+  if (!uid) return { ok: false, error: "Not signed in." };
+  if (emoji.length < 1 || emoji.length > 8)
+    return { ok: false, error: "That reaction isn’t supported." };
+
+  const { data, error } = await supabase.rpc("toggle_announcement_reaction", {
+    p_id: announcementId,
+    p_emoji: emoji,
+  });
+  if (error) return { ok: false, error: "Couldn’t react to that message." };
+  return { ok: true, reacted: data === true };
+}
+
+/**
+ * Reveal the author of an anonymous broadcast — president, owner or admin only
+ * (UAT-04).
+ *
+ * The masking itself happens in `society_announcement_feed`, so an ordinary
+ * member never receives the identity in the first place and no realtime payload
+ * can leak it. This is the deliberate, explicit act of looking, and it is
+ * refused in the database for anyone below president rank.
+ */
+export async function revealBroadcastAuthor(
+  announcementId: string
+): Promise<
+  | { ok: true; author: { id: string; name: string | null; username: string | null } }
+  | { ok: false; error: string }
+> {
+  const supabase = await createClient();
+  const uid = await getAuthUserId();
+  if (!uid) return { ok: false, error: "Not signed in." };
+
+  const { data, error } = await supabase.rpc("reveal_announcement_author", {
+    p_id: announcementId,
+  });
+  const row = (data as { author_id: string; full_name: string | null; username: string | null }[] | null)?.[0];
+  if (error || !row)
+    return {
+      ok: false,
+      error: "Only the president or the owner can reveal an anonymous author.",
+    };
+
+  return {
+    ok: true,
+    author: { id: row.author_id, name: row.full_name, username: row.username },
+  };
 }

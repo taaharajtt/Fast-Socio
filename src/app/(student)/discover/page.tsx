@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { cookies } from "next/headers";
 import { SwipeDeck } from "@/components/discover/swipe-deck";
 import { PostIntentButton } from "@/components/discover/post-intent-button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -8,6 +9,7 @@ import {
   getDiscoverSwipeDeck,
   getMyDiscoverData,
 } from "@/app/(student)/discover/discover-actions";
+import { SEED_COOKIE } from "@/lib/discover/session-seed";
 
 // No `unstable_instant` export here — it only adds build-time validation, and
 // that validation currently trips on @sentry/nextjs reading the `sentry-trace`
@@ -57,11 +59,23 @@ async function PostButtonSlot() {
 }
 
 async function DeckSlot() {
+  // UAT-15: the shuffle seed for THIS session. A server component cannot read
+  // sessionStorage, so the client mirrors its session seed into a cookie and
+  // rotates it — see `lib/discover/session-seed`. Absent on a first-ever visit,
+  // which simply means the unseeded (pre-0178) order for that one page.
+  //
+  // Reading a cookie makes this slot dynamic, which it already was: the deck is
+  // per-viewer and behind Suspense, and the prerendered shell above does not
+  // touch it.
+  const seed = (await cookies()).get(SEED_COOKIE)?.value ?? null;
+
   // The deck now arrives as a PAGE — cards plus the continuation state the
   // client needs to fetch the next one. Handing that whole object to SwipeDeck
   // is what lets it distinguish "still loading more" from "genuinely done".
-  const page = await timed("discover:deck", getDiscoverSwipeDeck);
-  return <SwipeDeck initial={page} />;
+  const page = await timed("discover:deck", () =>
+    getDiscoverSwipeDeck({ seed })
+  );
+  return <SwipeDeck initial={page} seed={seed} />;
 }
 
 /** The card + action row, at the exact geometry SwipeDeck renders, so nothing

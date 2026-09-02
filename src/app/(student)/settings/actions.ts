@@ -14,12 +14,26 @@ import { listObjects, deleteObjects } from "@/lib/s3/sign";
 const POST_MEDIA_MARKER = "/post-media/";
 
 /**
- * Permanently delete the caller's account. Deleting the auth user cascades to
- * profiles and all owned DB rows (FK on delete cascade), but Supabase Storage is
- * NOT cascaded — so we first purge the user's uploaded objects (avatars, post
- * images, DM attachments), otherwise they linger and stay retrievable (P5-03).
- * Requires the service-role key, so it runs through the admin client — but only
- * ever for the caller's own id, read from their authenticated session.
+ * Permanently delete the caller's own account (UAT-16).
+ *
+ * THE ORDER MATTERS, and it is the opposite of what it used to be.
+ *
+ * Before: purge storage, then delete the auth user. If the delete failed — a
+ * transient Auth API error, a missing service-role key — the student had just
+ * had every avatar, post image and DM attachment destroyed while their account
+ * carried on existing. The irreversible half ran first and the authoritative
+ * half could still fail.
+ *
+ * Now: READ the object paths (they are only discoverable while the rows exist),
+ * DELETE the account, then purge. If the purge fails the account is genuinely
+ * gone — which is what the user asked for and what the UI is about to claim —
+ * and the leftover objects are logged with their keys so the purge can be
+ * re-run. Deletion is therefore idempotent: calling it again on an already
+ * deleted user is a no-op, not an error.
+ *
+ * The service-role client is server-only and is only ever handed the id read
+ * from the caller's own verified session; there is no parameter a caller could
+ * use to name someone else.
  */
 export async function deleteAccount(): Promise<{ error: string } | void> {
   const supabase = await createClient();
@@ -27,7 +41,8 @@ export async function deleteAccount(): Promise<{ error: string } | void> {
   if (!userId) return { error: "You are not signed in." };
   const uid = userId;
 
-  // Gather the user's storage objects BEFORE the DB rows cascade away.
+  // Gather the user's storage objects BEFORE the DB rows cascade away — after
+  // the delete there is nothing left to derive these paths from.
   const [{ data: myPosts }, { data: myMsgs }] = await Promise.all([
     supabase.from("feed_posts").select("image_url").eq("author_id", uid),
     supabase
@@ -37,32 +52,68 @@ export async function deleteAccount(): Promise<{ error: string } | void> {
       .not("attachment_url", "is", null),
   ]);
 
-  const admin = createAdminClient();
+  // Avatars live under avatars/<uid>/…; post images and DM attachments are
+  // derived from the URLs their rows carry. A listing failure must not abort
+  // the deletion — it only means fewer objects can be purged, and that is
+  // reported below rather than silently swallowed.
+  let avatarPaths: string[] = [];
+  try {
+    avatarPaths = await listObjects("avatars", uid);
+  } catch (e) {
+    console.error("[deleteAccount] avatar listing failed", { uid, error: e });
+  }
 
-  // Media now lives in Contabo Object Storage, which has no cascade — these
-  // deletes are the only thing stopping a removed account's files from living
-  // on indefinitely.
-
-  // Avatars live under avatars/<uid>/…
-  const avatarPaths = await listObjects("avatars", uid);
-  await deleteObjects("avatars", avatarPaths);
-
-  // Post images (post-media/shared/<uuid>): extract paths from the public URLs.
   const postPaths = (myPosts ?? [])
     .map((p) => p.image_url as string | null)
     .filter((u): u is string => u !== null && u.includes(POST_MEDIA_MARKER))
     .map((u) => u.slice(u.indexOf(POST_MEDIA_MARKER) + POST_MEDIA_MARKER.length));
-  await deleteObjects("post-media", postPaths);
 
-  // DM attachments (chat-media): normalize each stored value to a path.
   const chatPaths = (myMsgs ?? [])
     .map((m) => chatMediaPath(m.attachment_url as string | null))
     .filter((p): p is string => Boolean(p));
-  await deleteObjects("chat-media", chatPaths);
 
+  // THE IRREVERSIBLE STEP, and the one whose failure the user must hear about.
+  // Deleting the auth user cascades to profiles and every owned row via the
+  // FK graph; Object Storage has no cascade, which is what the purge below is
+  // for.
+  const admin = createAdminClient();
   const { error } = await admin.auth.admin.deleteUser(uid);
-  if (error) return { error: error.message };
+  if (error) {
+    // Nothing has been destroyed at this point — the account is intact and the
+    // media is untouched — so this is safely retryable.
+    console.error("[deleteAccount] auth delete failed", { uid, error: error.message });
+    return { error: "We couldn’t delete your account just now. Please try again." };
+  }
+
+  // Best-effort purge. The account is already gone; a failure here leaves
+  // orphaned objects, which is a cleanup task, not a reason to tell the user
+  // their deletion failed (it did not) or to leave them signed in.
+  await purge("avatars", avatarPaths, uid);
+  await purge("post-media", postPaths, uid);
+  await purge("chat-media", chatPaths, uid);
 
   await supabase.auth.signOut();
   redirect("/login");
+}
+
+/**
+ * Delete a batch of objects, logging what could not be removed.
+ *
+ * The keys are logged because they are the only record of what still needs
+ * purging once the owning rows are gone. No secrets are logged — a bucket
+ * prefix and object keys carry no credential, and the keys are already
+ * de-identified (`post-media/shared/<uuid>`).
+ */
+async function purge(bucket: string, paths: string[], uid: string): Promise<void> {
+  if (paths.length === 0) return;
+  try {
+    await deleteObjects(bucket, paths);
+  } catch (e) {
+    console.error("[deleteAccount] orphaned objects after account delete", {
+      uid,
+      bucket,
+      paths,
+      error: e,
+    });
+  }
 }

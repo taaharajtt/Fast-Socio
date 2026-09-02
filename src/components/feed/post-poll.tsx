@@ -8,6 +8,10 @@ import {
   votePostPoll,
   type PostPollOption,
 } from "@/app/(student)/home/actions";
+import {
+  PollBallotsSheet,
+  usePollOwnership,
+} from "@/components/feed/poll-ballots-sheet";
 
 /**
  * A poll attached to a feed post. Tallies are always visible (this is the campus
@@ -20,6 +24,10 @@ export function PostPoll({ pollId }: { pollId: string }) {
   const [options, setOptions] = useState<PostPollOption[] | null>(null);
   const [optimistic, setOptimistic] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  // UAT-17: only the creator gets a tap target on the total. Non-creators see
+  // the same aggregate line they always did, as static text.
+  const canInspect = usePollOwnership(pollId);
+  const [showBallots, setShowBallots] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -125,10 +133,27 @@ export function PostPoll({ pollId }: { pollId: string }) {
         })}
       </div>
 
-      <p className="mt-2 text-[11px] text-fg-disabled">
-        {total} vote{total === 1 ? "" : "s"}
-        {chosen ? "" : " · tap to vote"}
-      </p>
+      {canInspect ? (
+        <>
+          <button
+            type="button"
+            onClick={() => setShowBallots(true)}
+            className="focus-ring mt-2 rounded-[8px] text-left text-[11px] font-semibold text-accent underline-offset-2 hover:underline"
+          >
+            {total} vote{total === 1 ? "" : "s"} · see who voted
+          </button>
+          <PollBallotsSheet
+            pollId={pollId}
+            open={showBallots}
+            onClose={() => setShowBallots(false)}
+          />
+        </>
+      ) : (
+        <p className="mt-2 text-[11px] text-fg-disabled">
+          {total} vote{total === 1 ? "" : "s"}
+          {chosen ? "" : " · tap to vote"}
+        </p>
+      )}
     </div>
   );
 }

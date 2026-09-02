@@ -344,3 +344,43 @@ export async function reportEvent(
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
+
+/**
+ * Rename an event (UAT-08).
+ *
+ * Backed by `rename_event` (mig 0178) rather than a table UPDATE, so the
+ * operation can touch the TITLE and nothing else. A policy broad enough to
+ * permit the row also permits `status`, `host_id` and `starts_at` in the same
+ * statement — a rename control should not be able to approve its own event.
+ *
+ * The RPC re-checks host / co-organizer / admin, so this action is UX rather
+ * than the security boundary, and calling it directly gains nothing.
+ */
+export async function renameEvent(
+  eventId: string,
+  title: string
+): Promise<{ ok: true; title: string } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
+
+  const trimmed = title.trim();
+  if (trimmed.length < 2 || trimmed.length > 120)
+    return { ok: false, error: "Title must be 2–120 characters." };
+
+  const { data, error } = await supabase.rpc("rename_event", {
+    p_id: eventId,
+    p_title: trimmed,
+  });
+  if (error)
+    return {
+      ok: false,
+      error: error.message.includes("not authorized")
+        ? "Only the host or a co-organizer can rename this event."
+        : "Couldn’t rename this event — try again.",
+    };
+
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath("/events");
+  return { ok: true, title: (data as string) ?? trimmed };
+}

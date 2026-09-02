@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import type { IncomingRequest } from "@/components/chat/request-row";
+import type { OutgoingRequest } from "@/components/chat/sent-request-row";
 import { resolveAvatarUrl } from "@/lib/avatar";
 import {
   EPOCH,
@@ -44,6 +45,7 @@ export async function loadInbox(): Promise<InboxData> {
     { data: reqRows },
     { data: matchRows },
     { data: outgoingReqRows },
+    { data: acceptedIncomingRows },
     { data: joinedRows },
     { data: ownedRows },
   ] = await Promise.all([
@@ -63,12 +65,27 @@ export async function loadInbox(): Promise<InboxData> {
       .select("id, user_low, user_high, created_at")
       .or(`user_low.eq.${me},user_high.eq.${me}`)
       .order("created_at", { ascending: false }),
-    // Requests WE sent (UAT-018): once we've initiated a conversation with a
-    // match, they should drop out of the "new matches" list.
+    // Requests WE sent. Two jobs, and the second one is new (UAT-02): once
+    // we've initiated a conversation with a match they drop out of the "new
+    // matches" list, AND the rows themselves are now rendered, so a sender can
+    // see that their request exists and what became of it. Bounded because a
+    // prolific sender should not make the Chat tab unbounded; the cap is well
+    // above the messageRequest rate limit's reach for any real account.
     supabase
       .from("message_requests")
-      .select("recipient_id")
-      .eq("sender_id", me),
+      .select("id, recipient_id, message, status, created_at")
+      .eq("sender_id", me)
+      .order("created_at", { ascending: false })
+      .limit(50),
+    // Requests we ACCEPTED. Needed for the same reason as the accepted outgoing
+    // ones: the conversation they created is empty until someone speaks, and
+    // without this it shows on neither panel (see `started` below).
+    supabase
+      .from("message_requests")
+      .select("sender_id")
+      .eq("recipient_id", me)
+      .eq("status", "accepted")
+      .limit(200),
     // DISCOVER TEAM ROOMS ONLY. A Discover room has no profile page of its own
     // — the conversation is the entire product — so /chat is where it lives.
     // Every other space (community chat room, society/verified community) hosts
@@ -224,6 +241,7 @@ export async function loadInbox(): Promise<InboxData> {
     otherIds.add(c.user_low === me ? c.user_high : c.user_low)
   );
   requests.forEach((r) => otherIds.add(r.sender_id));
+  (outgoingReqRows ?? []).forEach((r) => otherIds.add(r.recipient_id as string));
   matches.forEach((m) =>
     otherIds.add(m.user_low === me ? m.user_high : m.user_low)
   );
@@ -275,11 +293,29 @@ export async function loadInbox(): Promise<InboxData> {
   // preview window above, and independent of hiding/deleting individual
   // messages. The preview map is OR-ed in so a thread we can visibly quote is
   // never demoted, whatever the timestamps say.
+  //
+  // UAT-02 adds a third reason a conversation belongs in Messages: an ACCEPTED
+  // request. Acceptance removes the row from Requests (it is no longer pending)
+  // while the conversation is still empty, so under the old two-clause rule the
+  // thread existed in the database and appeared on NEITHER panel — which is
+  // exactly the "accepted requests vanish" report. An accepted pair is a
+  // conversation whether or not anyone has spoken yet.
+  const acceptedPartners = new Set(
+    (outgoingReqRows ?? [])
+      .filter((r) => r.status === "accepted")
+      .map((r) => r.recipient_id as string)
+  );
+  for (const r of acceptedIncomingRows ?? [])
+    acceptedPartners.add(r.sender_id as string);
+
   const started = new Set(
     conversations
       .filter(
         (c) =>
           lastMsg.has(c.id as string) ||
+          acceptedPartners.has(
+            (c.user_low === me ? c.user_high : c.user_low) as string
+          ) ||
           new Date(c.last_message_at as string).getTime() >
             new Date(c.created_at as string).getTime()
       )
@@ -333,11 +369,41 @@ export async function loadInbox(): Promise<InboxData> {
       .map((c) => (c.user_low === me ? c.user_high : c.user_low))
   );
   const initiatedIds = new Set(
-    (outgoingReqRows ?? []).map((r) => r.recipient_id as string)
+    (outgoingReqRows ?? [])
+      .filter((r) => r.status !== "declined")
+      .map((r) => r.recipient_id as string)
   );
   const newMatches = matches
     .map((m) => (m.user_low === me ? m.user_high : m.user_low))
     .filter((id) => !startedOtherIds.has(id) && !initiatedIds.has(id));
 
-  return { me, threads, newMatches, profiles, incoming };
+  // Sent requests, newest first. An accepted one carries the conversation id so
+  // the row opens the real thread; once that thread has a message it graduates
+  // to Messages and drops out of this list, which is the visible hand-off.
+  const convByOther = new Map(
+    conversations.map((c) => [
+      (c.user_low === me ? c.user_high : c.user_low) as string,
+      c.id as string,
+    ])
+  );
+  const outgoing: OutgoingRequest[] = (outgoingReqRows ?? [])
+    .filter((r) => {
+      if (r.status !== "accepted") return true;
+      const convId = convByOther.get(r.recipient_id as string);
+      return !convId || !lastMsg.has(convId);
+    })
+    .map((r) => {
+      const p = profiles[r.recipient_id as string];
+      return {
+        id: r.id as string,
+        message: r.message as string,
+        status: r.status as OutgoingRequest["status"],
+        createdAt: r.created_at as string,
+        recipientName: p?.full_name ?? "Student",
+        recipientAvatar: resolveAvatarUrl(p?.avatar_url, p?.gender),
+        conversationId: convByOther.get(r.recipient_id as string) ?? null,
+      };
+    });
+
+  return { me, threads, newMatches, profiles, incoming, outgoing };
 }

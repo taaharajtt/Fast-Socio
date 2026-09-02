@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { EventRenameControl } from "@/components/events/event-rename-control";
 import { ChevronLeft } from "lucide-react";
 import { AppImage } from "@/components/ui/app-image";
 import { RsvpButton, type RsvpState } from "@/components/events/rsvp-button";
@@ -46,6 +47,8 @@ export function EventShell({
     hostHref: string | null;
     pending: boolean;
     ended: boolean;
+    /** UAT-08: the viewer may rename this event (host, co-organizer, admin). */
+    canRename?: boolean;
   };
   rsvp: {
     initialState: RsvpState;
@@ -95,7 +98,17 @@ export function EventShell({
       </div>
 
       <div className="px-4 pt-3">
-        <h1 className="truncate text-[20px] font-bold text-fg">{event.title}</h1>
+        {/* UAT-08: the title is renameable in place by whoever manages the
+            event. `rename_event` re-checks host / co-organizer / admin, so this
+            control is an affordance, not the gate. */}
+        <div className="flex items-center gap-1.5">
+          <h1 className="min-w-0 flex-1 truncate text-[20px] font-bold text-fg">
+            {event.title}
+          </h1>
+          {event.canRename && (
+            <EventRenameControl eventId={event.id} title={event.title} />
+          )}
+        </div>
         {event.hostName && (
           <p className="truncate text-[13px] text-fg-muted">
             {event.hostHref ? (

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, Check } from "lucide-react";
 import { OpenChatButton } from "@/components/chat/open-chat-button";
+import { RequestToChatButton } from "@/components/chat/request-to-chat";
 import { ProfileTabs } from "@/components/profile/profile-tabs";
 import { ProfileActionsMenu } from "@/components/profile/profile-actions-menu";
 import { BadgeStrip } from "@/components/profile/badge-strip";
@@ -271,11 +272,22 @@ async function PublicProfilePageBody({
               </Link>
             ) : matched ? (
               <OpenChatButton otherId={profile.id} />
-            ) : (
+            ) : iBlocked ? (
+              // A blocked pair creates no new interactions in either direction
+              // (UAT-05), so no first-contact affordance is offered at all.
               <span className="flex items-center gap-1.5 rounded-full bg-fill px-4 py-2.5 text-sm font-medium text-fg-muted">
                 <Check className="h-4 w-4" aria-hidden />
-                Match to chat
+                Blocked
               </span>
+            ) : (
+              // UAT-01, path 2. This used to read "Match to chat" — an inert
+              // caption naming a requirement that was never actually the rule:
+              // message_requests has been the first-contact path since mig 0004
+              // and needs no match. The profile simply never offered it.
+              <RequestToChatButton
+                recipientId={profile.id}
+                name={profile.full_name}
+              />
             )}
             {!isSelf && (
               <ProfileActionsMenu

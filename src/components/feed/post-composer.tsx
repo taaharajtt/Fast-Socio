@@ -2,7 +2,14 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { BarChart3, ImagePlus, Loader2, Plus, X } from "lucide-react";
+import {
+  BarChart3,
+  ImagePlus,
+  Loader2,
+  Plus,
+  VenetianMask,
+  X,
+} from "lucide-react";
 import {
   AnonymousToggle,
   ComposerAction,
@@ -320,6 +327,32 @@ export function PostComposer({
           {pending ? "Posting…" : uploading ? "Uploading…" : "Post"}
         </GlassButton>
       </div>
+      {/* UAT-13: anonymity must never be a silent state.
+          The toggle is a 24px icon in a row of four; once it is on, nothing else
+          on screen says so, and the next post — after an error, or after the
+          composer was reopened — goes out anonymous without the author noticing.
+          This banner is the explicit confirmation, and it carries its own way
+          back out, so turning anonymity off never requires finding the icon
+          again. `role="status"` announces the state change to a screen reader
+          rather than leaving it to the button's `aria-pressed` alone. */}
+      {anon && !communityId && (
+        <div
+          role="status"
+          className="mt-2 flex items-center gap-2 rounded-[10px] bg-fill px-3 py-2"
+        >
+          <VenetianMask className="h-4 w-4 shrink-0 text-fg-muted" aria-hidden />
+          <span className="type-caption flex-1 text-fg-muted">
+            Posting anonymously — your name and photo stay hidden.
+          </span>
+          <button
+            type="button"
+            onClick={() => setAnon(false)}
+            className="focus-ring type-caption shrink-0 rounded-full px-2 py-1 font-semibold text-accent"
+          >
+            Undo
+          </button>
+        </div>
+      )}
       {error && (
         <p role="alert" className="mt-2 text-sm text-error">
           {error}

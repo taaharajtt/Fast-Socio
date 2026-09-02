@@ -4,7 +4,16 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
-import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import {
+  checkRateLimit,
+  checkRateLimitResult,
+  limitedMessage,
+  RATE_LIMITS,
+} from "@/lib/rate-limit";
+import {
+  messageRequestError,
+  validateMessageRequest,
+} from "@/lib/chat/message-request";
 import { isChatMediaPathFor, MESSAGE_PAGE_SIZE } from "@/lib/chat-media";
 import { loadInbox, type InboxData } from "@/app/(student)/chat/inbox-data";
 
@@ -90,57 +99,102 @@ export async function fetchNewerMessages(
 }
 
 /**
- * Accept or decline an incoming message request. RLS restricts updates to the
- * recipient, so we additionally scope by recipient_id = auth.uid(). An accepted
- * request becomes a conversation in Phase 3 (Chat).
+ * Send a first-contact message request (UAT-01).
+ *
+ * THE canonical entry point. Both the Discover person card's message bubble and
+ * the profile page's "Request to chat" call this one action, which calls one
+ * RPC — so validation, self-request prevention, block rules, uniqueness and the
+ * user-facing error text cannot drift apart between the two surfaces.
+ *
+ * `send_message_request` (mig 0178) is idempotent: a double tap, a retry, or a
+ * second tab all end with exactly one pending row and a success the caller can
+ * render as "request sent". A request does NOT create a conversation — that
+ * happens only on accept.
  */
-async function setRequestStatus(
-  requestId: string,
-  status: "accepted" | "declined"
-): Promise<{ error: string } | void> {
+export async function sendMessageRequest(
+  recipientId: string,
+  message: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
-  // Local JWT verification — no Auth API round trip on this hot path.
   const userId = await getAuthUserId();
-  if (!userId) return { error: "Not signed in." };
+  if (!userId) return { ok: false, error: "Not signed in." };
 
-  const { error } = await supabase
-    .from("message_requests")
-    .update({ status })
-    .eq("id", requestId)
-    .eq("recipient_id", userId);
-  if (error) return { error: error.message };
+  // Validated here as well as in the RPC. The client already checked, but a
+  // server action is a public endpoint and must never rely on that.
+  const parsed = validateMessageRequest(message);
+  if (!parsed.ok) return { ok: false, error: parsed.error };
+
+  // A message request reaches another student's inbox, so it keeps its stricter
+  // quota and its fail-closed behaviour.
+  const gate = await checkRateLimitResult(
+    "messageRequest",
+    RATE_LIMITS.messageRequest.max,
+    RATE_LIMITS.messageRequest.windowSeconds
+  );
+  if (gate.status === "limited")
+    return { ok: false, error: limitedMessage(gate, "Too many requests for now.") };
+  if (gate.status === "error")
+    return { ok: false, error: "Couldn’t send that right now — try again." };
+
+  const { error } = await supabase.rpc("send_message_request", {
+    p_recipient: recipientId,
+    p_message: parsed.text,
+  });
+  if (error) return { ok: false, error: messageRequestError(error.message) };
 
   revalidatePath("/chat");
+  return { ok: true };
 }
 
-export async function acceptMessageRequest(id: string) {
+/**
+ * Accept an incoming request (UAT-02).
+ *
+ * One RPC, one transaction: the status flip AND the conversation now happen
+ * together or not at all. The previous implementation read the sender, updated
+ * the status, then called `get_or_create_conversation` as three separate
+ * statements from the app — so a failure or a race between steps two and three
+ * left an accepted request with no conversation, which is precisely the state
+ * where the request had vanished from Requests and the thread had not yet
+ * appeared in Messages.
+ *
+ * Returns the conversation id so the caller can navigate straight into it
+ * instead of hunting for a row that may not have been re-read yet.
+ */
+export async function acceptMessageRequest(
+  id: string
+): Promise<{ ok: true; conversationId: string } | { ok: false; error: string }> {
   const supabase = await createClient();
-  // Local JWT verification — no Auth API round trip on this hot path.
   const userId = await getAuthUserId();
-  if (!userId) return { error: "Not signed in." };
+  if (!userId) return { ok: false, error: "Not signed in." };
 
-  // Look up the sender before flipping status so we can open the conversation.
-  const { data: req } = await supabase
-    .from("message_requests")
-    .select("sender_id")
-    .eq("id", id)
-    .eq("recipient_id", userId)
-    .single();
+  const { data, error } = await supabase.rpc("accept_message_request", {
+    p_id: id,
+  });
+  if (error || !data)
+    return {
+      ok: false,
+      error: error?.message?.includes("declined")
+        ? "That request was declined."
+        : "Couldn’t accept that request — try again.",
+    };
 
-  const result = await setRequestStatus(id, "accepted");
-  if (result?.error) return result;
-
-  // Now that the request is accepted, a conversation is eligible — create it.
-  if (req?.sender_id) {
-    await supabase.rpc("get_or_create_conversation", {
-      other_id: req.sender_id,
-    });
-  }
   revalidatePath("/chat");
+  return { ok: true, conversationId: data as string };
 }
 
-export async function declineMessageRequest(id: string) {
-  return setRequestStatus(id, "declined");
+/** Decline an incoming request. Idempotent — declining twice is a no-op. */
+export async function declineMessageRequest(
+  id: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
+
+  const { error } = await supabase.rpc("decline_message_request", { p_id: id });
+  if (error) return { ok: false, error: "Couldn’t decline that request — try again." };
+
+  revalidatePath("/chat");
+  return { ok: true };
 }
 
 /**

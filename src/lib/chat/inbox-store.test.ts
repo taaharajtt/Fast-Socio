@@ -11,6 +11,7 @@ const inbox = (me: string): InboxData => ({
   me,
   threads: [],
   newMatches: [],
+  outgoing: [],
   profiles: {},
   incoming: [],
 });

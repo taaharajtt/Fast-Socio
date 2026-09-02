@@ -30,7 +30,11 @@ import {
   createGroupFromDiscoverPost,
   deleteDiscoverPost,
 } from "@/app/(student)/discover/discover-actions";
-import type { MyDiscoverData, MyIntent } from "@/lib/smart-match/types";
+import type {
+  MyApplication,
+  MyDiscoverData,
+  MyIntent,
+} from "@/lib/smart-match/types";
 
 /**
  * Which screen of the flow is on show. Exactly one of these renders at a time —
@@ -251,9 +255,57 @@ export function DiscoverPostManager({ data }: { data: MyDiscoverData }) {
             onEdit={startEdit}
             onDone={() => router.refresh()}
           />
+          {/* UAT-09: the applicant's half of the lifecycle. A right swipe on a
+              recruitment call stored the application and notified its author
+              correctly — but the person who swiped had nowhere in the app to
+              see that it existed or what became of it, which is what made the
+              flow read as broken. */}
+          {data.outgoing.length > 0 && <MyApplications items={data.outgoing} />}
         </>
       )}
     </main>
+  );
+}
+
+/**
+ * Requests YOU sent, and where each one stands (UAT-09).
+ *
+ * Read-only on purpose: nothing here is the applicant's to act on. An accepted
+ * application already produced its effect (a chat becomes eligible, or the
+ * author adds you to the team), and a declined one is finished — so a tappable
+ * row would only promise an action that does not exist.
+ */
+function MyApplications({ items }: { items: MyApplication[] }) {
+  const LABEL: Record<MyApplication["status"], { text: string; tone: string }> = {
+    pending: { text: "Pending", tone: "text-fg-muted" },
+    accepted: { text: "Accepted", tone: "text-success" },
+    declined: { text: "Declined", tone: "text-fg-disabled" },
+    cancelled: { text: "Withdrawn", tone: "text-fg-disabled" },
+  };
+
+  return (
+    <section className="space-y-2">
+      <h2 className="type-headline text-fg">Your requests</h2>
+      {items.map((a) => {
+        const label = LABEL[a.status] ?? LABEL.pending;
+        return (
+          <div
+            key={a.id}
+            className="flex items-center gap-2.5 rounded-[14px] bg-card p-3"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="type-headline truncate text-fg">{a.postTitle}</p>
+              <p className="type-caption truncate text-fg-muted">
+                {a.message ? a.message : "You asked to join"}
+              </p>
+            </div>
+            <span className={`type-caption shrink-0 font-semibold ${label.tone}`}>
+              {label.text}
+            </span>
+          </div>
+        );
+      })}
+    </section>
   );
 }
 
@@ -407,16 +459,26 @@ function CloseWithGroupDialog({
             onClick={createGroup}
             className="gradient-brand w-full rounded-full px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
           >
-            {pending ? "Creating…" : "Create Group & Close"}
+            {pending
+              ? "Creating…"
+              : post.status === "open"
+                ? "Create Group & Close"
+                : "Create Group"}
           </button>
-          <button
-            type="button"
-            disabled={pending}
-            onClick={closeOnly}
-            className="glass w-full rounded-full px-4 py-2.5 text-sm font-semibold text-fg-muted"
-          >
-            Close Without Group
-          </button>
+          {/* Only meaningful while the post is still taking applications. A
+              post that is already `filled` has nothing left to close, and
+              offering it there implied the group could not be made without
+              closing something — the confusion UAT-07 is about. */}
+          {post.status === "open" && (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={closeOnly}
+              className="glass w-full rounded-full px-4 py-2.5 text-sm font-semibold text-fg-muted"
+            >
+              Close Without Group
+            </button>
+          )}
           <button
             type="button"
             disabled={pending}
@@ -514,15 +576,36 @@ function MyPosts({
                 >
                   Edit
                 </button>
-                {p.status === "open" && canGroup(p) && (
+                {/* UAT-07: the group CTA is driven by the TEAM, not by the
+                    post's status.
+                    It used to render only while `status === "open"`, and
+                    `create_discover_group_chat` sets the post to `filled` — so
+                    the action erased itself the instant it worked, and a filled
+                    post with a live room showed no way back into it. Now:
+                    a team with no room yet gets "Create group" (open or filled),
+                    and a post that already has one gets "Open group", which is
+                    also what a double tap lands on because the RPC is
+                    idempotent and returns the same room. */}
+                {p.groupId ? (
                   <button
                     type="button"
                     disabled={busyNow}
-                    onClick={() => setGroupPost(p)}
+                    onClick={() => router.push(`/chat/c/${p.groupId}`)}
                     className="h-10 rounded-full bg-accent px-4 text-xs font-semibold text-white transition-colors hover:bg-accent/90 active:scale-[0.97]"
                   >
-                    Create group
+                    Open group
                   </button>
+                ) : (
+                  canGroup(p) && (
+                    <button
+                      type="button"
+                      disabled={busyNow}
+                      onClick={() => setGroupPost(p)}
+                      className="h-10 rounded-full bg-accent px-4 text-xs font-semibold text-white transition-colors hover:bg-accent/90 active:scale-[0.97]"
+                    >
+                      Create group
+                    </button>
+                  )
                 )}
                 {p.status === "open" && (
                   <button

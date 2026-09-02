@@ -28,21 +28,32 @@ const FULL_DATA: Record<string, unknown> = {
   title: "The Rookie",
 };
 
-/** Types that must never appear on the Notifications page or the bell. */
+/**
+ * Types that must never appear on the Notifications page or the bell.
+ *
+ * UAT-18 moved the GROUP conversation surfaces (community_message,
+ * event_message, society_announcement, community_post) out of this list on
+ * purpose: none of them raises the Chat dock badge, so excluding them meant a
+ * broadcast or a room message produced no signal anywhere in the app. What is
+ * left here is direct chat — which has a badge, an unread count and a Requests
+ * panel already — and the admin announcement, which is delivered as a modal.
+ */
 const MUST_BE_HIDDEN = [
   // Direct messages, requests, accepts, and reactions.
   "message",
   "message_request",
   "message_request_accepted",
   "message_reaction",
-  // Community / chatroom and event chat.
-  "community_message",
-  "event_message",
-  // Society and community broadcasts.
-  "society_announcement",
-  "community_post",
   // Admin broadcast modal announcements.
   "announcement",
+];
+
+/** The group surfaces UAT-18 deliberately made visible. */
+const MUST_BE_VISIBLE = [
+  "community_message",
+  "event_message",
+  "society_announcement",
+  "community_post",
 ];
 
 describe("Notifications surface allow-list", () => {
@@ -53,7 +64,14 @@ describe("Notifications surface allow-list", () => {
     }
   });
 
-  it("shows one type for each of the nine categories", () => {
+  it("shows the group conversation surfaces UAT-18 added", () => {
+    for (const type of MUST_BE_VISIBLE) {
+      expect(isActivityVisibleType(type), `${type} must be visible`).toBe(true);
+      expect(activityVisibleTypeList()).toContain(type);
+    }
+  });
+
+  it("shows one type for each category", () => {
     const expected: Record<ActivityCategory, string> = {
       post_reacts: "post_like",
       comment_reacts: "comment_like",
@@ -64,6 +82,8 @@ describe("Notifications surface allow-list", () => {
       help: "help_response",
       aura: "achievement",
       moderation: "appeal_result",
+      conversations: "community_message",
+      spaces: "community_join_request",
     };
     for (const [category, type] of Object.entries(expected)) {
       expect(isActivityVisibleType(type), `${type} must be visible`).toBe(true);
@@ -78,7 +98,7 @@ describe("Notifications surface allow-list", () => {
       expect(category, `${type} needs a category`).not.toBeNull();
       seen.add(category!);
     }
-    expect(seen.size).toBe(9);
+    expect(seen.size).toBe(11);
   });
 
   it("categorises nothing that is not visible", () => {

@@ -121,48 +121,10 @@ export async function undoSwipe(
   return { ok: true };
 }
 
-/** Send a first-contact message request. Rate-limited. */
-export async function sendMessageRequest(
-  recipientId: string,
-  message: string
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const supabase = await createClient();
-  const userId = await getAuthUserId();
-  if (!userId) return { ok: false, error: "Not signed in." };
-
-  const text = message.trim();
-  if (text.length < 1 || text.length > 500)
-    return { ok: false, error: "Message must be 1–500 characters." };
-
-  // Unchanged policy (20/hour) — a message request reaches another student's
-  // inbox, so it keeps its stricter quota and its fail-closed behaviour. Only
-  // the MESSAGE improves: a real quota rejection now says when to come back,
-  // and a limiter outage no longer masquerades as one.
-  const gate = await checkRateLimitResult(
-    "messageRequest",
-    RATE_LIMITS.messageRequest.max,
-    RATE_LIMITS.messageRequest.windowSeconds
-  );
-  if (gate.status === "limited") {
-    return {
-      ok: false,
-      error: limitedMessage(gate, "Too many requests for now."),
-    };
-  }
-  if (gate.status === "error") {
-    return { ok: false, error: "Couldn’t send that right now — try again." };
-  }
-
-  const { error } = await supabase
-    .from("message_requests")
-    .insert({ sender_id: userId, recipient_id: recipientId, message: text });
-  if (error) {
-    if (error.code === "23505")
-      return { ok: false, error: "You already have a pending request." };
-    return { ok: false, error: error.message };
-  }
-  return { ok: true };
-}
+// UAT-01: `sendMessageRequest` used to live here, as a bare INSERT, and was the
+// ONLY entry point — which is why the profile page had no way to offer the same
+// thing. It now lives in `@/app/(student)/chat/actions` as one canonical action
+// over one RPC, called by both the Discover card and the profile.
 
 /** Report a profile for moderator review (writes to the polymorphic reports table). */
 export async function reportProfile(

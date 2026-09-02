@@ -9,7 +9,9 @@ import {
   type PanInfo,
 } from "framer-motion";
 import { Heart, X, MessageCircle, RotateCcw, Flag, Info, Check } from "lucide-react";
-import { GlassButton, GlassChip, GlassSheet, GlassInput } from "@/components/ui";
+import { GlassButton, GlassChip, GlassSheet } from "@/components/ui";
+import { RequestToChatSheet } from "@/components/chat/request-to-chat";
+import { ensureSessionSeed } from "@/lib/discover/session-seed";
 import { MotionReduced } from "@/components/ui/motion-reduced";
 import { VerifiedBadge } from "@/components/ui";
 import { AuraIcon } from "@/components/ui/aura-icon";
@@ -33,11 +35,7 @@ import {
 } from "@/lib/discover/deck-pager";
 import { beginSwipe, endSwipe } from "@/lib/discover/swipe-guard";
 import { safeMatchingDisplay } from "@/lib/smart-match/display";
-import {
-  recordSwipe,
-  sendMessageRequest,
-  undoSwipe,
-} from "@/app/(student)/discover/actions";
+import { recordSwipe, undoSwipe } from "@/app/(student)/discover/actions";
 import {
   getDiscoverSwipeDeck,
   respondToDiscoverPost,
@@ -65,7 +63,14 @@ type LastSwipe =
  * unchanged from the original deck; intents ride the same rails with their own
  * verbs underneath.
  */
-export function SwipeDeck({ initial }: { initial: DiscoverDeckPage }) {
+export function SwipeDeck({
+  initial,
+  seed = null,
+}: {
+  initial: DiscoverDeckPage;
+  /** The seed the server ordered page one with (UAT-15); see `session-seed`. */
+  seed?: string | null;
+}) {
   const [deck, setDeck] = useState<DiscoverSwipeCard[]>(initial.cards);
   const [matchName, setMatchName] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -93,10 +98,19 @@ export function SwipeDeck({ initial }: { initial: DiscoverDeckPage }) {
   // round runs at most ONCE per mounted session: a reload starts a fresh pager,
   // so passed people surface again next session, exactly as before.
   const pagerRef = useRef<ReturnType<typeof createDeckPager> | null>(null);
+  // UAT-15: ONE seed for the whole session, resolved ONCE before the pager is
+  // built so every refill sends the same value the server used for page one.
+  // Deriving it per request would give each page a different permutation — the
+  // duplicate-and-skip failure that rules `order by random()` out to begin with.
+  //
+  // Held in state rather than a ref so the pager closes over the VALUE: a ref
+  // read inside `fetchPage` would be a render-time ref access, and the closure
+  // would be reading `current` from a later render than the one that built it.
+  const [sessionSeed] = useState(() => ensureSessionSeed(seed));
   if (pagerRef.current == null) {
     pagerRef.current = createDeckPager({
       initial,
-      fetchPage: (req) => getDiscoverSwipeDeck(req),
+      fetchPage: (req) => getDiscoverSwipeDeck({ ...req, seed: sessionSeed }),
     });
   }
 
@@ -428,7 +442,12 @@ export function SwipeDeck({ initial }: { initial: DiscoverDeckPage }) {
           </button>
         </div>
 
-        <MessageRequestSheet profile={sheetFor} onClose={() => setSheetFor(null)} />
+        <RequestToChatSheet
+          open={Boolean(sheetFor)}
+          name={sheetFor?.full_name ?? null}
+          recipientId={sheetFor?.id ?? null}
+          onClose={() => setSheetFor(null)}
+        />
         <ReportSheet profile={reportFor} onClose={() => setReportFor(null)} />
         <DetailSheet
           card={detailFor}
@@ -664,73 +683,10 @@ function ProfileCardBody({
   );
 }
 
-function MessageRequestSheet({
-  profile,
-  onClose,
-}: {
-  profile: DiscoverProfile | null;
-  onClose: () => void;
-}) {
-  const [message, setMessage] = useState("");
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [sent, setSent] = useState(false);
-
-  async function send() {
-    if (!profile) return;
-    setSending(true);
-    setError(null);
-    const res = await sendMessageRequest(profile.id, message);
-    setSending(false);
-    if (!res.ok) {
-      setError(res.error);
-      return;
-    }
-    setSent(true);
-    setMessage("");
-    setTimeout(() => {
-      setSent(false);
-      onClose();
-    }, 1200);
-  }
-
-  return (
-    <GlassSheet open={Boolean(profile)} onClose={onClose}>
-      {profile && (
-        <div className="space-y-3">
-          <h3 className="type-title">
-            Message {profile.full_name ?? "them"}
-          </h3>
-          <p className="type-callout text-fg-muted">
-            Send an opening message to start a conversation.
-          </p>
-          <GlassInput
-            placeholder="Hey! Loved your bio…"
-            value={message}
-            maxLength={500}
-            onChange={(e) => setMessage(e.target.value)}
-            disabled={sending || sent}
-          />
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-fg-muted">{message.length}/500</span>
-            <GlassButton
-              size="md"
-              onClick={send}
-              disabled={sending || sent || message.trim().length === 0}
-            >
-              {sent ? "Sent ✓" : sending ? "Sending…" : "Send request"}
-            </GlassButton>
-          </div>
-          {error && (
-            <p role="alert" className="text-sm text-error">
-              {error}
-            </p>
-          )}
-        </div>
-      )}
-    </GlassSheet>
-  );
-}
+// UAT-01: the local MessageRequestSheet that used to live here (500-char limit,
+// its own error handling, its own copy) is gone. Both first-contact entry
+// points now render <RequestToChatSheet/> from @/components/chat/request-to-chat,
+// so the Discover card and the profile page cannot drift apart.
 
 /** Full detail for whichever card kind is open. */
 function DetailSheet({

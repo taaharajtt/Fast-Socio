@@ -74,14 +74,36 @@ export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
 /**
  * The ONLY notification types the Notifications page and the bell/dropdown are
- * allowed to render, grouped by the product's nine notification categories.
+ * allowed to render.
  *
  * This is an allow-list, not a deny-list: a type that is not listed here never
  * reaches the Notifications surface, even if a future migration starts emitting
- * it. Conversation traffic (DMs, DM requests/accepts, DM reactions, community
- * and event chat), society/community broadcasts, and admin announcements are
- * deliberately absent — they may still be created for push and for the Chat
- * dock badge, but they are not activity to read on this screen.
+ * it.
+ *
+ * UAT-18 REVISED THIS POLICY DELIBERATELY. The previous rule excluded every
+ * conversation surface on the grounds that Chat has its own dock badge. That
+ * held for DMs, where the badge points at the one place the message lives — but
+ * it was wrong for SHARED spaces. A society broadcast, a chat-room message and
+ * an event discussion post are each addressed to a group the reader belongs to,
+ * they do not raise the Chat badge (their conversations live on the room, the
+ * society and the event pages respectively), and so they produced no signal
+ * anywhere in the app. What is now allowed, and why:
+ *
+ *   * community_message / society_announcement / event_message — group
+ *     conversation the reader is a member of. GROUPED by subject in mig 0178
+ *     (`group_key`), so a burst in a busy room is one row carrying a count, not
+ *     thirty rows burying everything else.
+ *   * the community/society lifecycle rows (join requests and their outcomes,
+ *     post review outcomes, role changes, space approval) — each one is a
+ *     decision about the reader or one they have to make.
+ *   * event_post_request — an approval the reader owes someone.
+ *
+ * STILL DELIBERATELY ABSENT: `message`, `message_request`,
+ * `message_request_accepted` and `message_reaction`. Direct chat has a dock
+ * badge, a per-conversation unread count and a Requests panel; adding a fourth
+ * surface would duplicate all three and, for `message`, would put a row on a
+ * public-ish screen for every private message received. `announcement` is also
+ * absent — it is delivered as a cold-open modal.
  */
 export const ACTIVITY_VISIBLE_TYPES = [
   // 1. Post reacts
@@ -123,6 +145,22 @@ export const ACTIVITY_VISIBLE_TYPES = [
   "content_moderated",
   "moderation_warning",
   "appeal_result",
+  // 10. Group conversations (UAT-18) — grouped by subject, never one per line
+  "community_message",
+  "society_announcement",
+  "event_message",
+  // 11. Community and society lifecycle
+  "community_post",
+  "community_post_review",
+  "community_post_approved",
+  "community_post_rejected",
+  "community_join_request",
+  "community_join_approved",
+  "community_approved",
+  "community_rejected",
+  "society_role",
+  "society_role_removed",
+  "event_post_request",
 ] as const satisfies readonly NotificationType[];
 
 export type ActivityVisibleType = (typeof ACTIVITY_VISIBLE_TYPES)[number];

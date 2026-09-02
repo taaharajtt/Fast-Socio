@@ -3,6 +3,7 @@
 import { useTransition } from "react";
 import Link from "next/link";
 import { RequestRow } from "@/components/chat/request-row";
+import { SentRequestRow } from "@/components/chat/sent-request-row";
 import { AppImage } from "@/components/ui/app-image";
 import { resolveAvatarUrl } from "@/lib/avatar";
 import { OnlineDot, UnreadBadge } from "@/components/ui/badges";
@@ -55,13 +56,18 @@ export function InboxList({
   // local copy is what made the old back-navigation bug invisible, since a
   // replayed `initial` was object-different but data-older and the identity
   // guard could not tell.
-  const { threads, newMatches, profiles, incoming } = useInboxData(initial);
+  const { threads, newMatches, profiles, incoming, outgoing } =
+    useInboxData(initial);
 
   if (showRequests) {
     // Everything that is not yet a conversation. Pending message requests need
     // a decision, so they come first; new matches sit under them as plain
     // tappable rows.
-    if (incoming.length === 0 && newMatches.length === 0) {
+    if (
+      incoming.length === 0 &&
+      newMatches.length === 0 &&
+      outgoing.length === 0
+    ) {
       return (
         <p className="py-16 text-center text-sm text-fg-muted">
           No pending requests.
@@ -85,6 +91,19 @@ export function InboxList({
                 otherId={otherId}
                 profile={profiles[otherId]}
               />
+            ))}
+          </div>
+        )}
+        {/* UAT-02: the sender's half of the lifecycle. Below the rows that need
+            a decision, because nothing here is actionable — it exists so a sent
+            request is visibly still somewhere. */}
+        {outgoing.length > 0 && (
+          <div className="mt-6">
+            <h2 className="type-caption px-1 pb-1 font-semibold uppercase tracking-wide text-fg-muted">
+              Sent
+            </h2>
+            {outgoing.map((r) => (
+              <SentRequestRow key={`out:${r.id}`} request={r} />
             ))}
           </div>
         )}

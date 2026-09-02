@@ -181,3 +181,80 @@ describe("isOptimisticId", () => {
     expect(isOptimisticId("00000000-0000-0000-0000-000000000000")).toBe(false);
   });
 });
+
+/**
+ * UAT-11 — the arrival orders that actually produce duplicates in the wild.
+ *
+ * These are written against the shared helpers now that the community room, the
+ * society broadcast and the event thread use them too: each of those surfaces
+ * previously had its own `prev.some(id) ? prev : [...prev, row]`, which
+ * deduplicates but appends, so a catch-up read racing a live event rendered the
+ * thread out of order.
+ */
+describe("UAT-11 realtime / optimistic races", () => {
+  const row = (id: string, created_at: string, body = "hi") => ({
+    id,
+    created_at,
+    sender_id: "me",
+    body,
+  });
+
+  it("keeps two intentionally identical messages as two messages", () => {
+    // The regression the id-based reconcile exists for: matching by BODY TEXT
+    // collapsed "ok" sent twice into one bubble.
+    const a = row("1", "2026-01-01T00:00:00.000Z", "ok");
+    const b = row("2", "2026-01-01T00:00:01.000Z", "ok");
+    const merged = mergeMessages([a], [b]);
+    expect(merged).toHaveLength(2);
+    expect(merged.map((m) => m.id)).toEqual(["1", "2"]);
+  });
+
+  it("orders correctly when the catch-up read lands AFTER the live event", () => {
+    const older = row("a", "2026-01-01T00:00:00.000Z");
+    const newer = row("b", "2026-01-01T00:00:05.000Z");
+    // Live event first (the newer row), then the catch-up delivering the older.
+    const merged = mergeMessages(mergeMessage([], newer), [older]);
+    expect(merged.map((m) => m.id)).toEqual(["a", "b"]);
+  });
+
+  it("orders correctly when the same two arrive in the opposite order", () => {
+    const older = row("a", "2026-01-01T00:00:00.000Z");
+    const newer = row("b", "2026-01-01T00:00:05.000Z");
+    const merged = mergeMessage(mergeMessages([], [older]), newer);
+    expect(merged.map((m) => m.id)).toEqual(["a", "b"]);
+  });
+
+  it("is idempotent across a reconnect replay of an overlapping page", () => {
+    // A catch-up after a dropped socket re-delivers rows already on screen.
+    const page = [
+      row("a", "2026-01-01T00:00:00.000Z"),
+      row("b", "2026-01-01T00:00:01.000Z"),
+      row("c", "2026-01-01T00:00:02.000Z"),
+    ];
+    const once = mergeMessages([], page);
+    const twice = mergeMessages(once, page.slice(1));
+    expect(twice).toHaveLength(3);
+    expect(twice).toBe(once); // nothing new ⇒ same reference, no re-render
+  });
+
+  it("keeps rows sharing a timestamp stable whichever way they arrive", () => {
+    // Two rows written in the same microsecond. Without the id tiebreak these
+    // swap places depending on which route delivered them first.
+    const ts = "2026-01-01T00:00:00.000Z";
+    const x = row("x", ts);
+    const y = row("y", ts);
+    expect(mergeMessages([], [x, y]).map((m) => m.id)).toEqual(["x", "y"]);
+    expect(mergeMessages([], [y, x]).map((m) => m.id)).toEqual(["x", "y"]);
+  });
+
+  it("works on a row with no sender_id at all", () => {
+    // The broadcast surface has `author_id`, not `sender_id`. Requiring it in
+    // the type is what kept these surfaces on their own append logic.
+    const merged = mergeMessage([], {
+      id: "ann-1",
+      created_at: "2026-01-01T00:00:00.000Z",
+      author_id: "someone",
+    });
+    expect(merged).toHaveLength(1);
+  });
+});

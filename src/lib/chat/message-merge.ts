@@ -23,10 +23,23 @@
  *     lexicographic on that pair, which is total and therefore cannot skip.
  */
 
+/**
+ * The minimum a row needs to take part in these rules: a stable id and a
+ * timestamp.
+ *
+ * `sender_id` used to be required here, which quietly restricted the module to
+ * DMs — the community room, the society broadcast and the event thread all have
+ * rows shaped differently (`author_id`, or no sender at all on a system row),
+ * so they each grew their OWN append logic instead, and each one of them was
+ * append-with-an-id-check rather than a merge. UAT-11 is that divergence: they
+ * dropped duplicates but appended out of order, so a catch-up read racing a
+ * live event rendered messages in the wrong sequence. Nothing in this module
+ * ever read `sender_id`, so dropping it costs nothing and lets every
+ * conversation surface share one implementation.
+ */
 export type MergeableMessage = {
   id: string;
   created_at: string;
-  sender_id: string;
   /** Client-only: object-URL preview for an optimistic image while it uploads. */
   _localSrc?: string;
   [key: string]: unknown;

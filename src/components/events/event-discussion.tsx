@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { shouldAutoScroll } from "@/lib/chat/scroll-anchor";
+import { mergeMessage } from "@/lib/chat/message-merge";
 import { Send } from "lucide-react";
 import { GlassButton } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
@@ -61,7 +63,7 @@ export function EventDiscussion({
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -91,9 +93,7 @@ export function EventDiscussion({
               .maybeSingle();
             if (!data) return;
             const m = toMessage(data as unknown as Row);
-            setMessages((prev) =>
-              prev.some((x) => x.id === m.id) ? prev : [...prev, m]
-            );
+            setMessages((prev) => mergeMessage(prev, m));
           }
         )
         .subscribe();
@@ -104,9 +104,41 @@ export function EventDiscussion({
     };
   }, [eventId]);
 
+  // UAT-06. Two problems here, not one.
+  //
+  // `scrollIntoView` walks EVERY scrollable ancestor, so scrolling this thread
+  // also scrolled the event page behind it — the visible page jump when the
+  // keyboard opens. And it fired on every new message regardless of where the
+  // reader was, dragging them out of the history they were reading.
+  //
+  // Now: scroll the list container itself, and only when the reader is already
+  // at the bottom or sent the message. Same rule, same helper, as the DM thread.
+  const didInitialScroll = useRef(false);
+  const newest = messages.length > 0 ? messages[messages.length - 1] : null;
+  const newestId = newest?.id ?? null;
+  const newestIsMine = newest?.sender_id === meId;
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
+    const el = listRef.current;
+    if (!el) return;
+    if (!didInitialScroll.current) {
+      el.scrollTop = el.scrollHeight;
+      didInitialScroll.current = true;
+      return;
+    }
+    if (
+      !shouldAutoScroll({
+        metrics: {
+          scrollTop: el.scrollTop,
+          clientHeight: el.clientHeight,
+          scrollHeight: el.scrollHeight,
+        },
+        fromSelf: newestIsMine,
+      })
+    ) {
+      return;
+    }
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, [newestId, newestIsMine, messages.length]);
 
   async function onSend(e: React.FormEvent) {
     e.preventDefault();
@@ -125,7 +157,13 @@ export function EventDiscussion({
 
   return (
     <div className="flex flex-col">
-      <div className="max-h-[50vh] flex-1 space-y-3 overflow-y-auto py-2">
+      <div
+        ref={listRef}
+        // `overscroll-contain` stops a flick that reaches the end of this list
+        // from continuing into the page behind it (UAT-06: exactly one region
+        // scrolls).
+        className="max-h-[50vh] flex-1 space-y-3 overflow-y-auto overscroll-contain py-2"
+      >
         {messages.length === 0 && (
           <p className="py-6 text-center text-sm text-fg-muted">
             No messages yet{canPost ? " — start the conversation 👋" : "."}
@@ -173,7 +211,6 @@ export function EventDiscussion({
             </div>
           );
         })}
-        <div ref={bottomRef} />
       </div>
 
       {canPost ? (

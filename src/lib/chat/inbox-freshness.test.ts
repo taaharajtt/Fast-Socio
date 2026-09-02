@@ -21,6 +21,7 @@ function inbox(
       lastOutgoing: null,
     })),
     newMatches: [],
+    outgoing: [],
     profiles: {},
     incoming: [],
   };

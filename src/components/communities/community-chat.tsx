@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, Fragment } from "react";
+import { shouldAutoScroll } from "@/lib/chat/scroll-anchor";
+import { mergeMessage } from "@/lib/chat/message-merge";
 import { MessageCircle, Plus, Trash2, VenetianMask, X } from "lucide-react";
 import { GlassButton, GlassSheet } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
@@ -154,9 +156,7 @@ export function CommunityChat({
               .maybeSingle();
             if (!data) return;
             const m = data as CommunityMessage;
-            setMessages((prev) =>
-              prev.some((x) => x.id === m.id) ? prev : [...prev, m]
-            );
+            setMessages((prev) => mergeMessage(prev, m));
             if (m.poll_id) refreshPoll(m.poll_id);
             // The room is open right now, so a message that just arrived is
             // visible immediately — keep the read position moving instead of
@@ -214,7 +214,16 @@ export function CommunityChat({
   // Scroll the list container directly (not scrollIntoView, which also scrolls
   // ancestors and jumped the page when the keyboard opened). First paint jumps
   // instantly; new messages scroll smoothly.
+  // UAT-06: follow new messages ONLY when the reader is already at the bottom,
+  // or when the newest message is their own. This used to scroll on every
+  // change to `messages.length`, which drags someone reading history back to
+  // the end whenever anyone speaks — and the scroll position they lose is not
+  // recorded anywhere, so it cannot be given back. The decision is shared with
+  // the DM thread via `lib/chat/scroll-anchor` and unit-tested there.
   const didInitialScroll = useRef(false);
+  const newest = messages.length > 0 ? messages[messages.length - 1] : null;
+  const newestId = newest?.id ?? null;
+  const newestIsMine = newest?.sender_id === meId;
   useEffect(() => {
     const el = listRef.current;
     if (!el) return;
@@ -223,8 +232,20 @@ export function CommunityChat({
       didInitialScroll.current = true;
       return;
     }
+    if (
+      !shouldAutoScroll({
+        metrics: {
+          scrollTop: el.scrollTop,
+          clientHeight: el.clientHeight,
+          scrollHeight: el.scrollHeight,
+        },
+        fromSelf: newestIsMine,
+      })
+    ) {
+      return;
+    }
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [messages.length]);
+  }, [newestId, newestIsMine, messages.length]);
 
   // Resolve signed URLs for any attachment we haven't signed yet. The bucket is
   // private, so a raw path is useless without this.
@@ -443,6 +464,7 @@ export function CommunityChat({
                   )
                 ) : m.poll_id && polls[m.poll_id] ? (
                   <PollCard
+                    pollId={m.poll_id}
                     question={m.body}
                     options={polls[m.poll_id]}
                     mine={mine}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { shouldAutoScroll } from "@/lib/chat/scroll-anchor";
 import { useRouter } from "next/navigation";
 import {
   Check,
@@ -715,21 +716,44 @@ export function ChatThread({
   // `onMount: false` — the channel's first SUBSCRIBED already covers mount.
   useVisibilityRefresh(() => void catchUp(), { onMount: false });
 
-  // Scroll the MESSAGE LIST container directly instead of scrollIntoView —
-  // scrollIntoView walks every scrollable ancestor (including the page behind
-  // the fixed shell on iOS), which caused visible jumps when the keyboard
-  // opened. First paint jumps instantly; new messages scroll smoothly.
+  // UAT-06: follow new messages ONLY when the reader is already at the bottom
+  // (or sent the message themselves). This effect used to scroll on every
+  // change to `messages.length`, which yanks someone reading history back to
+  // the end the moment anyone speaks — and the position they lost is not
+  // recorded anywhere, so it cannot be restored.
+  //
+  // The decision lives in `lib/chat/scroll-anchor` so all four conversation
+  // surfaces share it and it is unit-tested without a DOM. Scrolling the LIST
+  // container (never scrollIntoView, which walks every scrollable ancestor
+  // including the page behind the fixed shell on iOS) is what stops the page
+  // jumping when the keyboard opens.
   const didInitialScroll = useRef(false);
+  const lastMessageId = messages.length > 0 ? messages[messages.length - 1].id : null;
+  const lastFromSelf =
+    messages.length > 0 && messages[messages.length - 1].sender_id === meId;
   useEffect(() => {
     const el = listRef.current;
     if (!el) return;
     if (!didInitialScroll.current) {
+      // First paint always opens at the latest message, instantly.
       el.scrollTop = el.scrollHeight;
       didInitialScroll.current = true;
       return;
     }
+    if (
+      !shouldAutoScroll({
+        metrics: {
+          scrollTop: el.scrollTop,
+          clientHeight: el.clientHeight,
+          scrollHeight: el.scrollHeight,
+        },
+        fromSelf: lastFromSelf,
+      })
+    ) {
+      return;
+    }
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [messages.length, otherTyping]);
+  }, [lastMessageId, lastFromSelf, messages.length, otherTyping]);
 
   // Throttled: one broadcast per 1.2s of continuous typing is enough for a
   // typing indicator; per-keystroke sends flooded the realtime socket.

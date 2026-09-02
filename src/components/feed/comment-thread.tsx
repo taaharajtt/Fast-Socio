@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import Link from "next/link";
+import { mergeMessage } from "@/lib/chat/message-merge";
 import { Heart, Loader2, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { AppImage } from "@/components/ui/app-image";
@@ -217,9 +218,7 @@ export const CommentThread = forwardRef<
                 };
               });
             } else {
-              setComments((prev) =>
-                prev.some((x) => x.id === c.id) ? prev : [...prev, c]
-              );
+              setComments((prev) => mergeMessage(prev, c));
             }
           }
         )

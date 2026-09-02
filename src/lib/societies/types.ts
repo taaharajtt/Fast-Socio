@@ -44,7 +44,13 @@ export type AnnouncementRow = {
   visibility: "public" | "members";
   created_at: string;
   updated_at: string;
-  author_id: string;
+  /**
+   * NULL for an anonymous broadcast seen by anyone below president rank
+   * (UAT-04). The masking happens in `society_announcement_feed`, so a member
+   * never receives the identity at all — including in a realtime payload, which
+   * is re-read through the same view.
+   */
+  author_id: string | null;
   author_name: string | null;
   author_username: string | null;
   author_avatar: string | null;
@@ -54,4 +60,8 @@ export type AnnouncementRow = {
   /** Raw `chat-media` storage path, signed at display time. */
   attachment_url: string | null;
   attachment_type: string | null;
+  /** UAT-04: posted without a name. */
+  is_anonymous?: boolean;
+  /** UAT-04: the message in this channel that this one replies to. */
+  reply_to_id?: string | null;
 };

@@ -115,6 +115,16 @@ export type PostStatus = "open" | "closed" | "expired" | "filled";
 export type MyIntent = SmartMatchPost & {
   status: PostStatus;
   pendingCount: number;
+  /**
+   * The Discover team room this post has already produced, if any (UAT-07).
+   *
+   * `create_discover_group_chat` is idempotent and marks the post `filled`, so
+   * the CTA that created the room used to disappear the moment it succeeded —
+   * the manager only rendered it for `status === "open"` — leaving no way back
+   * into the room from the post that owns it. Carrying the id here is what lets
+   * the row show "Open group" instead of nothing.
+   */
+  groupId: string | null;
 };
 
 /** A society/event the viewer may recruit for (create-post anchor). */
@@ -124,10 +134,32 @@ export type RecruitAnchor = {
   name: string;
 };
 
+/**
+ * An application the VIEWER sent (UAT-09).
+ *
+ * The applicant's half of the recruitment lifecycle, which had no surface at
+ * all: a right swipe stored exactly one application and notified the author,
+ * and then the applicant had nowhere in the app to learn whether it was still
+ * pending, accepted or declined. That absence is what made the flow read as
+ * broken even though the database side of it was correct.
+ */
+export type MyApplication = {
+  id: string;
+  postId: string;
+  postTitle: string;
+  mode: string;
+  status: ApplicationStatus;
+  message: string | null;
+  createdAt: string;
+  respondedAt: string | null;
+};
+
 /** The viewer's own Discover state — everything the Post Intent sheet needs. */
 export type MyDiscoverData = {
   viewer: SmartMatchViewer;
   myPosts: MyIntent[];
   incoming: IncomingApplication[];
+  /** Applications the viewer SENT, with their current state (UAT-09). */
+  outgoing: MyApplication[];
   recruitAnchors: RecruitAnchor[];
 };

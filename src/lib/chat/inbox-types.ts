@@ -1,4 +1,5 @@
 import type { IncomingRequest } from "@/components/chat/request-row";
+import type { OutgoingRequest } from "@/components/chat/sent-request-row";
 
 /**
  * Shape of the /chat inbox payload, shared by the server loader that produces
@@ -86,6 +87,18 @@ export type InboxData = {
   /** Every profile referenced by a thread, match or request, keyed by id. */
   profiles: Record<string, InboxProfile>;
   incoming: IncomingRequest[];
+  /**
+   * Requests THIS viewer sent, with their current state (UAT-02).
+   *
+   * The inbox used to read outgoing requests for one purpose only — hiding a
+   * match we had already written to — and then threw the rows away. So a sender
+   * had no surface anywhere in the app showing that their request existed, was
+   * still pending, or had been declined: from their side it had simply
+   * disappeared. Declined rows are carried too, and the list is what makes
+   * "accepted" visibly hand off to a real conversation rather than just
+   * vanishing.
+   */
+  outgoing: OutgoingRequest[];
 };
 
 /** Sentinel for "no messages yet", so such a thread sorts to the bottom. */

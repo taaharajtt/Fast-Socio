@@ -7,6 +7,7 @@ import { MembersTab } from "@/components/societies/tabs/members-tab";
 import { ManageTab } from "@/components/societies/tabs/manage-tab";
 import { getSocietyContext } from "@/lib/societies/load";
 import { getJoinRequests } from "@/lib/communities/relationship";
+import { getSocietyCapabilities } from "@/app/(student)/societies/actions";
 import { getSocialProof } from "@/lib/communities/social-proof";
 import { markCommunitySpaceSeen } from "@/lib/community/seen";
 import {
@@ -71,7 +72,15 @@ async function SocietyPageBody({
   markCommunitySpaceSeen(id);
 
   const canManage = canManageSociety(viewer);
-  const canPost = canPostAnnouncement(viewer);
+
+  // UAT-04: the broadcast channel's capabilities come from the DATABASE
+  // (`society_capabilities`, mig 0178) rather than from the client-side rank
+  // mirror, because this is the surface whose rules changed — a plain member
+  // may now post here, and only a president/owner/admin may reveal an anonymous
+  // author. Mirroring that in TypeScript as well would give the UI a second
+  // opinion that could drift from the one the RPCs enforce.
+  const caps = await getSocietyCapabilities(id);
+  const canPost = caps.can_post || canPostAnnouncement(viewer);
 
   const supabase = await createClient();
 
@@ -151,6 +160,8 @@ async function SocietyPageBody({
           announcements={announcements}
           canPost={canPost}
           canManage={canManage}
+          canPostAnonymously={caps.can_post_anonymously}
+          canReveal={caps.can_reveal_anonymous}
         />
       ),
     },

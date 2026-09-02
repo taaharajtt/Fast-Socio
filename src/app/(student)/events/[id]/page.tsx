@@ -11,14 +11,16 @@ import type { Attendee } from "@/components/events/attendee-list";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { formatEventDate } from "@/lib/events/format";
+import { EVENT_TIMEZONE_LABEL, hasEndedNow } from "@/lib/events/time-state";
 import { getSocialProof } from "@/lib/communities/social-proof";
 import { checkInQrDataUrl } from "@/lib/events/qr";
 import { resolveAvatarUrl } from "@/lib/avatar";
 
-/** Whether an event's end (or start, if open-ended) is in the past. */
-function hasEnded(startsAt: string, endsAt: string | null): boolean {
-  return new Date(endsAt ?? startsAt).getTime() < Date.now();
-}
+// UAT-10: the local `hasEnded` that lived here is gone. It read `Date.now()`
+// inside itself (so the boundary was untestable) and treated a null `ends_at`
+// as "ended at the start time", which marked every open-ended event as over the
+// moment it began. `lib/events/time-state` is now the single definition, shared
+// with the client badge that re-evaluates it at the boundary.
 
 type DiscussionRow = {
   id: string;
@@ -79,7 +81,12 @@ async function EventPageBody({
     .single();
   if (!event) notFound();
 
-  const ended = hasEnded(event.starts_at, event.ends_at);
+  // Evaluated once, from one clock reading, so every downstream use of `ended`
+  // in this render agrees with the others.
+  const ended = hasEndedNow({
+    startsAt: event.starts_at,
+    endsAt: event.ends_at,
+  });
   const pending = event.status !== "approved";
   const isHost = event.host_id === me;
 
@@ -201,7 +208,9 @@ async function EventPageBody({
           eventId={id}
           meId={me}
           description={event.description}
-          formattedDate={formatEventDate(event.starts_at)}
+          // The zone is named rather than implied: the number is always campus
+          // time, and a student who is travelling cannot otherwise tell.
+          formattedDate={`${formatEventDate(event.starts_at)} ${EVENT_TIMEZONE_LABEL}`}
           location={event.location}
           placeId={event.place_id}
           attendeeCount={event.attendee_count}
@@ -249,6 +258,10 @@ async function EventPageBody({
               : null,
         pending,
         ended,
+        // UAT-08. Mirrors `rename_event`'s own check (host, co-organizer or
+        // admin); the RPC is what actually enforces it, so an out-of-date
+        // client can only ever hide a control it should have shown.
+        canRename: isOrganizer,
       }}
       rsvp={{ initialState: rsvpState, count: event.attendee_count, capacity: event.capacity }}
       proof={proof}

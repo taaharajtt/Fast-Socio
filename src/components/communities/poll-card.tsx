@@ -4,6 +4,10 @@ import { useState, useTransition } from "react";
 import { BarChart3, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PollOptionResult } from "@/app/(student)/communities/actions";
+import {
+  PollBallotsSheet,
+  usePollOwnership,
+} from "@/components/feed/poll-ballots-sheet";
 
 /**
  * A poll inside a community chat room (UAT-005).
@@ -13,11 +17,14 @@ import type { PollOptionResult } from "@/app/(student)/communities/actions";
  * their own row, and the tallies arrive pre-aggregated from a definer view.
  */
 export function PollCard({
+  pollId,
   question,
   options,
   mine,
   onVote,
 }: {
+  /** Needed for UAT-17 — without it there is nothing to inspect ballots for. */
+  pollId: string;
   question: string;
   options: PollOptionResult[];
   /** Render inside the sender's own (gradient) bubble. */
@@ -25,6 +32,11 @@ export function PollCard({
   onVote: (optionId: string) => Promise<void>;
 }) {
   const [pending, start] = useTransition();
+  // UAT-17. `mine` above means "my BUBBLE" (I sent the message carrying this
+  // poll), which is not the same question as "I created this poll" — a poll can
+  // be quoted or forwarded. Ownership is resolved against the poll itself.
+  const canInspect = usePollOwnership(pollId);
+  const [showBallots, setShowBallots] = useState(false);
   // Optimistic: the tap should fill the bar immediately, not after a round-trip.
   const [optimistic, setOptimistic] = useState<string | null>(null);
 
@@ -124,15 +136,35 @@ export function PollCard({
         })}
       </div>
 
-      <p
-        className={cn(
-          "mt-2 text-[11px]",
-          mine ? "text-white/60" : "text-fg-disabled"
-        )}
-      >
-        {total} vote{total === 1 ? "" : "s"}
-        {chosen ? "" : " · tap to vote"}
-      </p>
+      {canInspect ? (
+        <>
+          <button
+            type="button"
+            onClick={() => setShowBallots(true)}
+            className={cn(
+              "focus-ring mt-2 rounded-[8px] text-left text-[11px] font-semibold underline-offset-2 hover:underline",
+              mine ? "text-white/80" : "text-accent"
+            )}
+          >
+            {total} vote{total === 1 ? "" : "s"} · see who voted
+          </button>
+          <PollBallotsSheet
+            pollId={pollId}
+            open={showBallots}
+            onClose={() => setShowBallots(false)}
+          />
+        </>
+      ) : (
+        <p
+          className={cn(
+            "mt-2 text-[11px]",
+            mine ? "text-white/60" : "text-fg-disabled"
+          )}
+        >
+          {total} vote{total === 1 ? "" : "s"}
+          {chosen ? "" : " · tap to vote"}
+        </p>
+      )}
     </div>
   );
 }

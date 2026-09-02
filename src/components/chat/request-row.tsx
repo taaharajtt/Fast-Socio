@@ -1,6 +1,7 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { GlassButton, GlassCard } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
 import {
@@ -18,6 +19,8 @@ export type IncomingRequest = {
 
 export function RequestRow({ request }: { request: IncomingRequest }) {
   const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
   return (
     <GlassCard className="p-4">
@@ -49,7 +52,18 @@ export function RequestRow({ request }: { request: IncomingRequest }) {
           disabled={pending}
           onClick={() =>
             start(async () => {
-              await acceptMessageRequest(request.id);
+              setError(null);
+              // UAT-02: accept now returns the conversation it created, in the
+              // same transaction. Navigating straight into it removes the window
+              // in which the request had left Requests but the thread had not
+              // yet appeared in Messages — the gap where an accepted request
+              // looked like it had been lost.
+              const res = await acceptMessageRequest(request.id);
+              if (!res.ok) {
+                setError(res.error);
+                return;
+              }
+              router.push(`/chat/${res.conversationId}`);
             })
           }
         >
@@ -62,13 +76,20 @@ export function RequestRow({ request }: { request: IncomingRequest }) {
           disabled={pending}
           onClick={() =>
             start(async () => {
-              await declineMessageRequest(request.id);
+              setError(null);
+              const res = await declineMessageRequest(request.id);
+              if (!res.ok) setError(res.error);
             })
           }
         >
           Decline
         </GlassButton>
       </div>
+      {error && (
+        <p role="alert" className="mt-2 text-sm text-error">
+          {error}
+        </p>
+      )}
     </GlassCard>
   );
 }

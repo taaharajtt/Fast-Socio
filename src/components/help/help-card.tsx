@@ -82,10 +82,25 @@ export function HelpCard({ req }: { req: HelpRequestRow }) {
         </span>
       </div>
 
-      {/* Title + preview */}
+      {/* Title + full description.
+          UAT-14: the body is NOT clamped here. This is the main Campus Help
+          listing, where the description is the thing being read — clamping it
+          at two lines meant every real ask ended in an ellipsis and the card had
+          to be opened to learn what was being asked for. The card grows with its
+          content instead.
+
+          `break-words` is what keeps that safe: an unbroken 200-character URL
+          or token would otherwise widen the row and give the whole page a
+          horizontal scrollbar now that nothing truncates it.
+
+          The compact preview rails are deliberately NOT changed — HomeHelpStrip
+          clamps on purpose, because those tiles are a fixed-height horizontal
+          carousel and a long ask would break the rail's rhythm. */}
       <div className="mt-2.5">
-        <h3 className="type-headline text-fg">{req.title}</h3>
-        <p className="type-callout mt-1 line-clamp-2 text-fg-muted">{req.body}</p>
+        <h3 className="type-headline break-words text-fg">{req.title}</h3>
+        <p className="type-callout mt-1 whitespace-pre-wrap break-words text-fg-muted">
+          {req.body}
+        </p>
       </div>
 
       {/* Author (or Anonymous) + counts */}

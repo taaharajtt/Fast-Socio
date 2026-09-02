@@ -28,6 +28,7 @@ import type {
   IncomingApplication,
   MyDiscoverData,
   MyIntent,
+  MyApplication,
   PostStatus,
   RecruitAnchor,
   SmartMatchPost,
@@ -334,7 +335,14 @@ const MAX_SOCIO_EXCLUDE = 500;
  */
 export async function getSocioSwipeCandidates(
   limit = 20,
-  exclude: string[] = []
+  exclude: string[] = [],
+  /**
+   * The client's per-session shuffle seed (UAT-15). Null means "no shuffle",
+   * which is the pre-0178 ordering exactly — the seed has to reach EVERY page of
+   * a session or pagination breaks, so it is threaded through rather than
+   * generated here, where each call would invent a different one.
+   */
+  seed: string | null = null
 ): Promise<DiscoverProfile[]> {
   const supabase = await createClient();
   const { data } = await supabase.rpc("get_discover_candidates", {
@@ -342,6 +350,7 @@ export async function getSocioSwipeCandidates(
     // Bounded: the exclusion set travels in every request, and a session that
     // pages far enough would otherwise grow it without limit.
     p_exclude: exclude.slice(-MAX_SOCIO_EXCLUDE),
+    p_seed: seed,
   });
   return (data as DiscoverProfile[]) ?? [];
 }
@@ -361,12 +370,15 @@ export async function getDiscoverSwipeDeck({
   intentCursorId = null,
   socioLimit = 20,
   intentLimit = 40,
+  seed = null,
 }: {
   socioExclude?: string[];
   intentCursor?: string | null;
   intentCursorId?: string | null;
   socioLimit?: number;
   intentLimit?: number;
+  /** Per-session shuffle seed (UAT-15); the same value on every page. */
+  seed?: string | null;
 } = {}): Promise<DiscoverDeckPage> {
   const uid = await getAuthUserId();
   if (!uid) return EMPTY_DECK_PAGE;
@@ -375,7 +387,7 @@ export async function getDiscoverSwipeDeck({
 
   const [socio, intents] = await Promise.all([
     socioLimit > 0
-      ? getSocioSwipeCandidates(socioLimit, socioExclude)
+      ? getSocioSwipeCandidates(socioLimit, socioExclude, seed)
       : Promise.resolve<DiscoverProfile[]>([]),
     intentLimit > 0
       ? getDiscoverIntentsPage({
@@ -625,15 +637,69 @@ export async function getMyDiscoverData(): Promise<MyDiscoverData | null> {
       });
   }
 
+  // Rooms already minted from these posts (UAT-07). One read for the whole
+  // page rather than one per row, and `discover_post_id` is the column
+  // `create_discover_group_chat` writes, so this is the same identity the RPC
+  // uses to stay idempotent.
+  const groupByPost = new Map<string, string>();
+  if (myFullPosts.length > 0) {
+    const { data: roomRows } = await supabase
+      .from("communities")
+      .select("id, discover_post_id")
+      .in(
+        "discover_post_id",
+        myFullPosts.map((p) => p.id)
+      );
+    for (const r of roomRows ?? [])
+      groupByPost.set(r.discover_post_id as string, r.id as string);
+  }
+
   const myPosts: MyIntent[] = myFullPosts.map((p) => ({
     ...p,
     pendingCount: pendingByPost.get(p.id) ?? 0,
+    groupId: groupByPost.get(p.id) ?? null,
+  }));
+
+  // UAT-09: applications the VIEWER sent. RLS lets an applicant read their own
+  // rows, and the post is embedded so the row can name what was applied to
+  // without a second round trip. Bounded — this is a status list, not history.
+  const { data: outRows } = await supabase
+    .from("smart_match_applications")
+    .select(
+      "id, post_id, message, status, created_at, responded_at, post:smart_match_posts!smart_match_applications_post_id_fkey(id, title, mode)"
+    )
+    .eq("applicant_id", uid)
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  const outgoing: MyApplication[] = (
+    (outRows ?? []) as unknown as Array<{
+      id: string;
+      post_id: string;
+      message: string | null;
+      status: MyApplication["status"];
+      created_at: string;
+      responded_at: string | null;
+      post: { id: string; title: string; mode: string } | null;
+    }>
+  ).map((a) => ({
+    id: a.id,
+    postId: a.post_id,
+    // A deleted post leaves the application row behind; it must still render as
+    // something rather than as an empty line.
+    postTitle: a.post?.title ?? "A removed post",
+    mode: a.post?.mode ?? "",
+    status: a.status,
+    message: a.message,
+    createdAt: a.created_at,
+    respondedAt: a.responded_at,
   }));
 
   return {
     viewer,
     myPosts,
     incoming,
+    outgoing,
     recruitAnchors: await getRecruitAnchors(uid),
   };
 }

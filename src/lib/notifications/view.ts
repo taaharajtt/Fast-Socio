@@ -37,6 +37,15 @@ export const SYSTEM_NOTIFICATION_TYPES = new Set<ActivityVisibleType>([
   "help_offer_accepted",
   "matching_accepted",
   "smart_match_accepted",
+  // Space lifecycle decisions ABOUT the reader — an approval or a rejection is
+  // a single fact, not an actor doing something repeatedly.
+  "community_approved",
+  "community_rejected",
+  "community_join_approved",
+  "community_post_approved",
+  "community_post_rejected",
+  "society_role",
+  "society_role_removed",
 ]);
 
 /** Short verb phrase for a groupable actor action, e.g. "liked your post". */
@@ -80,15 +89,34 @@ export function notificationActionPhrase(type: string): string {
       return "earned a top weekly leaderboard finish";
     case "content_moderated":
       return "removed content for violating community guidelines";
+    case "community_message":
+      return "sent a message in a community";
+    case "society_announcement":
+      return "posted a broadcast";
+    case "event_message":
+      return "sent a message in an event";
+    case "community_post":
+      return "posted in a community";
+    case "community_post_review":
+      return "submitted a post for review";
+    case "community_join_request":
+      return "asked to join a community";
+    case "event_post_request":
+      return "asked to post in an event";
     default:
       return "interacted with you";
   }
 }
 
 /**
- * The nine categories the Notifications page is allowed to show. Conversation
- * traffic, community/society broadcasts and admin announcements have no
- * category on purpose — they never reach this surface.
+ * The categories the Notifications page shows.
+ *
+ * UAT-18 adds two. `spaces` covers the community/society lifecycle decisions;
+ * `conversations` covers group chat surfaces (chat rooms, society broadcasts,
+ * event discussion) — the ones that have no dock badge of their own. DIRECT
+ * chat still has no category, on purpose: it is served by the Chat badge, the
+ * per-conversation unread count and the Requests panel, and does not reach this
+ * surface. Admin announcements likewise arrive as a cold-open modal.
  */
 export type ActivityCategory =
   | "post_reacts"
@@ -99,7 +127,9 @@ export type ActivityCategory =
   | "event_updates"
   | "help"
   | "aura"
-  | "moderation";
+  | "moderation"
+  | "spaces"
+  | "conversations";
 
 export const ACTIVITY_CATEGORY_LABEL: Record<ActivityCategory, string> = {
   post_reacts: "Post reacts",
@@ -111,6 +141,8 @@ export const ACTIVITY_CATEGORY_LABEL: Record<ActivityCategory, string> = {
   help: "Campus Help",
   aura: "Aura and badges",
   moderation: "Moderation and appeals",
+  spaces: "Communities and societies",
+  conversations: "Group chats",
 };
 
 /**
@@ -159,6 +191,22 @@ export function notificationCategory(type: string): ActivityCategory | null {
     case "moderation_warning":
     case "appeal_result":
       return "moderation";
+    case "community_message":
+    case "society_announcement":
+    case "event_message":
+      return "conversations";
+    case "community_post":
+    case "community_post_review":
+    case "community_post_approved":
+    case "community_post_rejected":
+    case "community_join_request":
+    case "community_join_approved":
+    case "community_approved":
+    case "community_rejected":
+    case "society_role":
+    case "society_role_removed":
+    case "event_post_request":
+      return "spaces";
     default: {
       const never: never = type;
       throw new Error(`Uncategorised notification type: ${String(never)}`);

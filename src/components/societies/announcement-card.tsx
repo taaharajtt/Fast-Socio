@@ -1,11 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Lock, MoreHorizontal, Pin, PinOff, Trash2 } from "lucide-react";
+import {
+  Eye,
+  Lock,
+  MoreHorizontal,
+  Pin,
+  PinOff,
+  Trash2,
+  VenetianMask,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   pinSocietyAnnouncement,
   deleteSocietyAnnouncement,
+  revealBroadcastAuthor,
+  toggleBroadcastReaction,
 } from "@/app/(student)/societies/actions";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PhotoViewer } from "@/components/ui/photo-viewer";
@@ -33,11 +43,19 @@ function timeAgo(iso: string): string {
 export function AnnouncementCard({
   a,
   canManage,
+  canReveal = false,
   showAuthorHeader = true,
 }: {
   a: AnnouncementRow;
   /** Owner/officer/admin — may pin and delete any announcement. */
   canManage: boolean;
+  /**
+   * UAT-04: president, owner or admin. Gates whether the REVEAL control is
+   * rendered — never whether the identity is available. The identity is not in
+   * this component's props at all for a masked message; it is fetched by the
+   * definer RPC only when someone deliberately asks.
+   */
+  canReveal?: boolean;
   /**
    * False when this message follows one from the same author in a thread —
    * the author/time row collapses to just the time, mirroring how consecutive
@@ -55,6 +73,10 @@ export function AnnouncementCard({
   const [viewing, setViewing] = useState(false);
   const [pollOptions, setPollOptions] = useState<PollOptionResult[] | null>(null);
   const [refreshToken, setRefreshToken] = useState(0);
+  // UAT-04. `revealed` starts null and is only ever filled by the RPC's answer:
+  // an anonymous message's author is not in this component's data.
+  const [revealed, setRevealed] = useState<string | null>(null);
+  const [reacted, setReacted] = useState(false);
 
   // Sign the attachment for display — the chat-media bucket is private.
   useEffect(() => {
@@ -169,7 +191,16 @@ export function AnnouncementCard({
           <p className="mt-0.5 flex items-center gap-1.5 text-xs text-fg-muted">
             {showAuthorHeader && (
               <>
-                <span className="truncate">{a.author_name ?? "Officer"}</span>
+                {a.is_anonymous ? (
+                  <span className="flex items-center gap-1 truncate">
+                    <VenetianMask className="h-3 w-3 shrink-0" aria-hidden />
+                    {/* `revealed` is only ever set by the reveal RPC. For every
+                        other viewer this is the ONLY name that exists here. */}
+                    {revealed ?? (a.is_mine ? "You (anonymous)" : "Anonymous")}
+                  </span>
+                ) : (
+                  <span className="truncate">{a.author_name ?? "Member"}</span>
+                )}
                 <span aria-hidden>·</span>
               </>
             )}
@@ -248,6 +279,7 @@ export function AnnouncementCard({
       {a.poll_id && pollOptions ? (
         <div className="mt-2">
           <PollCard
+            pollId={a.poll_id}
             question={a.body}
             options={pollOptions}
             mine={a.is_mine}
@@ -279,11 +311,60 @@ export function AnnouncementCard({
         </>
       )}
 
+      {/* UAT-04: react to a broadcast, and — for a president/owner/admin only —
+          look behind an anonymous one.
+
+          The reveal is a deliberate, single-message action, not a mode: there is
+          no "show all authors" switch, because the point of anonymity here is
+          that reading the channel does not casually deanonymise the people in
+          it. `reveal_announcement_author` refuses anyone below president rank,
+          so this button existing is not what grants the power. */}
+      <div className="mt-1.5 flex items-center gap-2">
+        <button
+          type="button"
+          aria-pressed={reacted}
+          aria-label={reacted ? "Remove your reaction" : "React with a heart"}
+          onClick={() =>
+            start(async () => {
+              const res = await toggleBroadcastReaction(a.id, "❤️");
+              if (res.ok) setReacted(res.reacted);
+              else setError(res.error);
+            })
+          }
+          className={cn(
+            "focus-ring rounded-full px-2 py-0.5 text-xs",
+            reacted ? "bg-accent/15 text-accent" : "text-fg-muted hover:text-fg"
+          )}
+        >
+          ❤️
+        </button>
+
+        {a.is_anonymous && canReveal && revealed === null && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() =>
+              start(async () => {
+                const res = await revealBroadcastAuthor(a.id);
+                if (res.ok) setRevealed(res.author.name ?? "Unknown student");
+                else setError(res.error);
+              })
+            }
+            className="focus-ring flex items-center gap-1 rounded-full px-2 py-0.5 text-xs text-fg-muted hover:text-fg"
+          >
+            <Eye className="h-3 w-3" aria-hidden />
+            Reveal author
+          </button>
+        )}
+      </div>
+
       <PhotoViewer
         open={viewing}
         onClose={() => setViewing(false)}
         src={signedImage}
-        senderName={a.author_name}
+        // An anonymous broadcast's photo must not carry its author's name into
+        // the viewer chrome — the one place the masking could have leaked.
+        senderName={a.is_anonymous ? (revealed ?? "Anonymous") : a.author_name}
         timestamp={a.created_at}
       />
 
