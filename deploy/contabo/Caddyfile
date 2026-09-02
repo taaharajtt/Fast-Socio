@@ -54,6 +54,15 @@
 			}
 		}
 	}
+
+	# Behind Cloudflare (caching plan, Phase 3). Without this, {remote_host}
+	# is a CLOUDFLARE edge IP, so the access log attributes every request to
+	# the proxy and the app records Cloudflare IPs in Settings -> Security.
+	# Ranges are Cloudflare's published list; re-fetch if they change.
+	servers {
+		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+		client_ip_headers Cf-Connecting-Ip X-Forwarded-For
+	}
 }
 
 fastsocio.online {
@@ -145,7 +154,7 @@ fastsocio.online {
 				header_up Host {host}
 				header_up X-Forwarded-Host {host}
 				header_up X-Forwarded-Proto {scheme}
-				header_up X-Real-IP {remote_host}
+				header_up X-Real-IP {client_ip}
 			}
 		}
 		# Next sets this itself when IT serves the file; when Caddy serves it
@@ -158,24 +167,10 @@ fastsocio.online {
 		# and streams the rest. Buffering here silently destroys that.
 		flush_interval -1
 
-		# RIDE OUT A DEPLOY INSTEAD OF 502-ing THROUGH IT.
-		#
-		# `docker compose up -d app` replaces the container, and for the ~9
-		# seconds until its healthcheck passes there is nothing listening on
-		# app:3000. Without this, every request in that window is answered 502.
-		# Measured on 2026-08-31: 78 of the day's 502s fell inside the single
-		# hour in which the app container was recreated four times, and none
-		# outside it — i.e. essentially all of them were deploy-induced and
-		# avoidable.
-		#
-		# `lb_try_duration` makes Caddy keep retrying the upstream for up to 15s
-		# before giving up, so a client mid-deploy waits a moment instead of
-		# seeing an error. 15s comfortably covers the observed 9s restart while
-		# staying well under the 300s transport timeouts below, so a genuinely
-		# dead upstream still fails rather than hanging.
-		#
-		# This only affects establishing the connection. A request already being
-		# streamed is not retried, so it cannot duplicate a Server Action.
+		# Ride out a deploy instead of 502-ing through it. `docker compose up -d
+		# app` replaces the container, and for the ~9s until its healthcheck
+		# passes nothing is listening on app:3000. Present in the repo since the
+		# perf audit but never actually applied to this live file — added 2026-09-02.
 		lb_try_duration 15s
 		lb_try_interval 250ms
 
@@ -185,7 +180,7 @@ fastsocio.online {
 		header_up Host {host}
 		header_up X-Forwarded-Host {host}
 		header_up X-Forwarded-Proto {scheme}
-		header_up X-Real-IP {remote_host}
+		header_up X-Real-IP {client_ip}
 
 		# Long-lived connections. Supabase Realtime is browser-direct and never
 		# passes through here, but RSC streaming and Server Action responses can
