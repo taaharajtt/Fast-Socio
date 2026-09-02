@@ -361,23 +361,49 @@ This is the standard "ship a new build" procedure. It replaces the bare
 Run the steps individually and read the output of each — do not paste the whole
 thing as one chain. Step 3 is the point of no return for live clients.
 
-**1. Fetch and pin the deployment id.**
+**1. Ship the tree and pin the deployment id.**
+
+**`~/fastsocio-app/repo` IS NOT A GIT CHECKOUT.** It has no `.git` directory and
+never has — the tree is shipped from the workstation and the previous one is kept
+as `repo.bak-<timestamp>` (that is what every `repo.bak-*` beside it is). An
+earlier version of this step said `git -C repo pull --ff-only`, which simply
+fails with "not a git repository", and `git -C repo rev-parse` fails with it — so
+the id has to come from the WORKSTATION's clone.
+
+Run from the repo on the workstation, on the commit you intend to ship:
 
 ```bash
-ssh -i ~/.ssh/fastsocio_vps fastsocio@169.58.149.230
-cd ~/fastsocio-app && git -C repo pull --ff-only
-export GIT_SHA=$(git -C repo rev-parse --short HEAD) && echo "deploying $GIT_SHA"
+# Commit and push first: the deployment id is a real, fetchable commit or it is
+# a label for something nobody can reproduce.
+git push origin <branch>
+export GIT_SHA=$(git rev-parse --short HEAD) && echo "deploying $GIT_SHA"
+
+# `git archive` ships exactly the committed tree — no node_modules, no .next,
+# and no untracked local files that would otherwise end up inside a prod image.
+git archive --format=tar HEAD | gzip -6 | ssh -i ~/.ssh/fastsocio_vps   fastsocio@169.58.149.230   'cd ~/fastsocio-app && rm -rf repo.new && mkdir repo.new && tar xzf - -C repo.new'
+
+# Swap, keeping the outgoing tree for rollback.
+ssh -i ~/.ssh/fastsocio_vps fastsocio@169.58.149.230   'cd ~/fastsocio-app && mv repo repo.bak-$(date +%Y%m%d-%H%M%S) && mv repo.new repo'
 ```
 
-`export GIT_SHA` is **required and now enforced in two places** — it is no
-longer possible to build without it. `docker-compose.yml` declares
-`${GIT_SHA:?...}`, so compose refuses to build, and `next.config.ts` throws when
-`DOCKER_BUILD=1` and the id is empty, which also covers a bare `docker build`
-that bypasses compose. It feeds `deploymentId`: `?dpl=` on asset URLs and a hard
-reload when a client's build no longer matches the server's. It previously
-defaulted to empty, which disabled skew protection *silently* — the failure only
-showed up one deploy later, stranding live clients on 404ing chunks and stale
-Server Action ids.
+Then, in the SSH session where you will build, `export GIT_SHA=<that same sha>`.
+It does not survive between `ssh` invocations, so exporting it on the workstation
+is not enough — it must be set in the shell that runs `docker compose build`.
+
+`export GIT_SHA` feeds `deploymentId`: `?dpl=` on asset URLs and a hard reload
+when a client's build no longer matches the server's. It previously defaulted to
+empty, which disabled skew protection *silently* — the failure only showed up one
+deploy later, stranding live clients on 404ing chunks and stale Server Action ids.
+
+**One guard, not two.** An earlier version of this runbook claimed
+`docker-compose.yml` declares `${GIT_SHA:?...}` so compose refuses to build. It
+does not, and deliberately: `:?` was tried and reverted because Compose
+interpolates build args on EVERY command, so it made `docker compose ps`, `logs`
+and `restart` all fail when the variable was unset — requiring a build variable
+before you can read logs during an incident. The compose file uses `${GIT_SHA:-}`
+and the real guard is in `next.config.ts`, which throws when `DOCKER_BUILD=1` and
+the id is empty. That still fails the build loudly and immediately, and unlike
+`:?` it also covers a bare `docker build` that bypasses compose.
 
 **2. Build.** Nothing is serving this yet; a failure here is free.
 
