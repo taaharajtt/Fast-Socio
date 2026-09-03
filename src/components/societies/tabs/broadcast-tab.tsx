@@ -1,4 +1,5 @@
 import { AnnouncementThread } from "@/components/societies/announcement-thread";
+import type { MessageReaction } from "@/lib/chat/reactions";
 import type { AnnouncementRow } from "@/lib/societies/types";
 
 /**
@@ -16,14 +17,20 @@ import type { AnnouncementRow } from "@/lib/societies/types";
  */
 export function BroadcastTab({
   societyId,
+  meId,
   announcements,
+  reactions,
   canPost,
   canManage,
   canPostAnonymously = false,
   canReveal = false,
 }: {
   societyId: string;
+  /** The reader's id, so their own reaction chip can be flagged. */
+  meId: string;
   announcements: AnnouncementRow[];
+  /** announcementId -> reactions, for the first paint. */
+  reactions?: Record<string, MessageReaction[]>;
   canPost: boolean;
   canManage: boolean;
   /** UAT-04 capability flags, resolved server-side from `society_capabilities`. */
@@ -33,7 +40,9 @@ export function BroadcastTab({
   return (
     <AnnouncementThread
       societyId={societyId}
+      meId={meId}
       announcements={announcements}
+      initialReactions={reactions}
       canPost={canPost}
       canManage={canManage}
       canPostAnonymously={canPostAnonymously}

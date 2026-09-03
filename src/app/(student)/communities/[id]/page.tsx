@@ -126,7 +126,7 @@ async function CommunityPageBody({
   // access is revoked the moment membership is (leave / remove / ban).
   const chat = !pending && rel.isMember
     ? await loadCommunityChat(id, true)
-    : { messages: [], polls: {} };
+    : { messages: [], polls: {}, reactions: {} };
 
   type Row = {
     user_id: string;
@@ -187,6 +187,7 @@ async function CommunityPageBody({
           joinStatus={rel.joinStatus}
           initialMessages={chat.messages}
           initialPolls={chat.polls}
+          initialReactions={chat.reactions}
           canModerate={rel.canModerateChat}
         />
       ),

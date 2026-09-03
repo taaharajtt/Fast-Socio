@@ -15,6 +15,7 @@ import { EVENT_TIMEZONE_LABEL, hasEndedNow } from "@/lib/events/time-state";
 import { getSocialProof } from "@/lib/communities/social-proof";
 import { checkInQrDataUrl } from "@/lib/events/qr";
 import { resolveAvatarUrl } from "@/lib/avatar";
+import { groupReactionsByMessage } from "@/lib/chat/reactions";
 
 // UAT-10: the local `hasEnded` that lived here is gone. It read `Date.now()`
 // inside itself (so the boundary was untestable) and treated a null `ends_at`
@@ -27,6 +28,12 @@ type DiscussionRow = {
   sender_id: string;
   body: string;
   created_at: string;
+  // mig 0179 — reply/edit/unsend/attachment on the attendee discussion.
+  edited_at: string | null;
+  deleted_at: string | null;
+  reply_to_id: string | null;
+  attachment_url: string | null;
+  attachment_type: string | null;
   sender: { full_name: string | null; avatar_url: string | null; gender: string | null } | null;
 };
 
@@ -132,7 +139,9 @@ async function EventPageBody({
       : Promise.resolve({ data: null }),
     supabase
       .from("event_messages")
-      .select("id, sender_id, body, created_at, sender:profiles(full_name, avatar_url, gender)")
+      .select(
+        "id, sender_id, body, created_at, edited_at, deleted_at, reply_to_id, attachment_url, attachment_type, sender:profiles(full_name, avatar_url, gender)"
+      )
       .eq("event_id", id)
       .order("created_at", { ascending: true })
       .limit(100),
@@ -176,9 +185,35 @@ async function EventPageBody({
       sender_id: r.sender_id,
       body: r.body,
       created_at: r.created_at,
+      edited_at: r.edited_at,
+      deleted_at: r.deleted_at,
+      reply_to_id: r.reply_to_id,
+      attachment_url: r.attachment_url,
+      attachment_type: r.attachment_type,
       sender_name: r.sender?.full_name ?? null,
       sender_avatar: resolveAvatarUrl(r.sender?.avatar_url, r.sender?.gender),
     })
+  );
+
+  // Reactions for the first paint. Read here rather than on the client so the
+  // thread does not open with no chips and grow them a round trip later, which
+  // reads as the reactions having been lost. RLS scopes these to people who can
+  // read the thread at all.
+  const discussionIds = discussionMessages.map((m) => m.id);
+  const { data: discussionReactionRows } =
+    discussionIds.length > 0
+      ? await supabase
+          .from("event_message_reactions")
+          .select("message_id, emoji, user_id")
+          .in("message_id", discussionIds)
+      : { data: [] as { message_id: string; emoji: string; user_id: string }[] };
+  const discussionReactions = groupReactionsByMessage(
+    (discussionReactionRows ?? []) as {
+      message_id: string;
+      emoji: string;
+      user_id: string;
+    }[],
+    discussionIds
   );
 
   const attendees: Attendee[] = ((attendeeRows as unknown as AttendeeRow[]) ?? [])
@@ -231,7 +266,13 @@ async function EventPageBody({
             comment: (myFeedback as { comment: string | null } | null)?.comment ?? null,
           }}
           discussionMessages={discussionMessages}
+          discussionReactions={discussionReactions}
           canDiscuss={!pending && (attending || isOrganizer)}
+          // Posting needs an attendee row on an approved event — the INSERT
+          // policy's own rule. An organizer who never registered may moderate
+          // the thread but is not a participant in it.
+          canPostInDiscussion={!pending && attending}
+          canModerateDiscussion={isOrganizer}
         />
       ),
     },

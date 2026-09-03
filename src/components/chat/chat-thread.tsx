@@ -29,6 +29,18 @@ import {
   type ReviewMessage,
 } from "@/components/chat/report-review";
 import { GlassButton, GlassSheet } from "@/components/ui";
+import {
+  MessageActionsSheet,
+  type MessageAction,
+} from "@/components/chat/message-actions-sheet";
+import { ReactionChips } from "@/components/chat/reaction-chips";
+import { ReplyBanner } from "@/components/chat/reply-banner";
+import { useMessagePress } from "@/lib/chat/use-message-press";
+import {
+  aggregateReactions,
+  applyReactionToggle,
+  type MessageReaction,
+} from "@/lib/chat/reactions";
 import { AppImage } from "@/components/ui/app-image";
 import { resolveAvatarUrl } from "@/lib/avatar";
 import { ImageCropper, type CropResult } from "@/components/ui/image-cropper";
@@ -82,8 +94,14 @@ import {
   type ReplyPreview,
 } from "@/app/(student)/chat/actions";
 
-type Reaction = { emoji: string; user_id: string };
-const QUICK_EMOJIS = ["❤️", "😂", "🔥", "👍", "😮", "😢", "🙏"];
+/**
+ * The reaction model, the quick-emoji row, the chip aggregation and the
+ * optimistic toggle all moved to `lib/chat/reactions` + the shared components
+ * beside this file, so the community rooms, event discussions and society
+ * broadcasts use THESE rules rather than three re-derivations of them. Nothing
+ * about the DM behaviour changed in the move.
+ */
+type Reaction = MessageReaction;
 /**
  * At most one `mark_conversation_read` RPC per this many ms. The RPC marks the
  * WHOLE conversation, so calling it once per inbound message — as this
@@ -269,17 +287,10 @@ export function ChatThread({
     setActionsFor(null);
     if (messageId.startsWith("temp-")) return; // still sending — no server row yet
     // Optimistic: reflect my toggle immediately, reconcile on the realtime event.
-    setReactions((prev) => {
-      const list = prev[messageId] ?? [];
-      const mineHere = list.find((r) => r.user_id === meId);
-      let next: Reaction[];
-      if (mineHere && mineHere.emoji === emoji) {
-        next = list.filter((r) => r.user_id !== meId);
-      } else {
-        next = [...list.filter((r) => r.user_id !== meId), { emoji, user_id: meId }];
-      }
-      return { ...prev, [messageId]: next };
-    });
+    setReactions((prev) => ({
+      ...prev,
+      [messageId]: applyReactionToggle(prev[messageId], meId, emoji),
+    }));
     const res = await toggleMessageReaction(messageId, emoji);
     if (!res.ok) {
       setError(res.error);
@@ -410,13 +421,8 @@ export function ChatThread({
     };
   });
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPress = useRef<ReturnType<typeof setTimeout> | null>(null);
-  /** Where a press started, so a press that MOVES can cancel the long-press. */
-  const pressOrigin = useRef<{ x: number; y: number } | null>(null);
-  /** The last tap, for detecting a double tap on the SAME message. */
-  const lastTap = useRef<{ id: string; at: number } | null>(null);
-  /** Pending single-tap action, cancelled if a second tap turns it into a like. */
-  const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The long-press timer, the press origin, the last-tap record and the
+  // single-tap settle timer all live in `useMessagePress` now.
   /** messageId -> its row element, so a quote can scroll to its original. */
   const rowRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -473,7 +479,6 @@ export function ChatThread({
   useEffect(() => {
     return () => {
       if (highlightTimer.current) clearTimeout(highlightTimer.current);
-      if (tapTimer.current) clearTimeout(tapTimer.current);
     };
   }, []);
 
@@ -1144,74 +1149,36 @@ export function ChatThread({
     );
   }
 
-  /** Long-press (touch) or right-click opens the per-message action sheet. */
+  /**
+   * Long-press (touch) or right-click opens the per-message action sheet;
+   * double tap likes; a single tap reveals the exact time.
+   *
+   * The gesture machinery moved to `lib/chat/use-message-press` so every
+   * conversation surface gets the same one — including the parts that are
+   * easy to get subtly wrong, like a long press that must be cancelled once
+   * the finger travels (otherwise it steals swipe-to-reply) and a single tap
+   * that must wait out the double-tap window (otherwise every like flashes a
+   * timestamp on its way through).
+   */
+  const pressFor = useMessagePress({
+    onLongPress: (id) => {
+      const m = messagesRef.current.find((x) => x.id === id);
+      if (m) setActionsFor(m);
+    },
+    onDoubleTap: (id) => {
+      const m = messagesRef.current.find((x) => x.id === id);
+      if (m) likeMessage(m);
+    },
+    onTap: (id) => setRevealedId((cur) => (cur === id ? null : id)),
+    // In selection mode a tap means "select"; the action sheet and the
+    // double-tap reaction would both fight it.
+    disabled: selecting,
+  });
+
   function pressHandlers(m: ChatMessage) {
-    // In selection mode a tap means "select"; the long-press action sheet and
-    // the double-tap reaction would both fight it.
-    if (selecting) return {};
     // No actions on deleted or still-sending (optimistic) messages.
     if (m.deleted_at || m.id.startsWith("temp-")) return {};
-    const open = () => setActionsFor(m);
-    const cancel = () => {
-      if (longPress.current) clearTimeout(longPress.current);
-      longPress.current = null;
-    };
-    return {
-      onPointerDown: (e: React.PointerEvent) => {
-        pressOrigin.current = { x: e.clientX, y: e.clientY };
-        longPress.current = setTimeout(open, 450);
-      },
-      // A press that TRAVELS is a swipe (or a scroll), not a long press. Without
-      // this the action sheet opened mid-swipe on any deliberate "hold, then
-      // slide" — the exact gesture the reply affordance asks for — and stole it.
-      onPointerMove: (e: React.PointerEvent) => {
-        const o = pressOrigin.current;
-        if (!o || !longPress.current) return;
-        if (Math.abs(e.clientX - o.x) > 8 || Math.abs(e.clientY - o.y) > 8) {
-          cancel();
-        }
-      },
-      onPointerUp: (e: React.PointerEvent) => {
-        const origin = pressOrigin.current;
-        pressOrigin.current = null;
-        cancel();
-        // A tap, not a swipe or a scroll: the pointer barely moved.
-        const moved =
-          !origin ||
-          Math.abs(e.clientX - origin.x) > 8 ||
-          Math.abs(e.clientY - origin.y) > 8;
-        if (moved) {
-          lastTap.current = null;
-          return;
-        }
-        const now = Date.now();
-        const prev = lastTap.current;
-        if (prev && prev.id === m.id && now - prev.at < 350) {
-          lastTap.current = null;
-          if (tapTimer.current) clearTimeout(tapTimer.current);
-          tapTimer.current = null;
-          likeMessage(m);
-          return;
-        }
-        lastTap.current = { id: m.id, at: now };
-        // A single tap reveals this message's exact time — but only once the
-        // double-tap window has closed, or every like would flash a timestamp
-        // on its way through.
-        if (tapTimer.current) clearTimeout(tapTimer.current);
-        tapTimer.current = setTimeout(() => {
-          tapTimer.current = null;
-          setRevealedId((cur) => (cur === m.id ? null : m.id));
-        }, 360);
-      },
-      onPointerLeave: () => {
-        pressOrigin.current = null;
-        cancel();
-      },
-      onContextMenu: (e: React.MouseEvent) => {
-        e.preventDefault();
-        open();
-      },
-    };
+    return pressFor(m.id);
   }
 
   // The newest message I sent — the ONE place a receipt belongs, IG style. It
@@ -1555,31 +1522,11 @@ export function ChatThread({
               </SwipeToReply>
 
               {/* UAT-005: reaction chips under the bubble. Tap yours to remove. */}
-              {chips.length > 0 && (
-                <div
-                  className={cn(
-                    "-mt-1 flex flex-wrap gap-1",
-                    mine ? "justify-end pr-1" : "justify-start pl-1"
-                  )}
-                >
-                  {chips.map((c) => (
-                    <button
-                      key={c.emoji}
-                      type="button"
-                      onClick={() => react(m.id, c.emoji)}
-                      className={cn(
-                        "flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[11px]",
-                        c.mine
-                          ? "border-accent/50 bg-accent/15 text-fg"
-                          : "border-glass-border bg-card text-fg-muted"
-                      )}
-                    >
-                      <span>{c.emoji}</span>
-                      {c.count > 1 && <span className="tabular-nums">{c.count}</span>}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <ReactionChips
+                chips={chips}
+                align={mine ? "end" : "start"}
+                onToggle={(emoji) => react(m.id, emoji)}
+              />
 
               {/* The meta line is now EXCEPTIONAL, not per-message.
                   Instagram prints no clock under every bubble — the day
@@ -1815,27 +1762,13 @@ export function ChatThread({
           onRecord={toggleRecording}
           replyPreview={
             replyTo ? (
-              <div className="flex items-start gap-2 border-b border-glass-border px-3 py-2">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[12px] font-semibold text-fg">
-                    Replying to{" "}
-                    {replyTo.sender_id === meId
-                      ? "yourself"
-                      : (otherName ?? "them")}
-                  </p>
-                  <p className="truncate text-[13px] text-fg-muted">
-                    {replyPreviewText(replyTo)}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setReplyTo(null)}
-                  aria-label="Cancel reply"
-                  className="focus-ring -mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-fg-muted hover:text-fg"
-                >
-                  <X className="h-4 w-4" aria-hidden />
-                </button>
-              </div>
+              <ReplyBanner
+                label={`Replying to ${
+                  replyTo.sender_id === meId ? "yourself" : (otherName ?? "them")
+                }`}
+                text={replyPreviewText(replyTo)}
+                onCancel={() => setReplyTo(null)}
+              />
             ) : null
           }
         />
@@ -1862,115 +1795,78 @@ export function ChatThread({
         timestamp={viewingPhoto?.timestamp ?? null}
       />
 
-      {/* UAT-005/009: long-press any message to react, forward, edit or unsend. */}
-      <GlassSheet
+      {/* UAT-005/009: long-press any message to react, forward, edit or unsend.
+          The sheet itself is now the shared one, so the rooms, the event
+          discussion and the broadcast channel offer their actions in exactly
+          this shape rather than each inventing a menu. */}
+      <MessageActionsSheet
         open={Boolean(actionsFor)}
         onClose={() => setActionsFor(null)}
         label="Message actions"
-      >
-        {actionsFor &&
-          (() => {
-            const a = actionsFor;
-            const mine = a.sender_id === meId;
-            const isText = !a.attachment_url && !a.shared_post_id;
-            const canForward = Boolean(a.body) || Boolean(a.shared_post_id);
-            return (
-              <div className="space-y-3">
-                {/* Quick-emoji reaction row (UAT-005). */}
-                <div className="flex items-center justify-between px-1">
-                  {QUICK_EMOJIS.map((e) => (
-                    <button
-                      key={e}
-                      type="button"
-                      onClick={() => react(a.id, e)}
-                      className="flex h-10 w-10 items-center justify-center rounded-full text-2xl active:scale-90"
-                      aria-label={`React ${e}`}
-                    >
-                      {e}
-                    </button>
-                  ))}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => startReply(a)}
-                  className="glass flex w-full items-center gap-3 rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm text-fg"
-                >
-                  <Reply className="h-4 w-4" aria-hidden />
-                  Reply
-                </button>
-
-                {canForward && (
-                  <button
-                    type="button"
-                    onClick={() => {
+        onReact={actionsFor ? (emoji) => react(actionsFor.id, emoji) : undefined}
+        actions={
+          actionsFor
+            ? ((): (MessageAction | false)[] => {
+                const a = actionsFor;
+                const mine = a.sender_id === meId;
+                const isText = !a.attachment_url && !a.shared_post_id;
+                const canForward = Boolean(a.body) || Boolean(a.shared_post_id);
+                return [
+                  {
+                    key: "reply",
+                    label: "Reply",
+                    icon: Reply,
+                    onSelect: () => startReply(a),
+                  },
+                  canForward && {
+                    key: "forward",
+                    label: "Forward",
+                    icon: CornerUpRight,
+                    onSelect: () => {
                       setForwardFor(a);
                       setActionsFor(null);
-                    }}
-                    className="glass flex w-full items-center gap-3 rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm text-fg"
-                  >
-                    <CornerUpRight className="h-4 w-4" aria-hidden />
-                    Forward
-                  </button>
-                )}
-
-                {/* Pin/unpin — either participant, any non-deleted message (Phase 10). */}
-                <button
-                  type="button"
-                  onClick={() => togglePin(a)}
-                  className="glass flex w-full items-center gap-3 rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm text-fg"
-                >
-                  {a.pinned_at ? (
-                    <>
-                      <PinOff className="h-4 w-4" aria-hidden />
-                      Unpin message
-                    </>
-                  ) : (
-                    <>
-                      <Pin className="h-4 w-4" aria-hidden />
-                      Pin message
-                    </>
-                  )}
-                </button>
-
-                {mine && isText && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditDraft(a.body ?? "");
-                      setEditing(a);
-                      setActionsFor(null);
-                    }}
-                    className="glass flex w-full items-center gap-3 rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm text-fg"
-                  >
-                    <Pencil className="h-4 w-4" aria-hidden />
-                    Edit message
-                  </button>
-                )}
-
-                {mine ? (
-                  <button
-                    type="button"
-                    onClick={() => confirmDelete(a)}
-                    className="glass flex w-full items-center gap-3 rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm text-error"
-                  >
-                    <Trash2 className="h-4 w-4" aria-hidden />
-                    Unsend
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => startSelecting(a)}
-                    className="glass flex w-full items-center gap-3 rounded-[var(--radius-sm)] px-4 py-3 text-left text-sm text-error"
-                  >
-                    <Flag className="h-4 w-4" aria-hidden />
-                    Report messages
-                  </button>
-                )}
-              </div>
-            );
-          })()}
-      </GlassSheet>
+                    },
+                  },
+                  // Pin/unpin — either participant, any non-deleted message
+                  // (Phase 10). A DM has two people in it, so pinning is not a
+                  // moderation power here the way it is in a room.
+                  {
+                    key: "pin",
+                    label: a.pinned_at ? "Unpin message" : "Pin message",
+                    icon: a.pinned_at ? PinOff : Pin,
+                    onSelect: () => togglePin(a),
+                  },
+                  mine &&
+                    isText && {
+                      key: "edit",
+                      label: "Edit message",
+                      icon: Pencil,
+                      onSelect: () => {
+                        setEditDraft(a.body ?? "");
+                        setEditing(a);
+                        setActionsFor(null);
+                      },
+                    },
+                  mine
+                    ? {
+                        key: "unsend",
+                        label: "Unsend",
+                        icon: Trash2,
+                        tone: "danger" as const,
+                        onSelect: () => confirmDelete(a),
+                      }
+                    : {
+                        key: "report",
+                        label: "Report messages",
+                        icon: Flag,
+                        tone: "danger" as const,
+                        onSelect: () => startSelecting(a),
+                      },
+                ];
+              })()
+            : []
+        }
+      />
 
       <ForwardSheet
         message={forwardFor}
@@ -2008,24 +1904,6 @@ export function ChatThread({
       )}
     </div>
   );
-}
-
-/** Group a message's raw reactions into per-emoji chips, flagging mine. */
-function aggregateReactions(
-  list: Reaction[] | undefined,
-  meId: string
-): { emoji: string; count: number; mine: boolean }[] {
-  if (!list || list.length === 0) return [];
-  const byEmoji = new Map<string, { count: number; mine: boolean }>();
-  for (const r of list) {
-    const cur = byEmoji.get(r.emoji) ?? { count: 0, mine: false };
-    cur.count += 1;
-    if (r.user_id === meId) cur.mine = true;
-    byEmoji.set(r.emoji, cur);
-  }
-  return [...byEmoji.entries()]
-    .map(([emoji, v]) => ({ emoji, ...v }))
-    .sort((a, b) => b.count - a.count);
 }
 
 /** Forward a message's content to one of the caller's matches (UAT-005). */

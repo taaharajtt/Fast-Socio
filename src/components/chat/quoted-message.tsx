@@ -1,8 +1,10 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import type { ReplyPreview } from "@/app/(student)/chat/actions";
-import { replyPreviewText } from "@/lib/chat/reply-preview";
+import {
+  replyPreviewText,
+  type QuotablePreview,
+} from "@/lib/chat/reply-preview";
 
 /**
  * The compact quote that sits above a reply — in the thread and, in the same
@@ -19,7 +21,10 @@ export function QuotedMessage({
   onClick,
   className,
 }: {
-  preview: ReplyPreview | null | undefined;
+  // `QuotablePreview`, not the DM-specific `ReplyPreview`: the group
+  // surfaces quote rows from three other tables, and every one of them is
+  // projected to this shape before it gets here.
+  preview: QuotablePreview | null | undefined;
   label?: string | null;
   /** Rendered against an outgoing (purple) bubble rather than the dark ground. */
   mine?: boolean;

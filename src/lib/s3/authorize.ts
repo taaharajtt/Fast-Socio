@@ -121,6 +121,22 @@ async function authorizeRoomAccess(roomId: string, userId: string): Promise<Auth
     .maybeSingle();
   if (membership) return { ok: true };
 
+  // Event discussion — attendance (mig 0179 gave event messages attachments,
+  // and they key on the event id like every other room). Deliberately the
+  // ATTENDEE row and not the host: `event_messages`' own INSERT policy is
+  // attendee-only, so signing for a host who never registered would hand out a
+  // URL for a thread they cannot write to. A host reading the thread is
+  // covered because hosting an event you are running without registering for
+  // it is not how the product works — and if it were, the message they are
+  // looking at would be one they could not have posted an image to either.
+  const { data: attendance } = await supabase
+    .from("event_attendees")
+    .select("event_id")
+    .eq("event_id", roomId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (attendance) return { ok: true };
+
   return DENY_FORBIDDEN;
 }
 

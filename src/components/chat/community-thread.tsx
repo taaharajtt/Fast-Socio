@@ -5,6 +5,7 @@ import {
 } from "@/components/communities/community-chat";
 import { RequestJoinButton } from "@/components/communities/request-join-button";
 import type { JoinState, PollOptionResult } from "@/app/(student)/communities/actions";
+import type { MessageReaction } from "@/lib/chat/reactions";
 
 /**
  * The body of a community conversation in the Chat area — the gate, then the
@@ -20,6 +21,7 @@ export function CommunityThread({
   joinStatus,
   initialMessages,
   initialPolls,
+  initialReactions,
   allowAnonymous = true,
   canModerate = false,
 }: {
@@ -29,6 +31,8 @@ export function CommunityThread({
   joinStatus: JoinState;
   initialMessages: CommunityMessage[];
   initialPolls: Record<string, PollOptionResult[]>;
+  /** messageId -> reactions, for the first paint (mig 0179). */
+  initialReactions?: Record<string, MessageReaction[]>;
   /** False for Discover team rooms — no anonymous posting there (fix-018). */
   allowAnonymous?: boolean;
   /** Viewer may delete anyone's message here (fix-051). */
@@ -59,6 +63,7 @@ export function CommunityThread({
       meId={meId}
       initialMessages={initialMessages}
       initialPolls={initialPolls}
+      initialReactions={initialReactions}
       allowAnonymous={allowAnonymous}
       canModerate={canModerate}
     />

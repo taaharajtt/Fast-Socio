@@ -105,8 +105,17 @@ export async function updateCommunity(input: {
 export async function sendCommunityMessage(
   communityId: string,
   body: string,
-  anonymous = false
-): Promise<{ ok: true } | { ok: false; error: string }> {
+  anonymous = false,
+  /**
+   * The message this one replies to (mig 0179). A trigger rejects a target
+   * outside this room, so a bad id fails the insert rather than writing a
+   * cross-room reference.
+   */
+  replyToId?: string | null
+): Promise<
+  | { ok: true; messageId: string | null }
+  | { ok: false; error: string }
+> {
   const supabase = await createClient();
   const userId = await getAuthUserId();
   if (!userId) return { ok: false, error: "Not signed in." };
@@ -119,13 +128,18 @@ export async function sendCommunityMessage(
   // limiter fails closed, so any failure to consult it rejected an ordinary
   // message as "You're sending too fast". Membership is still enforced by RLS.
 
-  const { error } = await supabase.rpc("send_community_message", {
+  const { data, error } = await supabase.rpc("send_community_message", {
     p_community_id: communityId,
     p_body: text,
     p_anonymous: anonymous,
+    p_reply_to: replyToId ?? null,
   });
   if (error) return { ok: false, error: error.message };
-  return { ok: true };
+  // The RPC returns the inserted id, which is what reconciles the optimistic
+  // bubble — matching on body text mis-pairs two identical messages sent in a
+  // row and leaves a duplicate on screen (the bug `resolveOptimistic` exists
+  // to prevent in the DM thread).
+  return { ok: true, messageId: (data as string | null) ?? null };
 }
 
 /**
@@ -146,8 +160,12 @@ export async function sendCommunityMessage(
 export async function sendCommunityImage(
   communityId: string,
   path: string,
-  anonymous = false
-): Promise<{ ok: true } | { ok: false; error: string }> {
+  anonymous = false,
+  replyToId?: string | null
+): Promise<
+  | { ok: true; messageId: string | null }
+  | { ok: false; error: string }
+> {
   const supabase = await createClient();
   const userId = await getAuthUserId();
   if (!userId) return { ok: false, error: "Not signed in." };
@@ -171,16 +189,25 @@ export async function sendCommunityImage(
     return { ok: false, error: "Only images can be attached." };
   }
 
-  const { error } = await supabase.from("community_chat_messages").insert({
-    community_id: communityId,
-    sender_id: userId,
-    body: "",
-    attachment_url: path,
-    attachment_type: "image",
-    is_anonymous: anonymous,
-  });
+  const { data, error } = await supabase
+    .from("community_chat_messages")
+    .insert({
+      community_id: communityId,
+      sender_id: userId,
+      body: "",
+      attachment_url: path,
+      attachment_type: "image",
+      is_anonymous: anonymous,
+      // Only present when it IS a reply. PostgREST rejects the whole insert if
+      // a payload names a column the database does not have, so an
+      // unconditional `reply_to_id: null` would break ordinary photo messages
+      // on any database where mig 0179 has not been applied yet.
+      ...(replyToId ? { reply_to_id: replyToId } : {}),
+    })
+    .select("id")
+    .single();
   if (error) return { ok: false, error: error.message };
-  return { ok: true };
+  return { ok: true, messageId: (data?.id as string | undefined) ?? null };
 }
 
 /**
@@ -211,6 +238,105 @@ export async function deleteCommunityMessage(
           : error.message,
     };
   }
+  return { ok: true };
+}
+
+/**
+ * Edit one of the caller's own room messages (mig 0179).
+ *
+ * Text only, exactly like `editMessage` for DMs: the RPC refuses a message
+ * carrying a poll or an image, and refuses one the caller did not write. There
+ * is no client UPDATE path that could rewrite someone else's words — the only
+ * UPDATE policy on this table is 0142's tombstone, whose WITH CHECK forces the
+ * row to become content-free.
+ */
+export async function editCommunityMessage(
+  messageId: string,
+  body: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
+
+  const text = body.trim();
+  if (text.length < 1 || text.length > 2000)
+    return { ok: false, error: "Message must be 1–2000 characters." };
+
+  const { error } = await supabase.rpc("edit_community_chat_message", {
+    p_message_id: messageId,
+    p_body: text,
+  });
+  if (error)
+    return { ok: false, error: "Only your own text messages can be edited." };
+  return { ok: true };
+}
+
+/**
+ * Pin or unpin a room message (mig 0179).
+ *
+ * Unlike a DM — where either participant may pin, because there are only two
+ * of them — pinning in a room is a moderation act on someone else's words, so
+ * the RPC requires the owner, a moderator, a society officer or an admin. The
+ * author of the message is NOT sufficient.
+ */
+export async function toggleCommunityMessagePin(
+  messageId: string,
+  pinned: boolean
+): Promise<{ ok: true; pinned: boolean } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
+
+  const { data, error } = await supabase.rpc("set_community_chat_pin", {
+    p_message_id: messageId,
+    p_pinned: pinned,
+  });
+  if (error) return { ok: false, error: "You can't pin messages in this room." };
+  return { ok: true, pinned: data === true };
+}
+
+/** Toggle the caller's emoji reaction on a room message (mig 0179). One per user. */
+export async function toggleCommunityMessageReaction(
+  messageId: string,
+  emoji: string
+): Promise<{ ok: true; reacted: boolean } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
+  if (emoji.length < 1 || emoji.length > 8)
+    return { ok: false, error: "That reaction isn’t supported." };
+
+  const { data, error } = await supabase.rpc("toggle_community_chat_reaction", {
+    p_message_id: messageId,
+    p_emoji: emoji,
+  });
+  if (error) return { ok: false, error: "Couldn’t react to that message." };
+  return { ok: true, reacted: data === true };
+}
+
+/** Report a room message for moderator review (target_type = community_message). */
+export async function reportCommunityMessage(
+  messageId: string,
+  reason: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
+
+  const allowed = await checkRateLimit(
+    "report",
+    RATE_LIMITS.report.max,
+    RATE_LIMITS.report.windowSeconds
+  );
+  if (!allowed) return { ok: false, error: "Too many reports for now." };
+
+  const { error } = await supabase.from("reports").insert({
+    reporter_id: userId,
+    target_type: "community_message",
+    target_id: messageId,
+    reason,
+  });
+  if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
 

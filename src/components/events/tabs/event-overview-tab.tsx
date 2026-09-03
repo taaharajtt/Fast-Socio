@@ -9,6 +9,7 @@ import {
   type Organizer,
 } from "@/components/events/event-host-controls";
 import { EventDiscussion, type EventMessage } from "@/components/events/event-discussion";
+import type { MessageReaction } from "@/lib/chat/reactions";
 import { EventFeedback } from "@/components/events/event-feedback";
 
 /**
@@ -40,7 +41,10 @@ export function EventOverviewTab({
   checkInCode,
   feedback,
   discussionMessages,
+  discussionReactions,
   canDiscuss,
+  canPostInDiscussion,
+  canModerateDiscussion = false,
 }: {
   eventId: string;
   meId: string;
@@ -64,7 +68,15 @@ export function EventOverviewTab({
   checkInCode: string | null;
   feedback: { rating: number | null; comment: string | null };
   discussionMessages: EventMessage[];
+  /** messageId -> reactions, for the first paint (mig 0179). */
+  discussionReactions?: Record<string, MessageReaction[]>;
+  /** The thread is shown at all. */
   canDiscuss: boolean;
+  /** Registered attendee: may send, reply, react, edit their own. Defaults to
+   *  `canDiscuss` so a caller that has not been updated keeps its behaviour. */
+  canPostInDiscussion?: boolean;
+  /** Host or organizer: may remove anyone's message. */
+  canModerateDiscussion?: boolean;
 }) {
   return (
     <div className="space-y-3">
@@ -190,8 +202,10 @@ export function EventOverviewTab({
           <EventDiscussion
             eventId={eventId}
             meId={meId}
-            canPost={canDiscuss}
+            canPost={canPostInDiscussion ?? canDiscuss}
+            canModerate={canModerateDiscussion}
             initialMessages={discussionMessages}
+            initialReactions={discussionReactions}
           />
         </section>
       )}

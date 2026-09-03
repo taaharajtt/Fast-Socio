@@ -15,6 +15,7 @@ import {
   getUpcomingSocietyEvents,
   getPastSocietyEvents,
   getSocietyAnnouncements,
+  getAnnouncementReactions,
 } from "@/lib/societies/queries";
 import { canManageSociety, canPostAnnouncement } from "@/lib/societies/logic";
 import { createClient } from "@/lib/supabase/server";
@@ -110,7 +111,12 @@ async function SocietyPageBody({
     ]);
 
   // Pending asks to participate — the Manage tab's access queue (mig 0119).
-  const joinRequests = canManage ? await getJoinRequests(id) : [];
+  // Reactions for the broadcasts on screen, so the channel paints its chips
+  // with the messages rather than a round trip later.
+  const [joinRequests, announcementReactions] = await Promise.all([
+    canManage ? getJoinRequests(id) : Promise.resolve([]),
+    getAnnouncementReactions(announcements.map((a) => a.id)),
+  ]);
 
   const officerIds = new Set(officers.map((o) => o.user_id));
   type MemberRow = {
@@ -157,7 +163,9 @@ async function SocietyPageBody({
       content: (
         <BroadcastTab
           societyId={id}
+          meId={viewer.me}
           announcements={announcements}
+          reactions={announcementReactions}
           canPost={canPost}
           canManage={canManage}
           canPostAnonymously={caps.can_post_anonymously}

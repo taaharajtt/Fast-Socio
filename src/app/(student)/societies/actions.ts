@@ -262,6 +262,37 @@ export async function postSocietyAnnouncementPoll(
   return { ok: true };
 }
 
+/**
+ * Edit one of the caller's own broadcasts (mig 0179).
+ *
+ * THE AUTHOR ONLY — including the author of an anonymous broadcast, who the
+ * RPC matches on the real column rather than the masked feed view. An officer
+ * may DELETE a broadcast but may never rewrite one: putting words in a
+ * member's mouth, under their name, is not a moderation power, and the RPC
+ * refuses it regardless of rank.
+ */
+export async function editSocietyAnnouncement(
+  societyId: string,
+  announcementId: string,
+  body: string
+): Promise<Result> {
+  const supabase = await createClient();
+  const uid = await getAuthUserId();
+  if (!uid) return { ok: false, error: "Not signed in." };
+
+  const text = body.trim();
+  if (text.length < 1 || text.length > 4000)
+    return { ok: false, error: "Message must be 1–4000 characters." };
+
+  const { error } = await supabase.rpc("edit_society_announcement", {
+    p_announcement: announcementId,
+    p_body: text,
+  });
+  if (error) return { ok: false, error: "Only your own broadcasts can be edited." };
+  revalidatePath(`/societies/${societyId}`);
+  return { ok: true };
+}
+
 export async function pinSocietyAnnouncement(
   societyId: string,
   announcementId: string,
@@ -287,6 +318,40 @@ export async function deleteSocietyAnnouncement(
   });
   if (error) return { ok: false, error: error.message };
   revalidatePath(`/societies/${societyId}`);
+  return { ok: true };
+}
+
+/**
+ * Report one broadcast message for moderator review.
+ *
+ * `society_announcement` has been a report target since mig 0103; nothing in
+ * the app filed one until the channel became a place ordinary members speak.
+ * An anonymous broadcast is reportable like any other — the report carries the
+ * message id, and a moderator resolves the author through the same definer
+ * path a president would, never through the reporter.
+ */
+export async function reportSocietyAnnouncement(
+  announcementId: string,
+  reason: string
+): Promise<Result> {
+  const supabase = await createClient();
+  const uid = await getAuthUserId();
+  if (!uid) return { ok: false, error: "Not signed in." };
+
+  const allowed = await checkRateLimit(
+    "report",
+    RATE_LIMITS.report.max,
+    RATE_LIMITS.report.windowSeconds
+  );
+  if (!allowed) return { ok: false, error: "Too many reports for now." };
+
+  const { error } = await supabase.from("reports").insert({
+    reporter_id: uid,
+    target_type: "society_announcement",
+    target_id: announcementId,
+    reason,
+  });
+  if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
 

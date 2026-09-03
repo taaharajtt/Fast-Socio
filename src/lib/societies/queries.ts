@@ -1,6 +1,10 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { roleRank, type SocietyRole } from "@/lib/societies/logic";
+import {
+  groupReactionsByMessage,
+  type MessageReaction,
+} from "@/lib/chat/reactions";
 import type { OfficerVM, AnnouncementRow } from "@/lib/societies/types";
 
 export type SocietyEvent = {
@@ -112,7 +116,17 @@ export async function getPastSocietyEvents(
   return (data ?? []) as SocietyEvent[];
 }
 
-/** Announcements through the visibility-enforcing definer feed view. */
+/**
+ * Announcements through the visibility-enforcing definer feed view.
+ *
+ * STRICTLY NEWEST-FIRST, and the `pinned` sort key is deliberately gone. The
+ * broadcast channel renders as a conversation, which reverses this list into
+ * chronological order — and with pinned rows floated to the head of a
+ * newest-first list, reversing put them at the END, i.e. a pinned message from
+ * last term appeared as the most recent thing anyone had said. Pinning is
+ * surfaced by the thread's pinned bar instead, which is where a chat surface
+ * puts it.
+ */
 export async function getSocietyAnnouncements(
   id: string,
   limit = 30
@@ -122,8 +136,32 @@ export async function getSocietyAnnouncements(
     .from("society_announcement_feed")
     .select("*")
     .eq("society_id", id)
-    .order("pinned", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(limit);
   return (data ?? []) as AnnouncementRow[];
+}
+
+/**
+ * Reactions on a page of broadcasts, for the first paint.
+ *
+ * Read on the server so the channel does not open with no chips and grow them
+ * a round trip later, which reads as the reactions having been lost.
+ */
+export async function getAnnouncementReactions(
+  ids: string[]
+): Promise<Record<string, MessageReaction[]>> {
+  if (ids.length === 0) return {};
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("society_announcement_reactions")
+    .select("message_id:announcement_id, emoji, user_id")
+    .in("announcement_id", ids);
+  return groupReactionsByMessage(
+    (data ?? []) as unknown as {
+      message_id: string;
+      emoji: string;
+      user_id: string;
+    }[],
+    ids
+  );
 }

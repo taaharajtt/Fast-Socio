@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { headObject } from "@/lib/s3/sign";
 import { getAuthUserId } from "@/lib/auth/user";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { isAppStorageUrl } from "@/lib/url-safety";
@@ -156,23 +157,163 @@ export async function cancelRsvp(
   return { ok: true };
 }
 
-/** Post a message to an event's attendee discussion (Refactor Phase 6). */
+/**
+ * Post a message to an event's attendee discussion (Refactor Phase 6).
+ *
+ * ATTENDEE GATING IS UNCHANGED and is not implemented here: the INSERT policy
+ * on `event_messages` requires an `event_attendees` row on an APPROVED event,
+ * so a non-attendee is refused by the database whether they reach this action
+ * through the UI or by posting to it directly. Migration 0179 adds a reply and
+ * an optional image on top of that, with a trigger keeping a reply inside its
+ * own event.
+ */
 export async function sendEventMessage(
   eventId: string,
+  body: string,
+  opts?: { replyToId?: string | null; attachmentPath?: string | null }
+): Promise<
+  | { ok: true; messageId: string | null }
+  | { ok: false; error: string }
+> {
+  const supabase = await createClient();
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
+  const text = body.trim();
+  if (!text && !opts?.attachmentPath)
+    return { ok: false, error: "Message is empty." };
+  if (text.length > 1000)
+    return { ok: false, error: "Message is too long." };
+
+  if (opts?.attachmentPath) {
+    // The object must live under THIS event's folder, so a caller cannot point
+    // a message at an attachment belonging to a room they are not in.
+    if (
+      !opts.attachmentPath.startsWith(`${eventId}/`) ||
+      opts.attachmentPath.includes("..")
+    ) {
+      return { ok: false, error: "Invalid attachment." };
+    }
+    // Images only, checked against what storage actually holds rather than
+    // trusting the picker — the presigned PUT carried the content type the
+    // CLIENT declared, so this is the first look at the real bytes.
+    const head = await headObject("chat-media", opts.attachmentPath);
+    if (!head?.contentType?.startsWith("image/"))
+      return { ok: false, error: "Only images can be attached." };
+  }
+
+  const { data, error } = await supabase
+    .from("event_messages")
+    .insert({
+      event_id: eventId,
+      sender_id: userId,
+      body: text,
+      // Omitted unless present: PostgREST rejects the whole insert if a
+      // payload names a column the database does not have, so an
+      // unconditional null would break posting on a database where mig 0179
+      // has not been applied yet.
+      ...(opts?.replyToId ? { reply_to_id: opts.replyToId } : {}),
+      ...(opts?.attachmentPath
+        ? { attachment_url: opts.attachmentPath, attachment_type: "image" }
+        : {}),
+    })
+    .select("id")
+    .single();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, messageId: (data?.id as string | undefined) ?? null };
+}
+
+/**
+ * Edit one of the caller's own discussion messages (mig 0179).
+ *
+ * SECURITY INVOKER on the database side, so the RLS policy — author, not
+ * deleted, no attachment — IS the enforcement rather than a check this action
+ * repeats. A non-attendee, or someone else's message, matches zero rows.
+ */
+export async function editEventMessage(
+  messageId: string,
   body: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
   const userId = await getAuthUserId();
   if (!userId) return { ok: false, error: "Not signed in." };
   const text = body.trim();
-  if (!text) return { ok: false, error: "Message is empty." };
-  if (text.length > 1000)
-    return { ok: false, error: "Message is too long." };
+  if (text.length < 1 || text.length > 1000)
+    return { ok: false, error: "Message must be 1–1000 characters." };
 
-  const { error } = await supabase.from("event_messages").insert({
-    event_id: eventId,
-    sender_id: userId,
-    body: text,
+  const { error } = await supabase.rpc("edit_event_message", {
+    p_message_id: messageId,
+    p_body: text,
+  });
+  if (error)
+    return { ok: false, error: "Only your own text messages can be edited." };
+  return { ok: true };
+}
+
+/**
+ * Soft-delete a discussion message (mig 0179): the author's own, or anyone's
+ * if the caller hosts or organizes the event. The row survives as a tombstone
+ * so replies quoting it still read sensibly.
+ */
+export async function deleteEventMessage(
+  messageId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
+
+  const { error } = await supabase.rpc("delete_event_message", {
+    p_message_id: messageId,
+  });
+  if (error) return { ok: false, error: "You can't delete this message." };
+  return { ok: true };
+}
+
+/**
+ * Toggle the caller's emoji reaction on a discussion message (mig 0179).
+ *
+ * Requires the right to POST, not merely to read: a host watching a thread
+ * they never registered for may moderate it but does not join in. The RPC
+ * enforces that; this action does not re-implement it.
+ */
+export async function toggleEventMessageReaction(
+  messageId: string,
+  emoji: string
+): Promise<{ ok: true; reacted: boolean } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
+  if (emoji.length < 1 || emoji.length > 8)
+    return { ok: false, error: "That reaction isn’t supported." };
+
+  const { data, error } = await supabase.rpc("toggle_event_message_reaction", {
+    p_message_id: messageId,
+    p_emoji: emoji,
+  });
+  if (error) return { ok: false, error: "Couldn’t react to that message." };
+  return { ok: true, reacted: data === true };
+}
+
+/** Report a discussion message for moderator review (target_type = event_message). */
+export async function reportEventMessage(
+  messageId: string,
+  reason: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
+
+  const allowed = await checkRateLimit(
+    "report",
+    RATE_LIMITS.report.max,
+    RATE_LIMITS.report.windowSeconds
+  );
+  if (!allowed) return { ok: false, error: "Too many reports for now." };
+
+  const { error } = await supabase.from("reports").insert({
+    reporter_id: userId,
+    target_type: "event_message",
+    target_id: messageId,
+    reason,
   });
   if (error) return { ok: false, error: error.message };
   return { ok: true };

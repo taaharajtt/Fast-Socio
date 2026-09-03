@@ -117,7 +117,7 @@ async function CommunityConversationPageBody({
   // Only a joined member can read the room, so the fetch is skipped entirely
   // for a follower — they get the join gate below instead of an empty thread.
   // The SAME loader the room page uses, so both surfaces show one history.
-  const { messages, polls } = await loadCommunityChat(id, rel.isMember);
+  const { messages, polls, reactions } = await loadCommunityChat(id, rel.isMember);
 
   const image = community.avatar_url ?? community.cover_url;
   const isDiscoverGroup = Boolean(community.is_discover_group);
@@ -201,6 +201,7 @@ async function CommunityConversationPageBody({
         joinStatus={rel.joinStatus}
         initialMessages={messages}
         initialPolls={polls}
+        initialReactions={reactions}
         // fix-018/058: a Discover team room has no anonymous option — everyone
         // there already knows who is on the team.
         allowAnonymous={!isDiscoverGroup}
