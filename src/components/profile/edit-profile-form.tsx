@@ -15,7 +15,7 @@ import { resolveAvatarUrl } from "@/lib/avatar";
 import {
   BIO_MAX,
   DEPARTMENTS,
-  GENDERS,
+  SELECTABLE_GENDERS,
   getDegreesForSchool,
   INTERESTS,
   MIN_INTERESTS,
@@ -361,7 +361,7 @@ export function EditProfileForm({ profile }: { profile: EditableProfile }) {
       <div className="space-y-2">
         <label className="text-sm font-medium">Gender</label>
         <div className="flex flex-wrap gap-2">
-          {GENDERS.map((g) => (
+          {SELECTABLE_GENDERS.map((g) => (
             <Pill
               key={g.value}
               active={gender === g.value}

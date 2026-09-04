@@ -74,6 +74,15 @@ export const GENDERS = [
   { value: "prefer_not_to_say", label: "Prefer not to say" },
 ] as const;
 
+/**
+ * The genders a student may actually pick. Onboarding and the edit screen offer
+ * male/female only; `prefer_not_to_say` stays in GENDERS purely so legacy rows
+ * that already hold it keep validating and rendering.
+ */
+export const SELECTABLE_GENDERS = GENDERS.filter(
+  (g) => g.value !== "prefer_not_to_say"
+);
+
 /** Interest tags shown as selectable glass pills (pick a handful). */
 export const INTERESTS = [
   "Coding",
@@ -162,7 +171,7 @@ export const INTERESTS = [
 ] as const;
 
 /** No maximum — students may pick as many interests as they like (fix-033). */
-export const MIN_INTERESTS = 3;
+export const MIN_INTERESTS = 5;
 export const BIO_MAX = 300;
 
 /**

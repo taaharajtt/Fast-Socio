@@ -12,40 +12,31 @@ import { saveOnboardingStep, saveProfile, type OnboardingDraft } from "./actions
 import {
   BIO_MAX,
   DEPARTMENTS,
-  GENDERS,
   getDegreesForSchool,
-  graduationYears,
-  HOSTEL_STATUS,
   INTERESTS,
-  LANGUAGES,
-  MAX_LANGUAGES,
-  MAX_PERSONALITY,
   MIN_INTERESTS,
-  PERSONALITY_TRAITS,
-  RELATIONSHIP_PREFS,
+  SELECTABLE_GENDERS,
 } from "@/lib/profile/constants";
 
 const STEPS = [
   "Photo",
   "Academics",
   "Interests",
-  "Personality",
-  "About you",
-  "Discover",
   "Bio",
   // The install ask. Last on purpose — see the note in <InstallStep/>: this is
   // the point of peak commitment, and the only moment in the whole journey
   // where asking pre-empts a return trip instead of interrupting one. It is
-  // skippable like every other optional step ("Finish" is always enabled).
+  // skippable ("Finish" is always enabled on this step).
   "Home Screen",
 ];
 
 /**
- * Multi-step onboarding wizard (Refactor Phase 2). Extends the original 4-step
- * flow into a full identity-vector capture. Every "Continue" autosaves the
- * partial draft server-side (saveOnboardingStep) so progress survives a reload
- * or a closed tab; the final step calls saveProfile which validates required
- * fields, awards the completion bonus, and routes to /home.
+ * Onboarding wizard. Collects only what every FAST SOCIO account must have:
+ * a real photo and name, school + degree, gender, five interests, and an
+ * optional bio. Every "Continue" autosaves the partial draft server-side
+ * (saveOnboardingStep) so progress survives a reload or a closed tab; the final
+ * step calls saveProfile which re-validates the required fields and routes to
+ * /home.
  */
 export function OnboardingWizard({
   initial,
@@ -72,28 +63,7 @@ export function OnboardingWizard({
   const [department, setDepartment] = useState(initial.department ?? "");
   const [degree, setDegree] = useState<string | null>(initial.degree ?? null);
   const [gender, setGender] = useState<string | null>(initial.gender ?? null);
-  const [gradYear, setGradYear] = useState<number | null>(
-    initial.graduationYear ?? null
-  );
-  const [hostel, setHostel] = useState<string | null>(
-    initial.hostelStatus ?? null
-  );
   const [interests, setInterests] = useState<string[]>(initial.interests ?? []);
-  const [personality, setPersonality] = useState<string[]>(
-    initial.personality ?? []
-  );
-  const [languages, setLanguages] = useState<string[]>(initial.languages ?? []);
-  const [pronouns, setPronouns] = useState(initial.pronouns ?? "");
-  const [hometown, setHometown] = useState(initial.hometown ?? "");
-  const [relPref, setRelPref] = useState<string | null>(
-    initial.relationshipPref ?? null
-  );
-  const [prefGenders, setPrefGenders] = useState<string[]>(
-    initial.prefGenders ?? []
-  );
-  const [prefVerified, setPrefVerified] = useState(
-    initial.prefVerifiedOnly ?? false
-  );
   const [bio, setBio] = useState(initial.bio ?? "");
 
   function draft(): OnboardingDraft {
@@ -103,16 +73,7 @@ export function OnboardingWizard({
       department,
       degree,
       gender,
-      graduationYear: gradYear,
-      hostelStatus: hostel,
       interests,
-      personality,
-      languages,
-      pronouns,
-      hometown,
-      relationshipPref: relPref,
-      prefGenders,
-      prefVerifiedOnly: prefVerified,
       bio,
     };
   }
@@ -142,30 +103,12 @@ export function OnboardingWizard({
     }
   }
 
-  function toggle(
-    value: string,
-    list: string[],
-    setList: (v: string[]) => void,
-    max: number
-  ) {
-    setList(
-      list.includes(value)
-        ? list.filter((t) => t !== value)
-        : list.length < max
-          ? [...list, value]
-          : list
-    );
-  }
-
-  // Only the originally-required fields gate progression; the new identity
-  // steps are always skippable (they enrich, they don't block).
+  // Photo, name, school, degree, gender and interests are all required; only
+  // the bio and the install ask are skippable.
   const stepValid = [
-    fullName.trim().length >= 2,
-    Boolean(department) && Boolean(gender),
+    Boolean(avatarUrl) && fullName.trim().length >= 2,
+    Boolean(department) && Boolean(degree) && Boolean(gender),
     interests.length >= MIN_INTERESTS,
-    true, // personality
-    true, // about you
-    true, // discover
     bio.length <= BIO_MAX,
     true, // home screen — never blocks Finish
   ][step];
@@ -203,8 +146,11 @@ export function OnboardingWizard({
       {step === 0 && (
         <section className="space-y-5">
           <div>
-            <h1 className="text-2xl font-bold">Add a photo</h1>
-            <p className="mt-1 text-fg-muted">Help people recognize you.</p>
+            <h1 className="text-2xl font-bold">Add your photo</h1>
+            <p className="mt-1 text-fg-muted">
+              To maintain the authenticity and decorum of the FAST SOCIO
+              community, every account is required to have a profile photo.
+            </p>
           </div>
           <div className="flex flex-col items-center gap-4">
             <button
@@ -227,13 +173,6 @@ export function OnboardingWizard({
                 </span>
               )}
             </button>
-            <input
-              ref={fileInput}
-              type="file"
-              accept="image/*"
-              hidden
-              onChange={onPickFile}
-            />
           </div>
           <div className="space-y-2">
             <label htmlFor="name" className="text-sm font-medium">
@@ -245,7 +184,19 @@ export function OnboardingWizard({
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
             />
+            <p className="text-xs text-fg-muted">
+              Use recognizable and appropriate display names. Avoid misleading,
+              offensive, or inappropriate names. Profiles with such names will be
+              banned by FAST SOCIO admins.
+            </p>
           </div>
+          <input
+            ref={fileInput}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={onPickFile}
+          />
         </section>
       )}
 
@@ -254,8 +205,8 @@ export function OnboardingWizard({
           <div>
             <h1 className="text-2xl font-bold">Your academics</h1>
             <p className="mt-1 text-fg-muted">
-              Your school. Your semester is set automatically from your roll
-              number.
+              Your school and degree. Your semester is set automatically from
+              your roll number.
             </p>
           </div>
           <Field label="School">
@@ -276,13 +227,13 @@ export function OnboardingWizard({
             </PillRow>
           </Field>
           {department && (
-            <Field label="Degree" optional>
+            <Field label="Degree">
               <PillRow>
                 {getDegreesForSchool(department).map((deg) => (
                   <Pill
                     key={deg}
                     active={degree === deg}
-                    onClick={() => setDegree(degree === deg ? null : deg)}
+                    onClick={() => setDegree(deg)}
                   >
                     {deg}
                   </Pill>
@@ -292,31 +243,13 @@ export function OnboardingWizard({
           )}
           <Field label="Gender">
             <PillRow>
-              {GENDERS.map((g) => (
+              {SELECTABLE_GENDERS.map((g) => (
                 <Pill
                   key={g.value}
                   active={gender === g.value}
                   onClick={() => setGender(g.value)}
                 >
                   {g.label}
-                </Pill>
-              ))}
-            </PillRow>
-          </Field>
-          <Field label="Expected graduation" optional>
-            <PillRow>
-              {graduationYears().map((y) => (
-                <Pill key={y} active={gradYear === y} onClick={() => setGradYear(gradYear === y ? null : y)}>
-                  {y}
-                </Pill>
-              ))}
-            </PillRow>
-          </Field>
-          <Field label="Living" optional>
-            <PillRow>
-              {HOSTEL_STATUS.map((h) => (
-                <Pill key={h.value} active={hostel === h.value} onClick={() => setHostel(hostel === h.value ? null : h.value)}>
-                  {h.label}
                 </Pill>
               ))}
             </PillRow>
@@ -355,112 +288,6 @@ export function OnboardingWizard({
       {step === 3 && (
         <section className="space-y-4">
           <div>
-            <h1 className="text-2xl font-bold">Your vibe</h1>
-            <p className="mt-1 text-fg-muted">
-              Pick up to {MAX_PERSONALITY} that fit you. ({personality.length}{" "}
-              selected)
-            </p>
-          </div>
-          <PillRow>
-            {PERSONALITY_TRAITS.map((t) => (
-              <Pill
-                key={t}
-                active={personality.includes(t)}
-                onClick={() =>
-                  toggle(t, personality, setPersonality, MAX_PERSONALITY)
-                }
-              >
-                {t}
-              </Pill>
-            ))}
-          </PillRow>
-        </section>
-      )}
-
-      {step === 4 && (
-        <section className="space-y-6">
-          <div>
-            <h1 className="text-2xl font-bold">A bit about you</h1>
-            <p className="mt-1 text-fg-muted">All optional — helps us match you.</p>
-          </div>
-          <Field label={`Languages (up to ${MAX_LANGUAGES})`} optional>
-            <PillRow>
-              {LANGUAGES.map((l) => (
-                <Pill
-                  key={l}
-                  active={languages.includes(l)}
-                  onClick={() => toggle(l, languages, setLanguages, MAX_LANGUAGES)}
-                >
-                  {l}
-                </Pill>
-              ))}
-            </PillRow>
-          </Field>
-          <Field label="Looking for" optional>
-            <PillRow>
-              {RELATIONSHIP_PREFS.map((r) => (
-                <Pill key={r.value} active={relPref === r.value} onClick={() => setRelPref(relPref === r.value ? null : r.value)}>
-                  {r.label}
-                </Pill>
-              ))}
-            </PillRow>
-          </Field>
-          <Field label="Pronouns" optional>
-            <GlassInput
-              placeholder="e.g. she/her"
-              value={pronouns}
-              maxLength={40}
-              onChange={(e) => setPronouns(e.target.value)}
-            />
-          </Field>
-          <Field label="Hometown" optional>
-            <GlassInput
-              placeholder="e.g. Lahore"
-              value={hometown}
-              maxLength={60}
-              onChange={(e) => setHometown(e.target.value)}
-            />
-          </Field>
-        </section>
-      )}
-
-      {step === 5 && (
-        <section className="space-y-6">
-          <div>
-            <h1 className="text-2xl font-bold">Who you&apos;ll discover</h1>
-            <p className="mt-1 text-fg-muted">
-              Shape your Discover deck. You can change this later in Settings.
-            </p>
-          </div>
-          <Field label="Show me" optional>
-            <PillRow>
-              {GENDERS.filter((g) => g.value !== "prefer_not_to_say").map((g) => (
-                <Pill
-                  key={g.value}
-                  active={prefGenders.includes(g.value)}
-                  onClick={() => toggle(g.value, prefGenders, setPrefGenders, 4)}
-                >
-                  {g.label}
-                </Pill>
-              ))}
-            </PillRow>
-          </Field>
-          <Field label="Verified students only" optional>
-            <PillRow>
-              <Pill active={prefVerified} onClick={() => setPrefVerified(true)}>
-                Yes
-              </Pill>
-              <Pill active={!prefVerified} onClick={() => setPrefVerified(false)}>
-                No
-              </Pill>
-            </PillRow>
-          </Field>
-        </section>
-      )}
-
-      {step === 6 && (
-        <section className="space-y-4">
-          <div>
             <h1 className="text-2xl font-bold">About you</h1>
             <p className="mt-1 text-fg-muted">A short bio (optional).</p>
           </div>
@@ -479,7 +306,7 @@ export function OnboardingWizard({
         </section>
       )}
 
-      {step === 7 && <InstallStep />}
+      {step === 4 && <InstallStep />}
 
       {error && <p className="mt-4 text-sm text-error">{error}</p>}
 
