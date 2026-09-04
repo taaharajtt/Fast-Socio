@@ -236,8 +236,8 @@ export function PostMediaCarousel({
             onClick={() => goTo(active + 1)}
           />
 
-          <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center">
-            <div className="pointer-events-auto flex items-center gap-1.5 rounded-full px-2 py-1">
+          <div className="pointer-events-none absolute inset-x-0 bottom-1.5 flex justify-center">
+            <div className="pointer-events-auto flex items-center gap-1">
               {media.map((item, index) => (
                 <button
                   key={`dot-${item.url}-${index}`}
@@ -245,14 +245,15 @@ export function PostMediaCarousel({
                   aria-label={slideLabel(index, total)}
                   aria-current={index === active}
                   onClick={() => goTo(index)}
-                  // 20px hit box around a 6px dot: a real touch target without
-                  // six visible chips crowding the bottom of the photo.
-                  className="flex h-5 w-5 items-center justify-center"
+                  // A tight 12px hit box around a 4px dot: small and close, like
+                  // the reference, but still a tappable target rather than the
+                  // bare dot itself.
+                  className="flex h-3 w-3 items-center justify-center"
                 >
                   <span
                     aria-hidden
                     className={cn(
-                      "h-[6px] w-[6px] rounded-full transition-opacity",
+                      "h-1 w-1 rounded-full transition-opacity",
                       index === active
                         ? "bg-white opacity-100"
                         : "bg-white opacity-45"
