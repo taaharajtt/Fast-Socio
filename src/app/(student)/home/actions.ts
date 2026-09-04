@@ -7,6 +7,13 @@ import { getAuthUserId } from "@/lib/auth/user";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { isAppStorageUrl } from "@/lib/url-safety";
 import { FEED_COLUMNS, FEED_PAGE_SIZE, type FeedPost } from "@/lib/feed/types";
+import {
+  DEFAULT_CAROUSEL_LAYOUT,
+  validatePostMedia,
+  type PostMediaInput,
+} from "@/lib/feed/media";
+import { postMediaPaths } from "@/lib/post-media";
+import { deleteObjects } from "@/lib/s3/sign";
 import { resolveAvatarUrl } from "@/lib/avatar";
 import { scoreContent, blockMessage } from "@/lib/moderation/rules";
 import { postingBlockReason } from "@/lib/moderation/server";
@@ -74,9 +81,42 @@ export async function editPost(
   return { ok: true };
 }
 
-/** Create a post (text and/or image, or a poll), optionally anonymous and/or in
- *  a community. When `pollOptions` is present the post carries a poll: `body` is
- *  the question and no image is attached. */
+/**
+ * Turn a `create_post_with_media` exception into something a person can act on.
+ *
+ * The RPC's messages are deliberately terse and stable (they are the contract);
+ * these are the sentences the composer shows. Anything unrecognised falls
+ * through unchanged rather than being swallowed into a generic apology.
+ */
+function friendlyPostError(message: string): string {
+  if (message.includes("at most 5 photos"))
+    return "A post can have at most 5 photos.";
+  if (message.includes("poll cannot carry photos"))
+    return "A poll can't also carry photos.";
+  if (message.includes("not a member of that community"))
+    return "You need to join this community before posting in it.";
+  if (message.includes("invalid media")) return "Those photos couldn't be attached.";
+  if (message.includes("invalid layout")) return "Unsupported photo layout.";
+  if (message.includes("write something"))
+    return "Write something or add an image.";
+  if (message.includes("not signed in")) return "Not signed in.";
+  return message;
+}
+
+/**
+ * Create a post: text, 1–5 images, or a poll — optionally anonymous and/or in a
+ * community.
+ *
+ * MEDIA IS ORDERED AND ATOMIC. `media` arrives in slide order and its array
+ * order IS the stored position, so a client never names a position and cannot
+ * invent a duplicate or a gap. The post row and its media rows are written by
+ * one SECURITY DEFINER function (mig 0180) precisely so a half-written carousel
+ * can never be visible in the feed.
+ *
+ * `imageUrl` is still accepted for the single legacy shape (a post with one
+ * image and no measured dimensions); it is ignored whenever `media` is present,
+ * where slide 1 becomes the stored cover.
+ */
 export async function createPost(input: {
   body: string;
   imageUrl?: string | null;
@@ -84,6 +124,10 @@ export async function createPost(input: {
   communityId?: string | null;
   /** 2–6 option labels. Present ⇒ this is a poll post (body is the question). */
   pollOptions?: string[] | null;
+  /** Ordered 1–5 images. Array order is the slide order. */
+  media?: PostMediaInput[] | null;
+  /** "uniform" (default) or "mixed" — the post-level carousel layout. */
+  carouselLayout?: string | null;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
   // Local JWT verification — no Auth API round trip on this hot path.
@@ -97,13 +141,27 @@ export async function createPost(input: {
     .filter(Boolean);
   const isPoll = (input.pollOptions?.length ?? 0) > 0;
 
+  // Independent re-validation of everything the client claims about its media:
+  // the count ceiling, the ratio vocabulary, positive dimensions, duplicate
+  // URLs, media-on-a-poll, the layout mode, and that every URL is one we host
+  // (P2-04). A server action is a public POST endpoint; the composer's copy of
+  // these rules is a courtesy and this one is the guarantee.
+  const mediaCheck = validatePostMedia({
+    media: input.media ?? [],
+    layout: input.carouselLayout ?? DEFAULT_CAROUSEL_LAYOUT,
+    hasPoll: isPoll,
+    isAllowedUrl: (url) => isAppStorageUrl(url),
+  });
+  if (!mediaCheck.ok) return { ok: false, error: mediaCheck.error };
+  const { media, layout } = mediaCheck;
+
   if (isPoll) {
     if (!body) return { ok: false, error: "Ask a poll question." };
     if (pollOptions.length < 2 || pollOptions.length > 6)
       return { ok: false, error: "A poll needs 2–6 options." };
     if (pollOptions.some((o) => o.length > 80))
       return { ok: false, error: "Poll options are limited to 80 characters." };
-  } else if (!body && !input.imageUrl) {
+  } else if (!body && media.length === 0 && !input.imageUrl) {
     return { ok: false, error: "Write something or add an image." };
   }
   if (body.length > 2000)
@@ -147,17 +205,25 @@ export async function createPost(input: {
     pollId = data as string;
   }
 
-  // No .select() — the posts table's SELECT is revoked (anonymity). return=minimal.
-  const { error } = await supabase.from("posts").insert({
-    author_id: userId,
-    body: body || null,
-    image_url: isPoll ? null : (input.imageUrl ?? null),
-    is_anonymous: isAnonymous,
-    community_id: input.communityId ?? null,
-    poll_id: pollId,
-    risk_score: risk.score,
+  // The post and every slide in one transaction (mig 0180). The RPC re-derives
+  // the author from auth.uid() — a client-supplied author id is never trusted —
+  // and re-checks community membership, which SECURITY DEFINER would otherwise
+  // bypass. Slide 1's URL is written to posts.image_url as the cover, so every
+  // reader that predates carousels keeps working.
+  const { error } = await supabase.rpc("create_post_with_media", {
+    p_body: body || null,
+    p_is_anonymous: isAnonymous,
+    p_community_id: input.communityId ?? null,
+    p_poll_id: pollId,
+    p_risk_score: risk.score,
+    p_media: media,
+    p_layout: layout,
+    // Legacy single-image shape: no measured dimensions, so it becomes the
+    // cover and nothing else, rather than a post_media row with an invented
+    // ratio. Ignored by the RPC whenever `media` is non-empty.
+    p_image_url: isPoll ? null : (input.imageUrl ?? null),
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: friendlyPostError(error.message) };
 
   revalidatePath(input.communityId ? `/communities/${input.communityId}` : "/home");
   return { ok: true };
@@ -255,12 +321,69 @@ export async function deletePost(
   const userId = await getAuthUserId();
   if (!userId) return { ok: false, error: "Not signed in." };
 
-  const { error } = await supabase.rpc("delete_post", { p_post_id: postId });
+  // Returns every media URL the post referenced — its cover AND every carousel
+  // slide — collected before the cascade takes the rows away (mig 0180). Object
+  // storage has no cascade, so this is the only moment those keys exist.
+  const { data, error } = await supabase.rpc("delete_post", { p_post_id: postId });
   if (error) return { ok: false, error: error.message };
+
+  // Best effort: the post IS deleted, which is what the caller asked for. A
+  // failed purge leaves orphaned bytes — a cleanup task, not a failed delete —
+  // so it is logged with its keys rather than surfaced as an error.
+  const paths = postMediaPaths((data as string[] | null) ?? []);
+  if (paths.length > 0) {
+    try {
+      await deleteObjects("post-media", paths);
+    } catch (e) {
+      console.error("[deletePost] orphaned objects after post delete", {
+        postId,
+        paths,
+        error: e,
+      });
+    }
+  }
 
   revalidatePath("/home");
   revalidatePath("/profile");
   return { ok: true };
+}
+
+/**
+ * Purge photos the composer uploaded for a post that was never created.
+ *
+ * Each cropped photo uploads as soon as it is confirmed, so publishing is
+ * instant — which means an abandoned draft, a removed slide, or a create that
+ * failed after some uploads succeeded all leave objects nothing points at. The
+ * composer knows those URLs and hands them back here.
+ *
+ * `unreferenced_post_media` (mig 0180) is what makes this safe: it returns a
+ * URL only when NO post and NO media row references it, so a published photo
+ * can never be deleted through this path, whoever asks. Best-effort and silent
+ * by design — cleanup must never interrupt what the user was actually doing.
+ */
+export async function discardPostMedia(urls: string[]): Promise<void> {
+  if (!Array.isArray(urls) || urls.length === 0) return;
+  const userId = await getAuthUserId();
+  if (!userId) return;
+  // Bound the work a single call can ask for: two full drafts' worth.
+  const candidates = urls
+    .filter((u) => typeof u === "string" && isAppStorageUrl(u))
+    .slice(0, 2 * 5);
+  if (candidates.length === 0) return;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("unreferenced_post_media", {
+    p_urls: candidates,
+  });
+  if (error) return;
+
+  const paths = postMediaPaths((data as string[] | null) ?? []);
+  if (paths.length === 0) return;
+  try {
+    await deleteObjects("post-media", paths);
+  } catch (e) {
+    console.error("[discardPostMedia] purge failed", { paths, error: e });
+  }
 }
 
 export type CommentAuthor = {

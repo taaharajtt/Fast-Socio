@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { storageLoader } from "@/lib/image-loader";
+import { squareStorageLoader, storageLoader } from "@/lib/image-loader";
 
 /** Once a src has finished loading in this tab, treat it as warm: skip the
  *  placeholder + fade entirely on any later mount of the same URL (revisited
@@ -47,6 +47,8 @@ export function AppImage({
   priority,
   fetchPriority,
   draggable,
+  fit,
+  square,
   onNaturalSize,
 }: {
   src: string;
@@ -60,6 +62,14 @@ export function AppImage({
    *  `priority` is set, otherwise left to the browser. */
   fetchPriority?: "high" | "low" | "auto";
   draggable?: boolean;
+  /** object-fit for the rendered image. Defaults to "cover"; a mixed-layout
+   *  carousel slide uses "contain" so the whole normalized image stays visible
+   *  and the container's own background provides the letterbox. */
+  fit?: "cover" | "contain";
+  /** Request a centre-cut 1:1 render from imgproxy instead of a width-fit one.
+   *  For strict square thumbnails, where fitting-then-cropping in CSS would
+   *  download pixels the box never shows. */
+  square?: boolean;
   /** Fires once, with the underlying <img>'s real pixel size, as it loads. */
   onNaturalSize?: (size: { width: number; height: number }) => void;
 }) {
@@ -81,7 +91,7 @@ export function AppImage({
         />
       )}
       <Image
-        loader={storageLoader}
+        loader={square ? squareStorageLoader : storageLoader}
         src={src}
         alt={alt}
         fill
@@ -101,7 +111,8 @@ export function AppImage({
           }
         }}
         className={cn(
-          "object-cover transition-opacity",
+          fit === "contain" ? "object-contain" : "object-cover",
+          "transition-opacity",
           loaded ? "duration-0 opacity-100" : "duration-150 opacity-0",
           className
         )}

@@ -160,9 +160,34 @@ export function exportSize(sw: number, sh: number): Size {
 }
 
 /**
+ * Nearest ratio to `ratio` among an explicit option list, compared on a LOG
+ * scale so the neighbours of 1:1 are symmetric (see lib/feed/media).
+ *
+ * Used when a caller supplies its own ratio set — post media offers 1:1 / 16:9
+ * / 9:16, which the threshold-based `detectAspectRatio` above does not model
+ * (it exists for the chat surfaces' 16:9 / 1:1 / 3:4 set and is left alone).
+ */
+export function nearestRatioFrom(
+  options: readonly { value: number }[],
+  ratio: number
+): number {
+  if (options.length === 0) return ASPECT_RATIOS.square;
+  if (!Number.isFinite(ratio) || ratio <= 0) return options[0].value;
+  return options.reduce((best, opt) =>
+    Math.abs(Math.log(ratio / opt.value)) < Math.abs(Math.log(ratio / best.value))
+      ? opt
+      : best
+  ).value;
+}
+
+/**
  * Draw the framed region to a canvas and encode it. PNG sources with alpha are
  * kept as PNG; everything else becomes JPEG, which is dramatically smaller for
  * photographs.
+ *
+ * Returns the exported pixel size alongside the blob: a media post persists the
+ * dimensions it uploaded, so the feed can size the carousel viewport before the
+ * image loads instead of measuring it afterwards.
  */
 export async function renderCrop(
   image: CanvasImageSource,
@@ -170,7 +195,7 @@ export async function renderCrop(
   frame: Size,
   scale: number,
   mimeType: string
-): Promise<Blob> {
+): Promise<{ blob: Blob; width: number; height: number }> {
   const { sx, sy, sw, sh } = sourceRect(offset, frame, scale);
   const out = exportSize(sw, sh);
 
@@ -187,7 +212,7 @@ export async function renderCrop(
     canvas.toBlob(resolve, type, 0.9)
   );
   if (!blob) throw new Error("Could not process the image.");
-  return blob;
+  return { blob, width: out.width, height: out.height };
 }
 
 /** File extension matching what renderCrop() will emit for `mimeType`. */

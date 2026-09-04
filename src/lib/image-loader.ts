@@ -51,3 +51,32 @@ export function storageLoader({
   // object-fit. The trailing :0 disables enlargement past the original.
   return `${IMGPROXY}/insecure/rs:fit:${width}:0:0/q:${quality ?? 70}/plain/${encodeURIComponent(plain)}`;
 }
+
+/**
+ * Loader for a strict 1:1 thumbnail: a centre-cut square of the source.
+ *
+ * `rs:fill` crops to fill the box rather than fitting inside it, and `g:ce`
+ * pins the crop to the centre — the "Slide 1, centre square" rule that every
+ * square post thumbnail follows, produced on demand instead of stored as a
+ * second permanent asset.
+ *
+ * It goes through `toPlainSource` for the same reason `storageLoader` does: a
+ * src that has already been through imgproxy is decoded back to the plain
+ * object URL first, so the square crop is applied exactly once and never
+ * layered on top of an earlier `rs:fit` (which would fit-then-crop and lose the
+ * edges twice over).
+ */
+export function squareStorageLoader({
+  src,
+  width,
+  quality,
+}: {
+  src: string;
+  width: number;
+  quality?: number;
+}): string {
+  if (!IMGPROXY) return src;
+  const plain = toPlainSource(src);
+  if (!plain) return src;
+  return `${IMGPROXY}/insecure/rs:fill:${width}:${width}:0/g:ce/q:${quality ?? 70}/plain/${encodeURIComponent(plain)}`;
+}

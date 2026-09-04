@@ -28,6 +28,14 @@ export type FeedPost = {
   author_verified?: boolean | null;
   /** Set once the author edits this post's text (fix-009); null if untouched. */
   edited_at?: string | null;
+  /** Post-level carousel layout: "uniform" (slide 1 sets the viewport ratio) or
+   *  "mixed" (square viewport, every slide contained). Absent on legacy rows. */
+  carousel_layout?: string | null;
+  /** Ordered media rows, aggregated by the feed_posts view so a feed page never
+   *  runs one query per post. `[]` for text/poll posts and for every legacy
+   *  single-image post, which still renders from `image_url`. Run it through
+   *  `normalizePostMedia` before rendering. */
+  media?: unknown;
 };
 
 /**
@@ -44,4 +52,4 @@ export type FeedPost = {
 // Kept as one literal (rather than a joined array) so PostgREST's types can
 // still infer the row shape from it at each call site.
 // prettier-ignore
-export const FEED_COLUMNS = "id, body, image_url, is_anonymous, like_count, comment_count, created_at, author_id, author_name, author_avatar, author_gender, author_department, author_verified, liked_by_me, poll_id, edited_at" as const;
+export const FEED_COLUMNS = "id, body, image_url, is_anonymous, like_count, comment_count, created_at, author_id, author_name, author_avatar, author_gender, author_department, author_verified, liked_by_me, poll_id, edited_at, carousel_layout, media" as const;

@@ -6,11 +6,15 @@ import { GlassCard } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
 import { moderateCommunityPost } from "@/app/(student)/communities/actions";
 import { resolveAvatarUrl } from "@/lib/avatar";
+import { coverMedia, normalizePostMedia } from "@/lib/feed/media";
 
 export type PendingPost = {
   id: string;
   body: string | null;
   image_url: string | null;
+  /** Ordered carousel media. The queue shows slide 1 only — a moderator is
+   *  triaging, and the cover is what identifies the post. */
+  media?: unknown;
   is_anonymous: boolean;
   author_name: string | null;
   author_avatar: string | null;
@@ -21,6 +25,7 @@ export function ReviewPostRow({ post }: { post: PendingPost }) {
   const [done, setDone] = useState<"approved" | "rejected" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const cover = coverMedia(normalizePostMedia(post.media), post.image_url);
 
   function act(approve: boolean) {
     setError(null);
@@ -63,12 +68,15 @@ export function ReviewPostRow({ post }: { post: PendingPost }) {
       {post.body && (
         <p className="mt-3 whitespace-pre-wrap text-[15px]">{post.body}</p>
       )}
-      {post.image_url && (
+      {cover && (
         <div className="relative mt-3 aspect-square w-full overflow-hidden rounded-2xl">
+          {/* Slide 1, centre-cut square — the same cover rule every square post
+              thumbnail in the app follows. */}
           <AppImage
-            src={post.image_url}
+            src={cover}
             alt="Pending post"
             sizes="(max-width: 448px) 100vw, 448px"
+            square
           />
         </div>
       )}

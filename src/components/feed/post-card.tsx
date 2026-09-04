@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useRef, useState } from "react";
+import { memo, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -35,6 +35,12 @@ import { timeAgo, absoluteTime } from "@/lib/time";
 import { AppImage } from "@/components/ui/app-image";
 import { resolveAvatarUrl } from "@/lib/avatar";
 import { ASPECT_RATIOS, nearestAspectRatio } from "@/lib/crop";
+import { PostMediaCarousel } from "@/components/feed/post-media-carousel";
+import {
+  isCarouselLayout,
+  normalizePostMedia,
+  DEFAULT_CAROUSEL_LAYOUT,
+} from "@/lib/feed/media";
 import type { FeedPost } from "@/lib/feed/types";
 
 const REPORT_REASONS = [
@@ -84,9 +90,16 @@ function PostCardImpl({
   // Heart-burst overlay: bumping the key remounts the <Heart> and replays the
   // animation, so rapid double-taps each get their own burst.
   const [burstKey, setBurstKey] = useState(0);
-  // Cropping always exports exactly one of the 3 standard ratios; snap the
-  // measured natural size to the nearest so a rounding pixel can't wobble it.
+  // LEGACY single-image posts only (see below): cropping always exported one of
+  // the 3 standard ratios, so snap the measured natural size to the nearest and
+  // a rounding pixel can't wobble it.
   const [imageAspect, setImageAspect] = useState<number>(ASPECT_RATIOS.square);
+  // Ordered carousel media, aggregated by the feed_posts view. Empty for text,
+  // poll and legacy single-image posts.
+  const media = useMemo(() => normalizePostMedia(post.media), [post.media]);
+  const layout = isCarouselLayout(post.carousel_layout)
+    ? post.carousel_layout
+    : DEFAULT_CAROUSEL_LAYOUT;
   const lastTap = useRef(0);
   // UAT-001: an anonymous post reads as Anonymous for everyone — including its
   // own author — so a poster never sees their own name/avatar on it.
@@ -294,22 +307,33 @@ function PostCardImpl({
           </p>
         )
       )}
-      {post.image_url && (
-        <div
-          className="relative mt-3 w-full overflow-hidden rounded-[14px]"
-          style={{ aspectRatio: imageAspect }}
-        >
-          <AppImage
-            src={post.image_url}
-            alt="Post image"
-            sizes="(max-width: 448px) 100vw, 448px"
-            draggable={false}
-            priority={priority}
-            onNaturalSize={(size) =>
-              setImageAspect(nearestAspectRatio(size.width / size.height))
-            }
-          />
-        </div>
+      {media.length > 0 ? (
+        <PostMediaCarousel media={media} layout={layout} priority={priority} />
+      ) : (
+        post.image_url && (
+          /*
+            LEGACY PATH — posts created before migration 0180, which have an
+            image_url but no post_media rows and therefore no stored ratio. The
+            container has to be measured from the decoded image, exactly as it
+            always was. New posts never come through here; they know their
+            geometry before paint.
+          */
+          <div
+            className="relative mt-3 w-full overflow-hidden rounded-[14px]"
+            style={{ aspectRatio: imageAspect }}
+          >
+            <AppImage
+              src={post.image_url}
+              alt="Post image"
+              sizes="(max-width: 448px) 100vw, 448px"
+              draggable={false}
+              priority={priority}
+              onNaturalSize={(size) =>
+                setImageAspect(nearestAspectRatio(size.width / size.height))
+              }
+            />
+          </div>
+        )
       )}
       {post.poll_id && <PostPoll pollId={post.poll_id} />}
 

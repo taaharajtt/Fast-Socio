@@ -188,13 +188,14 @@ async function ConversationPageBody({
     const { data: preRows } = await supabase
       .from("feed_posts")
       .select(
-        "id, body, image_url, is_anonymous, author_name, author_avatar, author_gender, like_count, comment_count"
+        "id, body, image_url, media, is_anonymous, author_name, author_avatar, author_gender, like_count, comment_count"
       )
       .in("id", sharedIds);
     (preRows ?? []).forEach((p) => {
       sharedPosts[p.id] = {
         body: p.body,
         image_url: p.image_url,
+        media: p.media,
         is_anonymous: p.is_anonymous,
         author_name: p.author_name,
         author_avatar: p.author_avatar,

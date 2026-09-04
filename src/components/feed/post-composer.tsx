@@ -3,10 +3,16 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
+  ArrowLeft,
+  ArrowRight,
   BarChart3,
+  Crop,
   ImagePlus,
   Loader2,
+  Maximize2,
   Plus,
+  RefreshCw,
+  Trash2,
   VenetianMask,
   X,
 } from "lucide-react";
@@ -19,10 +25,37 @@ import {
 import { ImageCropper, type CropResult } from "@/components/ui/image-cropper";
 import { UploadProgressBar } from "@/components/ui/upload-progress";
 import { uploadWithProgress, publicStorageUrl } from "@/lib/storage-upload";
-import { createClient } from "@/lib/supabase/client";
-import { createPost } from "@/app/(student)/home/actions";
+import { useObjectUrl } from "@/lib/use-object-url";
+import { cn } from "@/lib/utils";
+import { createPost, discardPostMedia } from "@/app/(student)/home/actions";
 import { MentionMenu } from "@/components/feed/mention-menu";
 import { useMentionAutocomplete } from "@/components/feed/use-mention-autocomplete";
+import {
+  ASPECT_VALUE,
+  DEFAULT_CAROUSEL_LAYOUT,
+  MAX_POST_MEDIA,
+  MEDIA_ASPECT_OPTIONS,
+  nearestMediaAspect,
+  slideFit,
+  slideLabel,
+  viewportAspect,
+  type CarouselLayout,
+  type PostMedia,
+} from "@/lib/feed/media";
+import {
+  acceptFiles,
+  aggregateProgress,
+  canPublish,
+  moveItem,
+  removeAt,
+  replaceAt,
+  toMediaInput,
+  uploadedUrls,
+  type DraftMediaItem,
+} from "@/lib/feed/draft-media";
+
+/** One file waiting for the crop dialog. `replaceId` re-crops an existing slide. */
+type CropJob = { file: File; replaceId: string | null };
 
 export function PostComposer({
   communityId,
@@ -42,13 +75,22 @@ export function PostComposer({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [body, setBody] = useState("");
   const [anon, setAnon] = useState(false);
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
+
+  // ORDERED DRAFT MEDIA (0180). The composer used to hold `imageUrl` +
+  // `pendingFile`, which can only ever describe one image in one state — no
+  // ordering, no per-item progress, no per-item error. A carousel needs all of
+  // those, so the draft is a list and every item owns its own lifecycle.
+  const [media, setMedia] = useState<DraftMediaItem[]>([]);
+  const [layout, setLayout] = useState<CarouselLayout>(DEFAULT_CAROUSEL_LAYOUT);
+  const [active, setActive] = useState(0);
+  // Files still to be cropped, oldest first. The head of this queue IS the
+  // cropper's current file — there is no second "which file is open" state to
+  // fall out of step with it.
+  const [cropQueue, setCropQueue] = useState<CropJob[]>([]);
+
   // Poll builder: when non-null, this post carries a poll and the textarea is
   // the question. Starts with two blank options; up to six.
   const [pollOptions, setPollOptions] = useState<string[] | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [uploadPct, setUploadPct] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -58,21 +100,161 @@ export function PostComposer({
   // confirmed picks serialise into mention tokens at submit.
   const mention = useMentionAutocomplete(body, setBody, textareaRef);
 
-  function onPickImage(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    setError(null);
-    setPendingFile(file);
+  const uploading = media.some((m) => m.status === "uploading");
+  const currentJob = cropQueue[0] ?? null;
+  const activeItem = media[Math.min(active, Math.max(media.length - 1, 0))];
+
+  /** Patch one draft item by id; every async upload callback goes through this
+   *  so a reorder or a removal mid-upload can never write to the wrong slide. */
+  function patchItem(id: string, patch: Partial<DraftMediaItem>) {
+    setMedia((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
   }
 
-  // A poll and an image are mutually exclusive, so toggling one clears the other.
+  function onPickImages(e: React.ChangeEvent<HTMLInputElement>) {
+    const picked = Array.from(e.target.files ?? []).filter((f) =>
+      f.type.startsWith("image/")
+    );
+    // Clear the input immediately: the same file picked twice in a row must
+    // still fire a change event, and this is also what stops a stray re-submit
+    // of the previous selection.
+    e.target.value = "";
+    if (picked.length === 0) return;
+    setError(null);
+    setNotice(null);
+
+    // Capacity counts what is already in the draft AND what is still queued for
+    // cropping, so pressing the image action three times can't overshoot.
+    const held = media.length + cropQueue.filter((j) => !j.replaceId).length;
+    const { accepted, message } = acceptFiles(held, picked);
+    if (message) setNotice(message);
+    if (accepted.length === 0) return;
+    setCropQueue((prev) => [
+      ...prev,
+      ...accepted.map((file) => ({ file, replaceId: null })),
+    ]);
+  }
+
+  /** Re-crop an existing slide: jumps the queue so it opens immediately. */
+  function recrop(item: DraftMediaItem) {
+    setError(null);
+    setCropQueue((prev) => [{ file: item.file, replaceId: item.id }, ...prev]);
+  }
+
+  function dropCurrentJob() {
+    setCropQueue((prev) => prev.slice(1));
+  }
+
+  /**
+   * A confirmed crop. The blob is held locally and uploaded straight away, so
+   * pressing Post later is instant — but the upload starts only once the user
+   * has CONFIRMED the crop, never merely because the picker changed.
+   */
+  function onCropped(job: CropJob, result: CropResult) {
+    dropCurrentJob();
+    setError(null);
+    const { blob, extension, mimeType, width, height } = result;
+    const id = job.replaceId ?? crypto.randomUUID();
+    const item: DraftMediaItem = {
+      id,
+      file: job.file,
+      blob,
+      extension,
+      mimeType,
+      // The crop frame WAS one of the three ratios, so this snaps the exported
+      // pixel size back onto the label it was cut to.
+      aspect: nearestMediaAspect(width / height),
+      width,
+      height,
+      status: "ready",
+      progress: 0,
+      url: null,
+      error: null,
+    };
+
+    // Computed from the current render's state rather than inside the updater:
+    // a state updater must stay pure, and React may run it twice.
+    const index = job.replaceId
+      ? media.findIndex((m) => m.id === job.replaceId)
+      : -1;
+    setMedia((prev) => {
+      const i = job.replaceId ? prev.findIndex((m) => m.id === job.replaceId) : -1;
+      return i === -1 ? [...prev, item] : replaceAt(prev, i, item);
+    });
+    setActive(index === -1 ? media.length : index);
+
+    // The slide that was just replaced had already been stored; nothing points
+    // at those bytes any more.
+    const replacedUrl = index === -1 ? null : media[index].url;
+    if (replacedUrl) void discardPostMedia([replacedUrl]);
+
+    void upload(id, blob, extension, mimeType);
+  }
+
+  async function upload(
+    id: string,
+    blob: Blob,
+    extension: string,
+    mimeType: string
+  ) {
+    patchItem(id, { status: "uploading", progress: 0, error: null });
+    // De-identified path (P3-01): never embed the author's uid in a post image
+    // URL, otherwise anonymous posts leak their author. `shared/` is allowed by
+    // the post-media upload policy; the object key is random.
+    const path = `shared/${crypto.randomUUID()}.${extension}`;
+    try {
+      await uploadWithProgress("post-media", path, blob, {
+        contentType: mimeType,
+        onProgress: (p) => patchItem(id, { progress: p.percent }),
+      });
+      // The blob is dropped once the bytes are stored: the preview switches to
+      // the stored URL, and a five-image draft stops pinning ~10MB of memory.
+      patchItem(id, {
+        status: "uploaded",
+        progress: 100,
+        url: publicStorageUrl("post-media", path),
+        blob: null,
+      });
+    } catch (e) {
+      patchItem(id, { status: "error", error: (e as Error).message });
+    }
+  }
+
+  /** Retry a slide whose upload failed. The blob never left the device. */
+  function retry(item: DraftMediaItem) {
+    if (!item.blob) return;
+    void upload(item.id, item.blob, item.extension, item.mimeType);
+  }
+
+  function removeSlide(index: number) {
+    const gone = media[index];
+    const next = removeAt(media, index);
+    setMedia(next);
+    setActive(Math.max(0, Math.min(active, next.length - 1)));
+    if (gone?.url) void discardPostMedia([gone.url]);
+  }
+
+  function move(index: number, delta: number) {
+    const to = index + delta;
+    if (to < 0 || to >= media.length) return;
+    setMedia((prev) => moveItem(prev, index, to));
+    setActive(to);
+  }
+
+  /** Drop the whole draft's media and purge anything already stored. */
+  function clearMedia() {
+    const orphans = uploadedUrls(media);
+    setMedia([]);
+    setActive(0);
+    setCropQueue([]);
+    if (orphans.length > 0) void discardPostMedia(orphans);
+  }
+
+  // A poll and images are mutually exclusive, so toggling one clears the other.
   function togglePoll() {
     setError(null);
     setPollOptions((prev) => {
       if (prev) return null;
-      setImageUrl(null);
-      setPendingFile(null);
+      clearMedia();
       return ["", ""];
     });
   }
@@ -91,53 +273,32 @@ export function PostComposer({
     );
   }
 
-  /** Upload the cropped result (UAT-008); the original never leaves the device. */
-  async function onCropped({ blob, extension, mimeType }: CropResult) {
-    setPendingFile(null);
-    setError(null);
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-    // De-identified path (P3-01): never embed the author's uid in a post image
-    // URL, otherwise anonymous posts leak their author. `shared/` is allowed by
-    // the post-media INSERT policy; the object key is random.
-    const path = `shared/${crypto.randomUUID()}.${extension}`;
-    setUploading(true);
-    setUploadPct(0);
-    try {
-      await uploadWithProgress("post-media", path, blob, {
-        contentType: mimeType,
-        onProgress: (p) => setUploadPct(p.percent),
-      });
-      setImageUrl(publicStorageUrl("post-media", path));
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setUploading(false);
-    }
-  }
-
   function submit() {
     setError(null);
     setNotice(null);
+    const payload = toMediaInput(media);
     start(async () => {
       const res = await createPost({
         body: mention.serialize(body),
-        imageUrl,
         isAnonymous: anon,
         communityId,
         pollOptions,
+        media: payload,
+        carouselLayout: layout,
       });
       if (!res.ok) {
+        // The draft is KEPT so the user can fix and retry; nothing they cropped
+        // is thrown away because the create failed.
         setError(res.error);
         return;
       }
       setBody("");
       mention.reset();
       setAnon(false);
-      setImageUrl(null);
+      setMedia([]);
+      setActive(0);
+      setCropQueue([]);
+      setLayout(DEFAULT_CAROUSEL_LAYOUT);
       setPollOptions(null);
       if (reviewNotice) setNotice(reviewNotice);
       // UAT-007: pull the freshly-created post into the feed automatically.
@@ -146,16 +307,35 @@ export function PostComposer({
     });
   }
 
-  // A poll needs a question plus at least two filled options; a normal post
-  // needs text or an image.
-  const pollReady =
-    !!pollOptions &&
-    body.trim().length > 0 &&
-    pollOptions.map((o) => o.trim()).filter(Boolean).length >= 2;
-  const disabled =
-    pending ||
-    uploading ||
-    (pollOptions ? !pollReady : body.trim().length === 0 && !imageUrl);
+  const publishable = canPublish({
+    body,
+    media,
+    pollOptions,
+    busy: pending || uploading || cropQueue.length > 0,
+  });
+
+  // The composer previews the EXACT viewport the feed will use, from the stored
+  // ratios — not from the images' natural sizes.
+  const previewMedia: PostMedia[] = media.map((m) => ({
+    url: m.url ?? "",
+    aspect: m.aspect,
+    width: m.width,
+    height: m.height,
+  }));
+  const previewAspect = viewportAspect(previewMedia, layout);
+  const fit = slideFit(layout);
+
+  // "Photo 2 of 4" while working through a multi-file pick.
+  const cropSubtitle = (() => {
+    if (!currentJob) return undefined;
+    if (currentJob.replaceId) {
+      const index = media.findIndex((m) => m.id === currentJob.replaceId);
+      return index === -1 ? undefined : `Re-cropping ${slideLabel(index, media.length)}`;
+    }
+    const queued = cropQueue.filter((j) => !j.replaceId).length;
+    const total = media.length + queued;
+    return total > 1 ? `Photo ${media.length + 1} of ${total}` : undefined;
+  })();
 
   return (
     <GlassCard className="relative overflow-hidden p-4">
@@ -229,48 +409,180 @@ export function PostComposer({
         </div>
       )}
 
-      {uploading && (
-        <div className="mt-2 rounded-xl bg-bg-elevated px-4 py-3">
-          <UploadProgressBar percent={uploadPct} label="Uploading image" />
+      {media.length > 0 && activeItem && (
+        <div className="mt-3">
+          {/* PRIMARY PREVIEW — the real viewport, at the real ratio. Slide 1
+              governs it in uniform mode, so reordering visibly changes the
+              whole post's shape here before anything is published. */}
+          <div
+            className={cn(
+              "relative w-full overflow-hidden rounded-[14px]",
+              layout === "mixed" ? "bg-bg" : "bg-bg-elevated"
+            )}
+            style={{ aspectRatio: previewAspect }}
+          >
+            <DraftPreview item={activeItem} fit={fit} />
+
+            {/* Pinned to the TOP of the preview so it never sits under the
+                format toggle in the bottom-left corner. */}
+            {activeItem.status === "uploading" && (
+              <div className="absolute inset-x-0 top-0 p-2">
+                <UploadProgressBar
+                  percent={activeItem.progress}
+                  label={`Uploading ${slideLabel(active, media.length)}`}
+                />
+              </div>
+            )}
+            {activeItem.status === "error" && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/55 px-4 text-center">
+                <p className="text-sm font-medium text-white">
+                  That photo didn&rsquo;t upload.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => retry(activeItem)}
+                  className="focus-ring flex items-center gap-1.5 rounded-full bg-white/15 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  <RefreshCw className="h-4 w-4" aria-hidden />
+                  Try again
+                </button>
+              </div>
+            )}
+
+            {/* FORMAT TOGGLE — bottom-left of the primary preview, and it
+                governs the WHOLE post, not this slide. */}
+            <button
+              type="button"
+              onClick={() =>
+                setLayout((l) => (l === "uniform" ? "mixed" : "uniform"))
+              }
+              aria-pressed={layout === "mixed"}
+              aria-label={
+                layout === "mixed"
+                  ? "Full image layout — every photo shown whole on a square canvas. Switch to uniform crop."
+                  : "Uniform crop — every photo cropped to the first photo's shape. Switch to full image."
+              }
+              title={
+                layout === "mixed"
+                  ? "Every photo is shown whole on a square canvas"
+                  : "Every photo is cropped to the first photo's shape"
+              }
+              className="focus-ring absolute bottom-2 left-2 flex h-9 items-center gap-1.5 rounded-full bg-black/45 px-3 text-xs font-semibold text-white backdrop-blur-sm"
+            >
+              {layout === "mixed" ? (
+                <Maximize2 className="h-4 w-4" aria-hidden />
+              ) : (
+                <Crop className="h-4 w-4" aria-hidden />
+              )}
+              {layout === "mixed" ? "Full image" : "Uniform crop"}
+            </button>
+
+            {media.length > 1 && (
+              <span className="absolute right-2 top-2 rounded-full bg-black/45 px-2 py-1 text-[11px] font-semibold text-white backdrop-blur-sm">
+                {active + 1}/{media.length}
+              </span>
+            )}
+          </div>
+
+          {/* FILMSTRIP — tap to make a slide active. Reordering is done with the
+              explicit buttons below rather than HTML drag-and-drop, which does
+              not exist on touch. */}
+          {media.length > 1 && (
+            <div
+              role="listbox"
+              aria-label="Photos in this post"
+              aria-orientation="horizontal"
+              className="no-scrollbar mt-2 flex gap-2 overflow-x-auto overscroll-x-contain pb-1"
+            >
+              {media.map((item, index) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="option"
+                  aria-selected={index === active}
+                  aria-label={slideLabel(index, media.length)}
+                  onClick={() => setActive(index)}
+                  className={cn(
+                    "relative h-14 w-14 shrink-0 overflow-hidden rounded-[10px] bg-bg-elevated",
+                    index === active
+                      ? "ring-2 ring-accent"
+                      : "opacity-70 ring-1 ring-glass-border"
+                  )}
+                >
+                  <DraftPreview item={item} fit="cover" />
+                  {item.status === "error" && (
+                    <span className="absolute inset-0 bg-error/40" aria-hidden />
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Per-slide controls, all keyboard- and touch-reachable. */}
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            {media.length > 1 && (
+              <>
+                <SlideControl
+                  icon={ArrowLeft}
+                  label="Move left"
+                  disabled={active === 0}
+                  onClick={() => move(active, -1)}
+                />
+                <SlideControl
+                  icon={ArrowRight}
+                  label="Move right"
+                  disabled={active === media.length - 1}
+                  onClick={() => move(active, 1)}
+                />
+              </>
+            )}
+            <SlideControl
+              icon={Crop}
+              label="Re-crop"
+              onClick={() => recrop(activeItem)}
+            />
+            <SlideControl
+              icon={Trash2}
+              label="Remove"
+              tone="danger"
+              onClick={() => removeSlide(active)}
+            />
+            {media.length < MAX_POST_MEDIA && (
+              <SlideControl
+                icon={Plus}
+                label="Add photos"
+                onClick={() => fileRef.current?.click()}
+              />
+            )}
+            <span className="type-caption ml-auto text-fg-muted">
+              {media.length}/{MAX_POST_MEDIA}
+            </span>
+          </div>
+
+          {uploading && (
+            <div className="mt-2 rounded-xl bg-bg-elevated px-4 py-3">
+              <UploadProgressBar
+                percent={aggregateProgress(media)}
+                label={
+                  media.length > 1 ? "Uploading photos" : "Uploading photo"
+                }
+              />
+            </div>
+          )}
         </div>
       )}
 
-      {imageUrl && !uploading && (
-        <div className="relative mt-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={imageUrl}
-            alt="Selected"
-            className="max-h-72 w-full rounded-xl object-cover"
-            loading="lazy"
-            decoding="async"
-          />
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            className="glass-strong absolute bottom-2 right-2 rounded-full px-3 py-1.5 text-xs font-semibold"
-          >
-            Recrop
-          </button>
-          <button
-            type="button"
-            aria-label="Remove image"
-            onClick={() => setImageUrl(null)}
-            className="glass-strong absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full"
-          >
-            <X className="h-4 w-4" aria-hidden />
-          </button>
-        </div>
-      )}
-
-      {pendingFile && (
+      {currentJob && (
         <ImageCropper
-          file={pendingFile}
-          aspect={1}
+          key={`${currentJob.replaceId ?? "new"}-${currentJob.file.name}-${currentJob.file.lastModified}`}
+          file={currentJob.file}
+          aspect={ASPECT_VALUE["1:1"]}
           aspectOptions
+          ratios={MEDIA_ASPECT_OPTIONS}
           title="Crop photo"
-          onCancel={() => setPendingFile(null)}
-          onCropped={onCropped}
+          subtitle={cropSubtitle}
+          onCancel={dropCurrentJob}
+          onCropped={(result) => onCropped(currentJob, result)}
         />
       )}
 
@@ -288,15 +600,18 @@ export function PostComposer({
           ref={fileRef}
           type="file"
           accept="image/*"
+          // A post can hold up to five images, so the picker lets the user grab
+          // them in one go; pressing the action again appends more.
+          multiple
           hidden
-          onChange={onPickImage}
+          onChange={onPickImages}
         />
         {!pollOptions && (
           <ComposerAction
             icon={ImagePlus}
             label="Image"
             onClick={() => fileRef.current?.click()}
-            disabled={uploading}
+            disabled={media.length >= MAX_POST_MEDIA}
           />
         )}
         <ComposerAction
@@ -322,7 +637,7 @@ export function PostComposer({
           variant="brand"
           className="shrink-0"
           onClick={submit}
-          disabled={disabled}
+          disabled={!publishable}
         >
           {pending ? "Posting…" : uploading ? "Uploading…" : "Post"}
         </GlassButton>
@@ -364,5 +679,70 @@ export function PostComposer({
         </p>
       )}
     </GlassCard>
+  );
+}
+
+/**
+ * One draft slide's preview.
+ *
+ * Before the upload finishes the source is the local blob, afterwards the
+ * stored URL — so the picture on screen is always the thing that will actually
+ * be posted. The object URL comes from `useObjectUrl`, which binds its lifetime
+ * to the blob inside a single effect and therefore survives Strict Mode's
+ * double-invoke instead of leaving the preview pointed at a revoked blob.
+ */
+function DraftPreview({
+  item,
+  fit,
+}: {
+  item: DraftMediaItem;
+  fit: "cover" | "contain";
+}) {
+  const localUrl = useObjectUrl(item.blob);
+  const src = localUrl ?? item.url;
+  if (!src) return null;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- a blob: preview has no remote loader to route through
+    <img
+      src={src}
+      alt=""
+      draggable={false}
+      className={cn(
+        "absolute inset-0 h-full w-full",
+        fit === "contain" ? "object-contain" : "object-cover"
+      )}
+      decoding="async"
+    />
+  );
+}
+
+/** A small labelled control in the slide toolbar. 36px tall, real hit area. */
+function SlideControl({
+  icon: Icon,
+  label,
+  onClick,
+  disabled,
+  tone,
+}: {
+  icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  tone?: "danger";
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "pressable focus-ring flex h-9 items-center gap-1.5 rounded-[10px] px-2.5",
+        "type-caption font-medium disabled:opacity-40",
+        tone === "danger" ? "text-error" : "text-fg-muted hover:text-fg"
+      )}
+    >
+      <Icon className="h-4 w-4 shrink-0" aria-hidden />
+      {label}
+    </button>
   );
 }

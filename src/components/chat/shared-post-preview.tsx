@@ -4,10 +4,14 @@ import Link from "next/link";
 import { AppImage } from "@/components/ui/app-image";
 import { cn } from "@/lib/utils";
 import { resolveAvatarUrl } from "@/lib/avatar";
+import { coverMedia, normalizePostMedia } from "@/lib/feed/media";
 
 export type SharedPostPreview = {
   body: string | null;
   image_url: string | null;
+  /** Ordered carousel media from feed_posts. Only slide 1 is ever shown here —
+   *  a shared post is a compact card, and the cover is always slide 1. */
+  media?: unknown;
   author_name: string | null;
   author_avatar: string | null;
   author_gender?: string | null;
@@ -53,6 +57,9 @@ export function SharedPostCard({
   const author = preview.is_anonymous
     ? "Anonymous"
     : (preview.author_name ?? "Student");
+  // Slide 1 is the cover for every compact surface; `image_url` is the fallback
+  // for posts created before carousels existed.
+  const cover = coverMedia(normalizePostMedia(preview.media), preview.image_url);
 
   return (
     <Link
@@ -92,9 +99,11 @@ export function SharedPostCard({
         </span>
       </div>
 
-      {preview.image_url && (
-        <div className="relative aspect-[4/3] w-full">
-          <AppImage src={preview.image_url} alt="" sizes="240px" />
+      {cover && (
+        <div className="relative aspect-square w-full">
+          {/* Slide 1, centre-cut to a square by imgproxy — never a later slide,
+              and never the mixed-layout letterboxing. */}
+          <AppImage src={cover} alt="" sizes="240px" square />
         </div>
       )}
 

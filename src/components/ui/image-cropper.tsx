@@ -12,13 +12,22 @@ import {
   coverScale,
   croppedExtension,
   detectAspectRatio,
+  nearestRatioFrom,
   reconcileView,
   renderCrop,
   type Offset,
   type Size,
 } from "@/lib/crop";
 
-export type CropResult = { blob: Blob; extension: string; mimeType: string };
+export type CropResult = {
+  blob: Blob;
+  extension: string;
+  mimeType: string;
+  /** Exported pixel size. Post media persists these so the feed can reserve the
+   *  right box before the image loads; other callers may ignore them. */
+  width: number;
+  height: number;
+};
 
 /**
  * Full-screen crop dialog (UAT-008). Drag to reposition, pinch / scroll /
@@ -32,7 +41,9 @@ export function ImageCropper({
   file,
   aspect,
   aspectOptions,
+  ratios,
   title = "Crop photo",
+  subtitle,
   round = false,
   onCancel,
   onCropped,
@@ -45,7 +56,16 @@ export function ImageCropper({
    * `aspect` automatically once the image's natural size is known.
    */
   aspectOptions?: boolean;
+  /**
+   * Overrides the ratio set offered when `aspectOptions` is on, and switches
+   * auto-selection to "nearest of these" instead of the chat-surface
+   * thresholds. Post media passes its own three ratios (1:1 / 16:9 / 9:16);
+   * every other caller keeps the existing 16:9 / 1:1 / 3:4 set untouched.
+   */
+  ratios?: readonly { label: string; value: number }[];
   title?: string;
+  /** Small line under the title — the composer uses it for "Photo 2 of 4". */
+  subtitle?: string;
   /** Draw the frame as a circle (avatars). The export is still the square crop. */
   round?: boolean;
   onCancel: () => void;
@@ -105,6 +125,18 @@ export function ImageCropper({
     return () => window.removeEventListener("resize", measure);
   }, [selectedAspect]);
 
+  const ratioOptions = ratios ?? ASPECT_RATIO_OPTIONS;
+  // With a caller-supplied ratio set, a source that is not already one of those
+  // ratios (4:3, 3:2, 21:9, most screenshots) will lose real pixels. Say so
+  // before the user presses Done, rather than after.
+  const sourceNeedsCrop =
+    !!ratios &&
+    !!natural &&
+    natural.height > 0 &&
+    !ratios.some(
+      (o) =>
+        Math.abs(Math.log(natural.width / natural.height / o.value)) <= 0.02
+    );
   const base = natural && frame.width ? coverScale(natural, frame) : 1;
   const scale = base * zoom;
 
@@ -232,11 +264,19 @@ export function ImageCropper({
     setBusy(true);
     setError(null);
     try {
-      const blob = await renderCrop(image, offset, frame, scale, file.type);
+      const { blob, width, height } = await renderCrop(
+        image,
+        offset,
+        frame,
+        scale,
+        file.type
+      );
       onCropped({
         blob,
         extension: croppedExtension(file.type),
         mimeType: blob.type,
+        width,
+        height,
       });
     } catch (err) {
       setError((err as Error).message);
@@ -260,7 +300,12 @@ export function ImageCropper({
         >
           Cancel
         </button>
-        <p className="text-sm font-semibold text-white">{title}</p>
+        <div className="min-w-0 text-center">
+          <p className="text-sm font-semibold text-white">{title}</p>
+          {subtitle && (
+            <p className="text-[11px] text-white/50">{subtitle}</p>
+          )}
+        </div>
         <button
           type="button"
           onClick={confirm}
@@ -274,7 +319,7 @@ export function ImageCropper({
 
       {aspectOptions && (
         <div className="flex shrink-0 items-center justify-center gap-2 pb-3">
-          {ASPECT_RATIO_OPTIONS.map((opt) => (
+          {ratioOptions.map((opt) => (
             <button
               key={opt.label}
               type="button"
@@ -290,6 +335,13 @@ export function ImageCropper({
             </button>
           ))}
         </div>
+      )}
+
+      {sourceNeedsCrop && (
+        <p role="status" className="shrink-0 px-6 pb-3 text-center text-[11px] text-white/50">
+          This photo isn&rsquo;t {ratioOptions.map((o) => o.label).join(" / ")} —
+          adjust the crop, then confirm.
+        </p>
       )}
 
       <div className="flex flex-1 items-center justify-center overflow-hidden">
@@ -316,7 +368,16 @@ export function ImageCropper({
                 const w = e.currentTarget.naturalWidth;
                 const h = e.currentTarget.naturalHeight;
                 if (w > 0 && h > 0) {
-                  if (aspectOptions) setSelectedAspect(detectAspectRatio({ width: w, height: h }));
+                  if (aspectOptions) {
+                    // With a caller-supplied ratio set, "auto" means the
+                    // nearest of THOSE ratios; otherwise keep the chat
+                    // surfaces' existing threshold behaviour untouched.
+                    setSelectedAspect(
+                      ratios
+                        ? nearestRatioFrom(ratios, w / h)
+                        : detectAspectRatio({ width: w, height: h })
+                    );
+                  }
                   setNatural({ width: w, height: h });
                 } else {
                   setLoadFailed(true);

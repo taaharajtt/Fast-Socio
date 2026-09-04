@@ -5,13 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { chatMediaPath } from "@/lib/chat-media";
+import { postMediaPaths } from "@/lib/post-media";
 import { listObjects, deleteObjects } from "@/lib/s3/sign";
-
-// Matches both the Contabo form ({base}/post-media/…) and any legacy Supabase
-// URL still stored on an old row ({base}/storage/v1/object/public/post-media/…),
-// so account deletion keeps working across the migration rather than silently
-// skipping files whose URL predates it.
-const POST_MEDIA_MARKER = "/post-media/";
 
 /**
  * Permanently delete the caller's own account (UAT-16).
@@ -43,8 +38,12 @@ export async function deleteAccount(): Promise<{ error: string } | void> {
 
   // Gather the user's storage objects BEFORE the DB rows cascade away — after
   // the delete there is nothing left to derive these paths from.
-  const [{ data: myPosts }, { data: myMsgs }] = await Promise.all([
-    supabase.from("feed_posts").select("image_url").eq("author_id", uid),
+  const [{ data: myPostMedia }, { data: myMsgs }] = await Promise.all([
+    // Every media URL this account's posts reference — the single image of a
+    // legacy post, the cover AND all five slides of a carousel, and posts the
+    // feed view hides (pending moderation, hidden). Reading feed_posts.image_url
+    // used to miss all three of those (mig 0180).
+    supabase.rpc("my_post_media_urls"),
     supabase
       .from("messages")
       .select("attachment_url")
@@ -63,10 +62,7 @@ export async function deleteAccount(): Promise<{ error: string } | void> {
     console.error("[deleteAccount] avatar listing failed", { uid, error: e });
   }
 
-  const postPaths = (myPosts ?? [])
-    .map((p) => p.image_url as string | null)
-    .filter((u): u is string => u !== null && u.includes(POST_MEDIA_MARKER))
-    .map((u) => u.slice(u.indexOf(POST_MEDIA_MARKER) + POST_MEDIA_MARKER.length));
+  const postPaths = postMediaPaths((myPostMedia as string[] | null) ?? []);
 
   const chatPaths = (myMsgs ?? [])
     .map((m) => chatMediaPath(m.attachment_url as string | null))
