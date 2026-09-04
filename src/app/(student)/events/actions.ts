@@ -8,6 +8,7 @@ import { getAuthUserId } from "@/lib/auth/user";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { isAppStorageUrl } from "@/lib/url-safety";
 import { orIlike } from "@/lib/postgrest/search";
+import { validateTitle } from "@/lib/spaces/rename";
 
 /** Submit a new event for admin approval (status starts pending). */
 export async function createEvent(input: {
@@ -505,9 +506,9 @@ export async function renameEvent(
   const userId = await getAuthUserId();
   if (!userId) return { ok: false, error: "Not signed in." };
 
-  const trimmed = title.trim();
-  if (trimmed.length < 2 || trimmed.length > 120)
-    return { ok: false, error: "Title must be 2–120 characters." };
+  const check = validateTitle("event", title);
+  if (!check.ok) return { ok: false, error: check.error };
+  const trimmed = check.value;
 
   const { data, error } = await supabase.rpc("rename_event", {
     p_id: eventId,

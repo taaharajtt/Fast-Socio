@@ -4,6 +4,8 @@ import { JoinRequestQueue } from "@/components/communities/join-request-queue";
 import { MemberAccessList } from "@/components/communities/member-access-list";
 import { MemberRoleList } from "@/components/societies/member-role-list";
 import { SocietyProfileEditor } from "@/components/societies/society-profile-editor";
+import { CommunityRenameControl } from "@/components/communities/community-rename-control";
+import { canRenameCommunity } from "@/lib/spaces/rename";
 import {
   assignableRoles,
   canEditProfile,
@@ -67,6 +69,12 @@ export function ManageTab({
 }) {
   const canAppoint = assignableRoles(viewer).length > 0;
   const canEditIdentity = canEditProfile(viewer);
+  // Renaming stays with the owner (or an admin) even though a president may
+  // edit everything else about the society — mirrors rename_community.
+  const canRename = canRenameCommunity({
+    isOwner: viewer.role === "owner",
+    isAdmin: viewer.isAdmin,
+  });
   // Officers cannot appoint (fix-024) but still need the roster visible so they
   // can step down from their own role.
   const showOfficers = canAppoint || isOfficerRole(viewer.role);
@@ -123,8 +131,24 @@ export function ManageTab({
         <Section
           icon={<ShieldCheck className="h-4 w-4" aria-hidden />}
           title="Society profile"
-          desc="Category, bio, banner, recruiting and links."
+          desc="Name, category, bio, banner, recruiting and links."
         >
+          {/* The name is not part of SocietyProfileEditor: it is written by
+              rename_community (mig 0178), a title-only RPC, and it carries a
+              STRICTER gate than the rest of this section — a president edits
+              the profile but does not rename the society (UAT-04). */}
+          {canRename && (
+            <div className="mb-3 flex items-center gap-2">
+              <span className="min-w-0 flex-1 truncate text-sm text-fg">
+                {society.name}
+              </span>
+              <CommunityRenameControl
+                communityId={society.id}
+                name={society.name}
+                label="society name"
+              />
+            </div>
+          )}
           <SocietyProfileEditor society={society} />
         </Section>
       )}

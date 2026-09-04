@@ -3,6 +3,7 @@ import { AlertTriangle, DoorOpen, Pencil, Users } from "lucide-react";
 import { DeleteChatRoom } from "@/components/communities/delete-chat-room";
 import { JoinRequestQueue } from "@/components/communities/join-request-queue";
 import { MemberAccessList } from "@/components/communities/member-access-list";
+import { CommunityRenameControl } from "@/components/communities/community-rename-control";
 import type { CommunityMemberVM } from "@/components/communities/member-row";
 import type { JoinRequestVM } from "@/lib/communities/relationship";
 
@@ -44,7 +45,7 @@ export function RoomManageTab({
   members,
 }: {
   communityId: string;
-  /** Typed back by the owner to confirm deletion. */
+  /** The room's current name: shown for rename, typed back to confirm deletion. */
   name: string;
   isOwner: boolean;
   joinRequests: JoinRequestVM[];
@@ -74,6 +75,16 @@ export function RoomManageTab({
           title="Room details"
           desc="Name, description and cover photo."
         >
+          {/* Rename in place — the common edit, one tap, no page change. The
+              full editor below still covers description and cover photo. */}
+          <div className="mb-3 flex items-center gap-2">
+            <span className="min-w-0 flex-1 truncate text-sm text-fg">{name}</span>
+            <CommunityRenameControl
+              communityId={communityId}
+              name={name}
+              label="chat room name"
+            />
+          </div>
           <Link
             href={`/communities/${communityId}/edit`}
             className="inline-block rounded-full bg-white/10 px-4 py-2 text-sm font-semibold text-fg"

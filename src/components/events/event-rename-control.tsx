@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { RenameControl } from "@/components/ui/rename-control";
 import { renameEvent } from "@/app/(student)/events/actions";
+import { TITLE_RULES } from "@/lib/spaces/rename";
 
 /**
  * The event's rename affordance (UAT-08).
@@ -27,8 +28,8 @@ export function EventRenameControl({
     <RenameControl
       value={title}
       label="event title"
-      minLength={2}
-      maxLength={120}
+      minLength={TITLE_RULES.event.min}
+      maxLength={TITLE_RULES.event.max}
       onSave={async (next) => {
         const res = await renameEvent(eventId, next);
         if (!res.ok) return res;

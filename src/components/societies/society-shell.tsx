@@ -7,6 +7,8 @@ import { SocietyReportButton } from "@/components/societies/society-report-butto
 import { FollowJoinButtons } from "@/components/communities/follow-join-buttons";
 import { SocialProof } from "@/components/communities/social-proof";
 import { SpaceShell, type SpaceShellTab } from "@/components/communities/space-shell";
+import { CommunityRenameControl } from "@/components/communities/community-rename-control";
+import { canRenameCommunity } from "@/lib/spaces/rename";
 import type { SocietyContext } from "@/lib/societies/load";
 import type { SocialProofVM } from "@/lib/communities/social-proof";
 
@@ -72,8 +74,21 @@ export function SocietyShell({
 
       <div className="px-4 pt-3">
         <div className="flex items-center gap-1.5">
-          <h1 className="truncate text-[20px] font-bold text-fg">{s.name}</h1>
+          <h1 className="min-w-0 flex-1 truncate text-[20px] font-bold text-fg">
+            {s.name}
+          </h1>
           {s.is_official && <VerifiedBadge size={16} />}
+          {/* Owner or admin only — NARROWER than the profile editor, which a
+              president may use. UAT-04 keeps renaming with whoever owns the
+              space, and `rename_community` (mig 0178) enforces that; showing
+              the pencil to a president would only produce a certain error. */}
+          {canRenameCommunity(viewer) && (
+            <CommunityRenameControl
+              communityId={s.id}
+              name={s.name}
+              label="society name"
+            />
+          )}
         </div>
         <p className="text-[13px] text-fg-muted">
           {categoryLabel(s.society_category)} ·{" "}

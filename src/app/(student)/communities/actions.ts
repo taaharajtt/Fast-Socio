@@ -8,6 +8,7 @@ import { getAuthUserId } from "@/lib/auth/user";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { isAppStorageUrl } from "@/lib/url-safety";
 import { isSocietyCategory } from "@/lib/societies/logic";
+import { validateTitle } from "@/lib/spaces/rename";
 
 /**
  * Submit a new community for admin approval (status starts pending). The
@@ -94,6 +95,54 @@ export async function updateCommunity(input: {
 
   revalidatePath(`/communities/${input.id}`);
   redirect(`/communities/${input.id}`);
+}
+
+/**
+ * Rename a society or chat room — the title, and nothing else.
+ *
+ * Backed by `rename_community` (mig 0178) rather than a table UPDATE for the
+ * same reason `renameEvent` is: the "owners edit their community" policy is
+ * broad enough to carry `description`, `cover_url` and friends in the same
+ * statement, and a rename affordance should not be able to reach them.
+ *
+ * The RPC re-checks authority — the owner or an admin, for a room and a society
+ * alike — so this action is UX, not the security boundary. Calling it directly
+ * (a Server Function is a public POST endpoint) gains nothing.
+ */
+export async function renameCommunity(
+  communityId: string,
+  name: string
+): Promise<{ ok: true; name: string } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
+
+  const check = validateTitle("community", name);
+  if (!check.ok) return { ok: false, error: check.error };
+  const trimmed = check.value;
+
+  const { data, error } = await supabase.rpc("rename_community", {
+    p_id: communityId,
+    p_name: trimmed,
+  });
+  if (error)
+    return {
+      ok: false,
+      error: error.message.includes("not authorized")
+        ? "You don’t have permission to rename this."
+        : error.message.includes("not found")
+          ? "This space no longer exists."
+          : "Couldn’t rename this — try again.",
+    };
+
+  // The name is rendered by the space itself, by the communities list, and by
+  // every chat surface that labels the room, so all three are revalidated.
+  revalidatePath(`/communities/${communityId}`);
+  revalidatePath(`/societies/${communityId}`);
+  revalidatePath("/communities");
+  revalidatePath("/chat");
+  revalidatePath(`/chat/c/${communityId}`);
+  return { ok: true, name: (data as string) ?? trimmed };
 }
 
 /**

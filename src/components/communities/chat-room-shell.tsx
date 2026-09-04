@@ -5,6 +5,7 @@ import { GlassChip } from "@/components/ui";
 import { FollowJoinButtons } from "@/components/communities/follow-join-buttons";
 import { SocialProof } from "@/components/communities/social-proof";
 import { SpaceShell, type SpaceShellTab } from "@/components/communities/space-shell";
+import { CommunityRenameControl } from "@/components/communities/community-rename-control";
 import type { JoinState } from "@/app/(student)/communities/actions";
 import type { SocialProofVM } from "@/lib/communities/social-proof";
 
@@ -91,8 +92,19 @@ export function ChatRoomShell({
 
       <div className="px-4 pt-3">
         <div className="flex items-center gap-2">
-          <h1 className="truncate text-[20px] font-bold text-fg">{community.name}</h1>
+          <h1 className="min-w-0 flex-1 truncate text-[20px] font-bold text-fg">
+            {community.name}
+          </h1>
           {pending && <GlassChip tone="warning">pending</GlassChip>}
+          {/* Owner-only affordance. `rename_community` (mig 0182) re-checks the
+              owner, so hiding the pencil is the courtesy, not the gate. */}
+          {isOwner && (
+            <CommunityRenameControl
+              communityId={community.id}
+              name={community.name}
+              label="chat room name"
+            />
+          )}
         </div>
         <p className="text-[13px] text-fg-muted">
           {community.member_count.toLocaleString()} member
