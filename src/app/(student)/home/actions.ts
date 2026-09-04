@@ -4,7 +4,19 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { resolveAnonymity } from "@/lib/feed/composer-state";
 import { getAuthUserId } from "@/lib/auth/user";
-import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import {
+  checkRateLimit,
+  checkRateLimitResult,
+  limitedMessage,
+  RATE_LIMITS,
+} from "@/lib/rate-limit";
+import {
+  COMMENT_LIMITS,
+  DUPLICATE_COMMENT_MESSAGE,
+  isDuplicateComment,
+  isFloodingComments,
+  postScopedAction,
+} from "@/lib/feed/comment-guard";
 import { isAppStorageUrl } from "@/lib/url-safety";
 import { FEED_COLUMNS, FEED_PAGE_SIZE, type FeedPost } from "@/lib/feed/types";
 import {
@@ -645,12 +657,75 @@ export async function addComment(
   const allowed = await checkRateLimit("comment", 60, 60 * 60);
   if (!allowed) return { ok: false, error: "You're commenting too fast." };
 
+  // Per-POST guards (anti-farming). Global limits stop a user burying the whole
+  // feed; these stop them burying ONE post — which is what made comment Aura
+  // farmable. Cooldown first: it is the cheapest rejection and, being checked
+  // before the window bucket, a throttled user does not burn window slots too.
+  const cooldown = await checkRateLimitResult(
+    postScopedAction(COMMENT_LIMITS.perPostCooldown, postId),
+    COMMENT_LIMITS.perPostCooldown.max,
+    COMMENT_LIMITS.perPostCooldown.windowSeconds
+  );
+  if (cooldown.status === "limited")
+    return {
+      ok: false,
+      error: limitedMessage(cooldown, "Slow down between comments."),
+    };
+  if (cooldown.status === "error")
+    return { ok: false, error: "Couldn't post that comment. Try again." };
+
+  const postWindow = await checkRateLimitResult(
+    postScopedAction(COMMENT_LIMITS.perPostWindow, postId),
+    COMMENT_LIMITS.perPostWindow.max,
+    COMMENT_LIMITS.perPostWindow.windowSeconds
+  );
+  if (postWindow.status === "limited")
+    return {
+      ok: false,
+      error: limitedMessage(
+        postWindow,
+        "You've commented on this post a lot just now."
+      ),
+    };
+  if (postWindow.status === "error")
+    return { ok: false, error: "Couldn't post that comment. Try again." };
+
   const restricted = await postingBlockReason();
   if (restricted) return { ok: false, error: restricted };
 
+  // Duplicate + flood signals. `scoreContent` has always accepted these, but
+  // nothing set them: they need DB context, so they are gathered here.
+  const dupSince = new Date(
+    Date.now() - COMMENT_LIMITS.duplicateWindowHours * 60 * 60 * 1000
+  ).toISOString();
+  const { data: recentOwn } = await supabase
+    .from("post_comments")
+    .select("body, created_at")
+    .eq("post_id", postId)
+    .eq("author_id", userId)
+    .gte("created_at", dupSince)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  const recent = (recentOwn ?? []).map(
+    (c: { body: string; created_at: string }) => ({
+      body: mentionsToPlainText(c.body),
+      createdAt: c.created_at,
+    })
+  );
+  if (isDuplicateComment(visible, recent))
+    return { ok: false, error: DUPLICATE_COMMENT_MESSAGE };
+
+  const floodCutoff =
+    Date.now() - COMMENT_LIMITS.perPostWindow.windowSeconds * 1000;
+  const inWindow = recent.filter(
+    (c) => new Date(c.createdAt).getTime() >= floodCutoff
+  ).length;
+
   // Rule engine (Phase 9): block severe content; hold a risky comment (hidden
   // until a moderator restores it).
-  const risk = scoreContent(visible);
+  const risk = scoreContent(visible, {
+    isFlooding: isFloodingComments(inWindow),
+  });
   if (risk.action === "block")
     return { ok: false, error: blockMessage(risk) };
 
@@ -711,6 +786,11 @@ export async function toggleCommentLike(
  * own comments") is the real guard; we scope by author_id too so a mistargeted
  * id can never touch someone else's row. Replies cascade (parent_id FK), likes
  * cascade, and the count trigger keeps the post's comment_count accurate.
+ *
+ * Aura is NOT reconciled here: `reconcile_comment_aura()` (mig 0181) does it in
+ * the same transaction as the delete, so the -2 lands exactly when this was the
+ * commenter's last comment on the post — and never twice, however often this
+ * action is retried or run concurrently.
  */
 export async function deleteComment(
   commentId: string
