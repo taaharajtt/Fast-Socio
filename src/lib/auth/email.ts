@@ -23,7 +23,10 @@ const LEGACY_ISB_EMAIL_RE = /^i\d{6}@nu\.edu\.pk$/;
  * button un-greys without a round trip; an address approved in the DB but
  * missing here just shows a disabled button until the next deploy.
  */
-const MANUAL_APPROVED_EMAILS = ["l257838@lhr.nu.edu.pk"] as const;
+const MANUAL_APPROVED_EMAILS = [
+  "l257838@lhr.nu.edu.pk",
+  "k228738@nu.edu.pk",
+] as const;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 

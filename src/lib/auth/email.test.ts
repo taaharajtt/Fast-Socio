@@ -21,6 +21,8 @@ describe("isValidFastEmail", () => {
   it("accepts individually approved cross-campus exceptions", () => {
     expect(isValidFastEmail("l257838@lhr.nu.edu.pk")).toBe(true);
     expect(isValidFastEmail("  L257838@LHR.NU.EDU.PK  ")).toBe(true);
+    expect(isValidFastEmail("k228738@nu.edu.pk")).toBe(true);
+    expect(isValidFastEmail("  K228738@NU.EDU.PK  ")).toBe(true);
   });
 
   it("rejects non-Islamabad locals on the bare nu.edu.pk domain and other campuses", () => {
