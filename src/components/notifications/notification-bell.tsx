@@ -38,13 +38,13 @@ export async function NotificationBell() {
   // list, so the dot can never point at a row the dropdown refuses to show.
   const [{ count }, { data: rows }] = await Promise.all([
     supabase
-      .from("notifications_live")
+      .from("activity_notifications")
       .select("id", { count: "exact", head: true })
       .eq("user_id", user!.id)
       .is("read_at", null)
       .in("type", visible),
     supabase
-      .from("notifications_live")
+      .from("activity_notifications")
       .select("id, actor_id, type, data, group_count, read_at, created_at")
       .eq("user_id", user!.id)
       .in("type", visible)

@@ -4,7 +4,7 @@ import {
   isNotificationType,
   notificationCopy,
   notificationHref,
-  type ActivityVisibleType,
+  type NotificationType,
 } from "@/lib/notifications/copy";
 
 export {
@@ -17,9 +17,12 @@ export {
 /**
  * Notification types that are NOT tied to a specific "actor doing something to
  * you" and must never be bundled (CR-013): system events shown individually.
- * Only types the Notifications surface actually renders appear here.
+ *
+ * Typed over the FULL notification union, not just the Activity-visible slice:
+ * migration 0192 moved the space lifecycle to Community Updates, and that
+ * surface needs the same "actor-less, never bundled" fact about them.
  */
-export const SYSTEM_NOTIFICATION_TYPES = new Set<ActivityVisibleType>([
+export const SYSTEM_NOTIFICATION_TYPES = new Set<NotificationType>([
   "match",
   "event_approved",
   "event_rejected",
@@ -130,31 +133,31 @@ export function notificationActionPhrase(type: string): string {
  * per-conversation unread count and the Requests panel, and does not reach this
  * surface. Admin announcements likewise arrive as a cold-open modal.
  */
+/**
+ * The categories the Notifications page shows.
+ *
+ * `spaces`, `conversations`, `event_decision` and `event_updates` are GONE as
+ * of migration 0192: every type that fed them now belongs to Community →
+ * Updates, so a category here would always be empty. What remains is feed
+ * social activity, Discover, Campus Help, Aura and moderation.
+ */
 export type ActivityCategory =
   | "post_reacts"
   | "comment_reacts"
   | "comments"
   | "discover"
-  | "event_decision"
-  | "event_updates"
   | "help"
   | "aura"
-  | "moderation"
-  | "spaces"
-  | "conversations";
+  | "moderation";
 
 export const ACTIVITY_CATEGORY_LABEL: Record<ActivityCategory, string> = {
   post_reacts: "Post reacts",
   comment_reacts: "Comment reacts",
   comments: "Comments and replies",
   discover: "Matches and Discover",
-  event_decision: "Event decisions",
-  event_updates: "Event updates",
   help: "Campus Help",
   aura: "Aura and badges",
   moderation: "Moderation and appeals",
-  spaces: "Communities and societies",
-  conversations: "Group chats",
 };
 
 /**
@@ -181,15 +184,6 @@ export function notificationCategory(type: string): ActivityCategory | null {
     case "smart_match_mention":
     case "incoming_match_interest":
       return "discover";
-    case "event_approved":
-    case "event_rejected":
-      return "event_decision";
-    case "event_organizer_added":
-    case "event_organizer_removed":
-    case "event_reminder":
-    case "event_updated":
-    case "waitlist_promoted":
-      return "event_updates";
     case "help_response":
     case "help_offer_accepted":
     case "help_follow":
@@ -205,23 +199,6 @@ export function notificationCategory(type: string): ActivityCategory | null {
     case "moderation_warning":
     case "appeal_result":
       return "moderation";
-    case "community_message":
-    case "society_announcement":
-    case "event_message":
-      return "conversations";
-    case "community_post":
-    case "community_post_review":
-    case "community_post_approved":
-    case "community_post_rejected":
-    case "community_join_request":
-    case "community_join_approved":
-    case "community_join_rejected":
-    case "community_approved":
-    case "community_rejected":
-    case "society_role":
-    case "society_role_removed":
-    case "event_post_request":
-      return "spaces";
     default: {
       const never: never = type;
       throw new Error(`Uncategorised notification type: ${String(never)}`);

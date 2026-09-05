@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { isCommunityUpdateType } from "@/lib/community/updates";
 import {
   ACTIVITY_VISIBLE_TYPES,
   activityVisibleTypeList,
@@ -31,29 +32,58 @@ const FULL_DATA: Record<string, unknown> = {
 /**
  * Types that must never appear on the Notifications page or the bell.
  *
- * UAT-18 moved the GROUP conversation surfaces (community_message,
- * event_message, society_announcement, community_post) out of this list on
- * purpose: none of them raises the Chat dock badge, so excluding them meant a
- * broadcast or a room message produced no signal anywhere in the app. What is
- * left here is direct chat — which has a badge, an unread count and a Requests
- * panel already — and the admin announcement, which is delivered as a modal.
+ * MIGRATION 0192 MOVED THE WHOLE SPACE DOMAIN OUT. Room and event messages,
+ * society broadcasts, community posts, the community/society/event lifecycle
+ * and direct messages are all Community → Updates now, so the Notifications
+ * page must not render or count any of them. UAT-18's opposite decision (which
+ * this list used to encode) is superseded: back then Updates did not exist, so
+ * excluding them meant they appeared nowhere at all.
  */
 const MUST_BE_HIDDEN = [
-  // Direct messages, requests, accepts, and reactions.
+  // Direct chat, now owned by Updates as well as the Chat badge.
   "message",
   "message_request",
   "message_request_accepted",
   "message_reaction",
-  // Admin broadcast modal announcements.
-  "announcement",
-];
-
-/** The group surfaces UAT-18 deliberately made visible. */
-const MUST_BE_VISIBLE = [
+  // Space conversation.
   "community_message",
   "event_message",
   "society_announcement",
   "community_post",
+  // Space lifecycle and decisions.
+  "community_post_review",
+  "community_post_approved",
+  "community_post_rejected",
+  "community_join_request",
+  "community_join_approved",
+  "community_join_rejected",
+  "community_approved",
+  "community_rejected",
+  "society_role",
+  "society_role_removed",
+  "event_post_request",
+  // Events.
+  "event_approved",
+  "event_rejected",
+  "event_reminder",
+  "event_updated",
+  "waitlist_promoted",
+  "event_organizer_added",
+  "event_organizer_removed",
+  // Admin broadcast modal announcements.
+  "announcement",
+];
+
+/** What genuinely remains on the general Notifications page. */
+const MUST_BE_VISIBLE = [
+  "post_like",
+  "comment",
+  "comment_reply",
+  "mention",
+  "match",
+  "help_response",
+  "achievement",
+  "appeal_result",
 ];
 
 describe("Notifications surface allow-list", () => {
@@ -64,7 +94,7 @@ describe("Notifications surface allow-list", () => {
     }
   });
 
-  it("shows the group conversation surfaces UAT-18 added", () => {
+  it("still shows the feed, Discover, Help, Aura and moderation surfaces", () => {
     for (const type of MUST_BE_VISIBLE) {
       expect(isActivityVisibleType(type), `${type} must be visible`).toBe(true);
       expect(activityVisibleTypeList()).toContain(type);
@@ -77,13 +107,9 @@ describe("Notifications surface allow-list", () => {
       comment_reacts: "comment_like",
       comments: "comment",
       discover: "match",
-      event_decision: "event_approved",
-      event_updates: "waitlist_promoted",
       help: "help_response",
       aura: "achievement",
       moderation: "appeal_result",
-      conversations: "community_message",
-      spaces: "community_join_request",
     };
     for (const [category, type] of Object.entries(expected)) {
       expect(isActivityVisibleType(type), `${type} must be visible`).toBe(true);
@@ -98,7 +124,7 @@ describe("Notifications surface allow-list", () => {
       expect(category, `${type} needs a category`).not.toBeNull();
       seen.add(category!);
     }
-    expect(seen.size).toBe(11);
+    expect(seen.size).toBe(7);
   });
 
   it("categorises nothing that is not visible", () => {
@@ -109,9 +135,17 @@ describe("Notifications surface allow-list", () => {
     expect(notificationCategory("some_future_type")).toBeNull();
   });
 
-  it("only lists visible types as unbundleable system notifications", () => {
+  it("gives every unbundleable system type a home on one surface or the other", () => {
+    // This used to assert SYSTEM_NOTIFICATION_TYPES was a subset of the
+    // Activity-visible list. Migration 0192 moved the space lifecycle to
+    // Community Updates, so that is no longer the invariant — what still must
+    // hold is that no system type is orphaned: each renders on exactly one of
+    // the two surfaces.
     for (const type of SYSTEM_NOTIFICATION_TYPES) {
-      expect(isActivityVisibleType(type)).toBe(true);
+      const onActivity = isActivityVisibleType(type);
+      const onUpdates = isCommunityUpdateType(type);
+      expect(onActivity || onUpdates, `${type} renders nowhere`).toBe(true);
+      expect(onActivity && onUpdates, `${type} renders on both`).toBe(false);
     }
   });
 });

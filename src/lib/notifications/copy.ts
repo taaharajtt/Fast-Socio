@@ -83,6 +83,17 @@ export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
  * reaches the Notifications surface, even if a future migration starts emitting
  * it.
  *
+ * MIGRATION 0192 NARROWED THIS AGAIN. Everything that happens inside a space —
+ * room and event messages, society broadcasts, community posts, the whole
+ * community/society/event lifecycle, and direct messages — now belongs to
+ * Community → Updates and is NOT rendered here. The database is authoritative:
+ * this page reads `public.activity_notifications`, the complement of
+ * `community_updates`, so a community-scoped post_like is excluded by SUBJECT
+ * even though its type still appears below. This list is the second gate, not
+ * the only one.
+ *
+ * The previous policy, kept for the record:
+ *
  * UAT-18 REVISED THIS POLICY DELIBERATELY. The previous rule excluded every
  * conversation surface on the grounds that Chat has its own dock badge. That
  * held for DMs, where the badge points at the one place the message lives — but
@@ -127,15 +138,6 @@ export const ACTIVITY_VISIBLE_TYPES = [
   "smart_match_mention",
   // An anonymous aggregate, never an actor action (mig 0185).
   "incoming_match_interest",
-  // 5. Event approved / declined
-  "event_approved",
-  "event_rejected",
-  // 6. Organizer changes, reminders, waitlist promotion
-  "event_organizer_added",
-  "event_organizer_removed",
-  "event_reminder",
-  "event_updated",
-  "waitlist_promoted",
   // 7. Campus Help
   "help_response",
   "help_offer_accepted",
@@ -151,23 +153,6 @@ export const ACTIVITY_VISIBLE_TYPES = [
   "content_moderated",
   "moderation_warning",
   "appeal_result",
-  // 10. Group conversations (UAT-18) — grouped by subject, never one per line
-  "community_message",
-  "society_announcement",
-  "event_message",
-  // 11. Community and society lifecycle
-  "community_post",
-  "community_post_review",
-  "community_post_approved",
-  "community_post_rejected",
-  "community_join_request",
-  "community_join_approved",
-  "community_join_rejected",
-  "community_approved",
-  "community_rejected",
-  "society_role",
-  "society_role_removed",
-  "event_post_request",
 ] as const satisfies readonly NotificationType[];
 
 export type ActivityVisibleType = (typeof ACTIVITY_VISIBLE_TYPES)[number];
@@ -535,4 +520,76 @@ export function notificationHref(
 /** Compile-time exhaustiveness: an unhandled type fails `npm run build`. */
 function assertNever(value: never): never {
   throw new Error(`Unhandled notification type: ${String(value)}`);
+}
+
+// ---------------------------------------------------------------------------
+// Emphasis
+// ---------------------------------------------------------------------------
+
+/** One run of notification text, and whether it should be emphasised. */
+export type CopySegment = { text: string; strong: boolean };
+
+/**
+ * The same sentence `notificationCopy` produces, split into emphasised and
+ * muted runs so a row can render "**Wasiq Maken** posted an announcement in
+ * **Hostelities**" without building HTML from a string.
+ *
+ * DERIVED, NOT DUPLICATED. There is exactly one place that decides what a
+ * notification SAYS, and it stays `notificationCopy`. This locates the terms
+ * that deserve weight — the actor summary and whatever subject the payload
+ * names — inside that finished sentence. Adding a type therefore needs no
+ * change here, and the two can never word the same event differently.
+ *
+ * Returns plain data, never markup: the renderer maps each segment to a
+ * <span>, so nothing user-supplied can become an element.
+ */
+export function notificationSegments(
+  type: NotificationType,
+  actorName: string | null,
+  data: NotificationData,
+  count = 1
+): CopySegment[] {
+  const text = notificationCopy(type, actorName, data, count);
+
+  // The terms worth emphasising: who did it, and what it happened to.
+  // `is_anonymous` is honoured by not offering the actor as a term at all — an
+  // anonymous row must not gain weight on a name it is hiding.
+  const terms = [
+    data.is_anonymous ? null : actorName ? actorSummary(actorName, count) : null,
+    str(data, "community_name"),
+    str(data, "event_title"),
+    str(data, "title"),
+    str(data, "mode_label"),
+    str(data, "role_label"),
+  ].filter((t): t is string => Boolean(t && t.trim()));
+
+  // Longest first, so "Wasiq Maken and 1 other" wins over "Wasiq Maken".
+  const ordered = [...new Set(terms)].sort((a, b) => b.length - a.length);
+
+  const marks: { start: number; end: number }[] = [];
+  for (const term of ordered) {
+    let from = 0;
+    for (;;) {
+      const at = text.indexOf(term, from);
+      if (at === -1) break;
+      const end = at + term.length;
+      // Skip anything overlapping a mark we already made.
+      if (!marks.some((m) => at < m.end && end > m.start)) {
+        marks.push({ start: at, end });
+      }
+      from = end;
+    }
+  }
+  marks.sort((a, b) => a.start - b.start);
+
+  const out: CopySegment[] = [];
+  let cursor = 0;
+  for (const mark of marks) {
+    if (mark.start > cursor)
+      out.push({ text: text.slice(cursor, mark.start), strong: false });
+    out.push({ text: text.slice(mark.start, mark.end), strong: true });
+    cursor = mark.end;
+  }
+  if (cursor < text.length) out.push({ text: text.slice(cursor), strong: false });
+  return out.length > 0 ? out : [{ text, strong: false }];
 }

@@ -3,9 +3,11 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   COMMUNITY_UPDATE_TYPES,
+  SOCIAL_NOTIFICATION_TYPES,
   communityUpdateTypeList,
   isActionableUpdate,
   isCommunityUpdateType,
+  notificationDomain,
 } from "./updates";
 import {
   ACTIVITY_VISIBLE_TYPES,
@@ -16,8 +18,11 @@ import {
 } from "@/lib/notifications/copy";
 
 const ROOT = process.cwd();
+// The EFFECTIVE definition, which 0192 replaced. Parsing 0183 would assert
+// against a superseded list — the exact "the file that defines a function is
+// not the one running" trap this repo keeps hitting.
 const MIGRATION = readFileSync(
-  join(ROOT, "supabase/migrations/0183_community_updates.sql"),
+  join(ROOT, "supabase/migrations/0192_community_updates_inbox.sql"),
   "utf8"
 );
 
@@ -49,12 +54,12 @@ describe("the domain is defined once", () => {
     }
   });
 
-  it("only contains types the Activity surface also renders", () => {
-    // The overlap policy: ONE record per event, shown on both surfaces, with
-    // one shared read state. A community type Activity refuses to render would
-    // be a badge item with no second home and an unclearable read state.
+  it("contains NOTHING the Activity surface also renders", () => {
+    // The overlap policy INVERTED by migration 0192: the two surfaces now
+    // partition the notification space instead of sharing it, so a row belongs
+    // to exactly one inbox and cannot be counted twice.
     for (const type of COMMUNITY_UPDATE_TYPES) {
-      expect(ACTIVITY_VISIBLE_TYPES).toContain(type);
+      expect(ACTIVITY_VISIBLE_TYPES as readonly string[]).not.toContain(type);
     }
   });
 
@@ -77,23 +82,18 @@ describe("the domain is defined once", () => {
   });
 });
 
-describe("what the badge must never count", () => {
+describe("what the always-community list must never contain", () => {
+  // Migration 0192 routes these by SUBJECT, not by type: the same `post_like`
+  // is an Update on a community post and a Notification on a feed post. Putting
+  // them in the always-community list would drag every feed like into Updates,
+  // so their absence here is the thing worth asserting.
   const FORBIDDEN = [
-    // Raw chat — Chat has its own badge pointing at where the message lives.
-    "community_message",
-    "event_message",
-    "message",
-    "message_request",
-    "message_reaction",
-    // Someone posting in a space is a feed, not a task.
-    "community_post",
-    // Likes and social reactions.
     "post_like",
     "comment_like",
     "comment",
+    "comment_reply",
     "mention",
-    // Platform-wide creation events have no per-user relevance at all, which is
-    // what made the old `communities`/`events` counters meaningless.
+    // Admin broadcasts are a cold-open modal, not an inbox row.
     "announcement",
   ];
 
@@ -104,6 +104,31 @@ describe("what the badge must never count", () => {
       expect(migrationTypes()).not.toContain(type);
     });
   }
+
+  it("routes the generic social types by subject instead", () => {
+    for (const type of SOCIAL_NOTIFICATION_TYPES) {
+      // In a space -> Updates. On the open feed -> Notifications.
+      expect(notificationDomain(type, { communityId: "c1" })).toBe("community");
+      expect(notificationDomain(type, { eventId: "e1" })).toBe("community");
+      expect(notificationDomain(type, {})).toBe("activity");
+      expect(
+        notificationDomain(type, { communityId: null, eventId: null })
+      ).toBe("activity");
+    }
+  });
+
+  it("sends every always-community type to Updates whatever its subject", () => {
+    for (const type of COMMUNITY_UPDATE_TYPES) {
+      expect(notificationDomain(type, {})).toBe("community");
+    }
+  });
+
+  it("leaves genuinely unrelated types on Notifications", () => {
+    for (const type of ["match", "help_response", "achievement", "appeal_result"]) {
+      expect(notificationDomain(type, {})).toBe("activity");
+      expect(notificationDomain(type, { communityId: "c1" })).toBe("activity");
+    }
+  });
 
   it("has no notion of 'a new community was created' or 'a new event exists'", () => {
     // There is no type for either, on either side — the badge cannot count them
@@ -129,6 +154,11 @@ describe("required triggers are all represented", () => {
     ["an announcement in a space you follow", "society_announcement"],
     ["a material change to an event you joined", "event_updated"],
     ["an upcoming-event reminder", "event_reminder"],
+    ["a community chat-room message", "community_message"],
+    ["an event chat message", "event_message"],
+    ["a post in a community", "community_post"],
+    ["a direct message", "message"],
+    ["a waitlist promotion", "waitlist_promoted"],
   ];
 
   for (const [label, type] of REQUIRED) {

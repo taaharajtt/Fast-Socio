@@ -93,9 +93,14 @@ export default async function ActivityPage() {
   // broadcasts and admin announcements (delivered as a cold-open modal, UAT-012)
   // are likewise not rows to read here.
   const { data: rows } = await supabase
-    // notifications_live (mig 0132) hides any row whose subject has been
-    // deleted, so a notification never outlives the thing it points at.
-    .from("notifications_live")
+    // `activity_notifications` (mig 0192) is the COMPLEMENT of
+    // community_updates over notifications_live: it hides rows whose subject
+    // has been deleted (0132) AND every row the Community Updates inbox owns.
+    // The type allow-list alone could not do this — a like on a community post
+    // and a like on a feed post are both `post_like`, and only the SUBJECT
+    // separates them — so the surface split is decided in SQL and this page
+    // keeps the list as a second gate.
+    .from("activity_notifications")
     .select("id, actor_id, type, data, group_count, read_at, created_at")
     .eq("user_id", me)
     .in("type", activityVisibleTypeList())
