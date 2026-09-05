@@ -22,20 +22,25 @@ begin;
 -- ---------------------------------------------------------------------------
 do $$
 begin
-  foreach_check: for i in 1..1 loop
-    if not exists (select 1 from pg_views where schemaname='public' and viewname='community_updates') then
-      raise exception 'FAIL: community_updates is missing';
-    end if;
-    if not exists (select 1 from pg_views where schemaname='public' and viewname='activity_notifications') then
-      raise exception 'FAIL: activity_notifications is missing';
-    end if;
-  end loop foreach_check;
+  if not exists (select 1 from pg_views where schemaname='public' and viewname='community_updates') then
+    raise exception 'FAIL: community_updates is missing';
+  end if;
+  if not exists (select 1 from pg_views where schemaname='public' and viewname='activity_notifications') then
+    raise exception 'FAIL: activity_notifications is missing';
+  end if;
 
   -- Both views must be security_invoker, or RLS on notifications stops
   -- scoping them and one student reads another's inbox.
   if exists (
     select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
-     where n.nspname='public' and c.relname in ('community_updates','activity_notifications')
+     where n.nspname='public'
+       and c.relname in ('community_updates','activity_notifications',
+                         -- notifications_live too: both surfaces are built on
+                         -- it, and if IT loses security_invoker their own
+                         -- setting does not save them — the inner view is what
+                         -- reads the table. Lost once already, to a
+                         -- CREATE OR REPLACE VIEW without the WITH clause.
+                         'notifications_live')
        and coalesce(c.reloptions::text, '') not like '%security_invoker=true%'
   ) then
     raise exception 'FAIL: a surface view is not security_invoker';
@@ -145,6 +150,9 @@ begin
   select array_agg(id) into ids from (
     select p.id from public.profiles p
      where p.deactivated_at is null and coalesce(p.is_banned,false)=false
+       -- NOT an admin: the notifications SELECT policy lets admins read every
+       -- row, so an admin fixture would count the whole platform's rows.
+       and p.admin_role is null
      order by p.created_at limit 2) s;
   me := ids[1]; other := ids[2];
 
@@ -226,6 +234,9 @@ begin
   select array_agg(id) into ids from (
     select p.id from public.profiles p
      where p.deactivated_at is null and coalesce(p.is_banned,false)=false
+       -- NOT an admin: the notifications SELECT policy lets admins read every
+       -- row, so an admin fixture would count the whole platform's rows.
+       and p.admin_role is null
      order by p.created_at limit 2) s;
   me := ids[1]; other := ids[2];
   delete from public.notifications where user_id = me;
@@ -282,6 +293,9 @@ begin
   select array_agg(id) into ids from (
     select p.id from public.profiles p
      where p.deactivated_at is null and coalesce(p.is_banned,false)=false
+       -- NOT an admin: the notifications SELECT policy lets admins read every
+       -- row, so an admin fixture would count the whole platform's rows.
+       and p.admin_role is null
      order by p.created_at limit 2) s;
   me := ids[1]; other := ids[2];
   delete from public.notifications where user_id = me;
@@ -328,7 +342,8 @@ do $$
 declare me uuid; other uuid; ids uuid[]; n int;
 begin
   select array_agg(id) into ids from (
-    select id from public.profiles order by created_at limit 2) s;
+    select id from public.profiles where admin_role is null
+     order by created_at limit 2) s;
   me := ids[1]; other := ids[2];
 
   perform set_config('request.jwt.claims', json_build_object('sub', me)::text, true);
