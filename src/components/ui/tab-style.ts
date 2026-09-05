@@ -6,7 +6,8 @@ import { cn } from "@/lib/utils";
  * There were five tab implementations in the app — RouteTabs, ProfileTabs,
  * HelpTabs, RanksTabs and SpaceShell — each hard-coding its own indicator, and
  * each drifting slightly in label size and geometry. They all read from here,
- * so a change to how "selected" looks is one edit rather than five.
+ * so a change to how "selected" looks is one edit rather than five. (Profile
+ * no longer has tabs at all: it is Posts-only on both screens.)
  *
  * Two things carry selection, and they do different jobs:
  *

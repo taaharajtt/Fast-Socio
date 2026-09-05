@@ -71,12 +71,20 @@ async function ConversationPageBody({
   // RLS ensures the caller is a participant; otherwise no row is returned.
   const { data: conv } = await supabase
     .from("conversations")
-    .select("id, user_low, user_high")
+    .select("id, user_low, user_high, closed_at")
     .eq("id", id)
     .single();
   if (!conv) notFound();
 
   const otherId = conv.user_low === me ? conv.user_high : conv.user_low;
+  // Closed by an unmatch (mig 0182). History stays readable — deleting it would
+  // take DM report evidence with it — but the thread is inert: the composer is
+  // gone here and the messages INSERT policy refuses a write even if a stale
+  // client tries one anyway. Reaching this URL directly is exactly the case
+  // this covers.
+  const closed = Boolean(
+    (conv as { closed_at?: string | null }).closed_at
+  );
   const [{ data: other }, { data: otherPresence }, { data: msgs }] = await Promise.all([
     supabase
       .from("profiles")
@@ -274,6 +282,7 @@ async function ConversationPageBody({
         }
         otherName={other?.full_name ?? null}
         reportParam={report ?? null}
+        closed={closed}
       />
     </div>
   );

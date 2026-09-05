@@ -29,6 +29,13 @@ import { MatchRow, type MatchListRow } from "@/components/profile/match-row";
  * either. Asking about a non-match returns an empty set rather than raising,
  * which is indistinguishable from "they have no matches" and so leaks nothing.
  *
+ * Mig 0182 puts the owner's `show_matches` preference, a live-and-unbanned
+ * check and the block check inside that same function, so a hidden list, a
+ * newly-unmatched viewer, a blocked pair, a banned or deactivated owner and a
+ * plain stranger all reach this page identically: the empty state. Nothing on
+ * this route is cached (it reads auth-scoped data behind Suspense), so a list
+ * cannot flash before the check lands.
+ *
  * Note the deliberate omission: these rows carry NO match percentage. The score
  * between two other people is not the viewer's to see.
  */
@@ -99,9 +106,9 @@ async function SecondDegreeMatchesBody({
       ) : (
         <div className="divide-y divide-glass-border border-y border-glass-border">
           {rows.map((row) => (
-            // No further hop — the boundary is one step, so these rows do not
-            // link onward. No chat shortcut either: you have not matched them.
-            <MatchRow key={row.id} row={row} showChat={false} />
+            // Informational only: no onward hop, no chat shortcut (you have not
+            // matched them) and no Unmatch (not your relationship to end).
+            <MatchRow key={row.id} row={row} />
           ))}
         </div>
       )}

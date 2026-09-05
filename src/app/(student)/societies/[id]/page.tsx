@@ -9,7 +9,6 @@ import { getSocietyContext } from "@/lib/societies/load";
 import { getJoinRequests } from "@/lib/communities/relationship";
 import { getSocietyCapabilities } from "@/app/(student)/societies/actions";
 import { getSocialProof } from "@/lib/communities/social-proof";
-import { markCommunitySpaceSeen } from "@/lib/community/seen";
 import {
   getSocietyOfficers,
   getUpcomingSocietyEvents,
@@ -67,10 +66,6 @@ async function SocietyPageBody({
   const { id } = await params;
   const ctx = await getSocietyContext(id);
   const { viewer } = ctx;
-  // Clears this society's badge items — its broadcasts and its review/join
-  // queue — and nothing else. Deferred via `after()`, so the visit that clears
-  // them still gets to show them.
-  markCommunitySpaceSeen(id);
 
   const canManage = canManageSociety(viewer);
 

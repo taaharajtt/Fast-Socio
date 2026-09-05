@@ -77,20 +77,29 @@ export function ProfileVerifiedTick() {
  * by a hairline instead of a gap between two fills.
  *
  * `auraHref` makes the Aura half a link on your own profile (where it opens the
- * breakdown) and inert on someone else's. `showAura` honours the viewer's
- * privacy setting; when it is off, Matches takes the full width and the divider
- * is dropped rather than left dangling.
+ * breakdown) and inert on someone else's. `matchesHref` does the same for the
+ * Matches half — the whole half, heart and number and label, because a stat
+ * that leads somewhere should be tappable everywhere it looks tappable.
+ * `showAura` honours the viewer's privacy setting; when it is off, Matches
+ * takes the full width and the divider is dropped rather than left dangling.
+ *
+ * Neither href is a permission. The pages behind them re-derive the caller's
+ * right to the data (`get_matches_of` fails closed), so an absent link is the
+ * affordance being withheld, not the authorisation.
  */
 export function ProfileStats({
   aura,
   matches,
   auraHref,
+  matchesHref,
   showAura = true,
   className,
 }: {
   aura: number;
   matches: number;
   auraHref?: string;
+  /** Present only when this viewer may open this profile's matches list. */
+  matchesHref?: string;
   showAura?: boolean;
   className?: string;
 }) {
@@ -101,6 +110,16 @@ export function ProfileStats({
         <span className="text-[30px] font-bold leading-none">{aura}</span>
       </span>
       <span className="type-callout mt-2 text-fg-muted">Aura</span>
+    </>
+  );
+
+  const matchesBody = (
+    <>
+      <span className="flex items-center gap-2">
+        <Heart className="h-6 w-6 fill-error text-error" aria-hidden />
+        <span className="text-[30px] font-bold leading-none">{matches}</span>
+      </span>
+      <span className="type-callout mt-2 text-fg-muted">Matches</span>
     </>
   );
 
@@ -123,13 +142,19 @@ export function ProfileStats({
       {showAura ? (
         <div aria-hidden className="my-1 w-px shrink-0 bg-hairline" />
       ) : null}
-      <div className="flex flex-1 flex-col items-center justify-center py-1">
-        <span className="flex items-center gap-2">
-          <Heart className="h-6 w-6 fill-error text-error" aria-hidden />
-          <span className="text-[30px] font-bold leading-none">{matches}</span>
-        </span>
-        <span className="type-callout mt-2 text-fg-muted">Matches</span>
-      </div>
+      {matchesHref ? (
+        <Link
+          href={matchesHref}
+          aria-label={`Matches: ${matches}`}
+          className="pressable-subtle focus-ring flex flex-1 flex-col items-center justify-center rounded-xl py-1"
+        >
+          {matchesBody}
+        </Link>
+      ) : (
+        <div className="flex flex-1 flex-col items-center justify-center py-1">
+          {matchesBody}
+        </div>
+      )}
     </div>
   );
 }

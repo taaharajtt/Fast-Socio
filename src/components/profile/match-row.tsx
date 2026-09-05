@@ -1,8 +1,6 @@
 import Link from "next/link";
-import { RowLink } from "@/components/ui/row-link";
-import { ChevronRight } from "lucide-react";
 import { AppImage } from "@/components/ui/app-image";
-import { OpenChatButton } from "@/components/chat/open-chat-button";
+import { UnmatchButton } from "@/components/profile/unmatch-button";
 import { resolveAvatarUrl } from "@/lib/avatar";
 
 /** One person in a matches list (fix-056). */
@@ -21,15 +19,24 @@ export type MatchListRow = {
   match_percentage?: number | null;
 };
 
+/**
+ * A row leads to that person's profile, and nothing else.
+ *
+ * There used to be a chevron here that opened the listed person's OWN matches.
+ * It is gone: a match's matches are now reached the one way that can carry the
+ * owner's privacy setting with it — by opening their profile and tapping their
+ * Matches stat (mig 0182). One route, one rule.
+ *
+ * `showUnmatch` is for YOUR list only. Someone else's list is informational:
+ * no unmatch control (it isn't your relationship to end) and no Message button
+ * (you haven't matched them).
+ */
 export function MatchRow({
   row,
-  /** Second-degree drill-in target; omitted when the viewer can't go deeper. */
-  hopHref,
-  showChat = true,
+  showUnmatch = false,
 }: {
   row: MatchListRow;
-  hopHref?: string;
-  showChat?: boolean;
+  showUnmatch?: boolean;
 }) {
   const avatar = resolveAvatarUrl(row.avatar_url, row.gender);
   return (
@@ -61,18 +68,11 @@ export function MatchRow({
         </span>
       </Link>
 
-      <div className="flex shrink-0 items-center gap-2">
-        {showChat && <OpenChatButton otherId={row.id} />}
-        {hopHref && (
-          <RowLink
-            href={hopHref}
-            aria-label={`See who ${row.full_name ?? "they"} matched with`}
-            className="glass flex h-8 w-8 items-center justify-center rounded-full text-fg-muted"
-          >
-            <ChevronRight className="h-4 w-4" aria-hidden />
-          </RowLink>
-        )}
-      </div>
+      {showUnmatch && (
+        <div className="flex shrink-0 items-center">
+          <UnmatchButton otherId={row.id} name={row.full_name} />
+        </div>
+      )}
     </div>
   );
 }

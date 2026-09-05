@@ -6,6 +6,7 @@ import { FloatingDock } from "@/components/floating-dock";
 import { PushAutoEnable } from "@/components/push/push-auto-enable";
 import { PresenceHeartbeat } from "@/components/presence/heartbeat";
 import { ChatRealtime } from "@/components/chat/chat-realtime";
+import { CommunityRealtime } from "@/components/communities/community-realtime";
 import { AnnouncementModal } from "@/components/notifications/announcement-modal";
 import { ExternalLinkInterceptor } from "@/components/ui/external-link-interceptor";
 import { RouteFallback } from "@/components/ui/route-fallback";
@@ -100,9 +101,9 @@ export default function StudentLayout({
  * ONE parallel stage covers everything. It used to be two: the events badge
  * needed `events_seen_at` off the profile row, so it ran afterwards as a second
  * sequential round trip. That whole count now lives inside
- * `community_badge_count()` (migration 0170), which reads the mark itself — so
- * the layout's shell is a single Promise.all again and the second stage is gone
- * rather than merely moved.
+ * `community_badge_count()` — since migration 0183 a single count of unread
+ * Community updates — so the layout's shell is a single Promise.all again and
+ * the second stage is gone rather than merely moved.
  */
 async function StudentShell() {
   const supabase = await createClient();
@@ -129,10 +130,10 @@ async function StudentShell() {
     // The badge SEMANTICS are unchanged and still owned by one definition each:
     // the RPC calls chat_badge_count()/community_badge_count() rather than
     // reimplementing them, and the reader runs the results back through the
-    // same toBadge/sumBadge helpers the client uses — so a server render and a
-    // realtime recount still cannot disagree about what the number MEANS
-    // (unread conversations + requests, mig 0169; grouped Community/Event/
-    // Broadcast and never chat, mig 0170).
+    // same toBadge/toCommunityBadge helpers the client uses — so a server
+    // render and a realtime recount still cannot disagree about what the number
+    // MEANS (unread conversations + requests, mig 0169; unread Community
+    // updates and never chat, mig 0183).
     getHomeBootstrap(),
     ])
   );
@@ -190,6 +191,17 @@ async function StudentShell() {
           subscriber per published write, and was measured at 57% of this
           database's total CPU, so those duplicates were not free. */}
       <ChatRealtime userId={userId} initialBadge={chatBadge} />
+      {/* The Community badge's ONE listener (mig 0183). A single
+          `postgres_changes` subscription on `notifications`, RLS-scoped to this
+          student, that reconciles by re-reading the authoritative count — never
+          by counting the event. Separate from <ChatRealtime/> because the two
+          share no data and no debounce window: merging them would recompute the
+          Community badge on every inbound DM and refetch the inbox on every
+          announcement. */}
+      <CommunityRealtime
+        userId={userId}
+        initialBadge={bootstrap.community.total}
+      />
       <AnnouncementModal
         announcements={bootstrap.announcements.map((a: Announcement) => ({
           id: a.id as string,
@@ -201,10 +213,9 @@ async function StudentShell() {
         }))}
       />
       <FloatingDock
-        // Keyed by NAV_ITEM href. "/events" used to be passed here and read by
-        // nothing — /events is an adopted route, not a tab — so the events
-        // signal now arrives as part of the Community badge, under the key the
-        // dock actually renders.
+        // Keyed by NAV_ITEM href. The Community number is unread Community
+        // UPDATES (mig 0183) — the exact rows /communities/updates renders —
+        // not the old six-part grouped count that answered no single question.
         badges={{ "/chat": chatBadge, "/communities": bootstrap.community.total }}
         avatarUrl={resolveAvatarUrl(profile?.avatar_url, profile?.gender)}
         viewerId={userId}

@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { ChevronLeft, Check } from "lucide-react";
 import { OpenChatButton } from "@/components/chat/open-chat-button";
 import { RequestToChatButton } from "@/components/chat/request-to-chat";
-import { ProfileTabs } from "@/components/profile/profile-tabs";
+import { ProfilePosts } from "@/components/profile/profile-posts";
 import { ProfileActionsMenu } from "@/components/profile/profile-actions-menu";
 import { BadgeStrip } from "@/components/profile/badge-strip";
 import {
@@ -24,6 +24,7 @@ import { isOnline, presenceLabel } from "@/lib/time";
 import { FEED_COLUMNS, type FeedPost } from "@/lib/feed/types";
 import { semesterLabel } from "@/lib/profile/constants";
 import { deriveSemester } from "@/lib/profile/semester";
+import { matchesHref } from "@/lib/profile/matches-visibility";
 
 /**
  * PERF/CORRECTNESS (perf audit Phase 4) — this default export is deliberately
@@ -41,27 +42,22 @@ import { deriveSemester } from "@/lib/profile/semester";
  */
 export default function PublicProfilePage({
   params,
-  searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string }>;
 }) {
   return (
     <Suspense fallback={<PageLoading />}>
-      <PublicProfilePageBody params={params} searchParams={searchParams} />
+      <PublicProfilePageBody params={params} />
     </Suspense>
   );
 }
 
 async function PublicProfilePageBody({
   params,
-  searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string }>;
 }) {
   const { id } = await params;
-  const { tab: initialTab } = await searchParams;
   const supabase = await createClient();
   // Verified locally from the JWT — no Auth API round trip (layout already
   // gated this route; RLS scopes every query below).
@@ -72,7 +68,7 @@ async function PublicProfilePageBody({
     supabase
       .from("profiles")
       .select(
-        "id, full_name, username, department, degree, bio, avatar_url, gender, cover_url, aura_score, verified, show_online, show_aura, show_department, show_semester, deactivated_at"
+        "id, full_name, username, department, degree, bio, avatar_url, gender, cover_url, aura_score, verified, show_online, show_aura, show_department, show_semester, show_matches, deactivated_at"
       )
       .eq("id", id)
       .single(),
@@ -299,10 +295,22 @@ async function PublicProfilePageBody({
           </div>
         </div>
 
+        {/* The Matches stat leads onward only for a CURRENT match of someone
+            who has not hidden their list (mig 0182). `matched` is the
+            authoritative read from `matches` above — never inferred from a
+            chat, a request or a like. The link is only the affordance:
+            get_matches_of() re-checks all of it and returns nothing to anyone
+            who types the URL. */}
         <ProfileStats
           aura={profile.aura_score ?? 0}
           matches={matchCount ?? 0}
           showAura={showAura}
+          matchesHref={matchesHref({
+            profileId: profile.id,
+            isSelf,
+            matched,
+            showMatches: profile.show_matches,
+          })}
           className="mb-5 mt-5"
         />
 
@@ -310,12 +318,11 @@ async function PublicProfilePageBody({
           <p className="type-callout mb-5 leading-relaxed text-fg">{profile.bio}</p>
         )}
 
-        {/* Public profile is Posts-only — no Stats data is passed, so there's a
-            single tab and ProfileTabs renders it with NO tab switcher and no
-            underline (a plain posts page). Campus Help is not part of the profile
-            at all anymore; a stray ?tab=help / ?tab=stats / ?tab=communities
-            falls back to Posts. */}
-        <ProfileTabs posts={posts} currentUserId={me} initialTab={initialTab} />
+        {/* Posts-only, and now so is your own profile — there is no tab model
+            left on either screen. Nothing reads `?tab=`, so a stray
+            ?tab=help / ?tab=stats / ?tab=communities from an old link is simply
+            ignored and this posts list renders. */}
+        <ProfilePosts posts={posts} currentUserId={me} />
       </main>
     </div>
   );

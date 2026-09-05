@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchChatBadge, toBadge, type ChatBadge } from "@/lib/chat/badge-count";
 import {
   fetchCommunityBadge,
-  sumBadge,
+  toCommunityBadge,
   type CommunityBadge,
 } from "@/lib/community/badge-count";
 import { activityVisibleTypeList } from "@/lib/notifications/view";
@@ -55,8 +55,8 @@ export const getHomeBootstrap = cache(async (): Promise<HomeBootstrap> => {
   if (!error && data && typeof data === "object") {
     const row = data as Record<string, unknown>;
     // The badge helpers own the shape rules (0169's `conversations` marker,
-    // 0170's grouping). Reuse them on the embedded payloads rather than
-    // re-deriving totals here, so one definition stays authoritative.
+    // 0183's unread-updates count). Reuse them on the embedded payloads rather
+    // than re-deriving totals here, so one definition stays authoritative.
     const chat = readChat(row.chat);
     const community = readCommunity(row.community);
     if (chat && community) {
@@ -110,7 +110,7 @@ async function legacyBootstrap(): Promise<HomeBootstrap> {
 }
 
 const EMPTY_CHAT: ChatBadge = toBadge(0, 0);
-const EMPTY_COMMUNITY: CommunityBadge = sumBadge({});
+const EMPTY_COMMUNITY: CommunityBadge = toCommunityBadge({});
 
 /**
  * Narrow the embedded chat payload; null means "not the shape we expect", which
@@ -132,11 +132,16 @@ function readChat(value: unknown): ChatBadge | null {
 }
 
 /**
- * Narrow the embedded community payload through the SAME summing rule the
- * direct reader uses — `sumBadge` owns migration 0170's grouping decision
- * (Community/Event/Broadcast, never chat), so it must not be re-derived here.
+ * Narrow the embedded community payload through the SAME rule the direct reader
+ * uses — `toCommunityBadge` owns migration 0183's definition (unread Community
+ * updates, never chat, never a platform-wide creation count), so it must not be
+ * re-derived here.
+ *
+ * A pre-0183 database answers with 0170's six-part breakdown, which carries no
+ * `updates` key and resolves to zero: no badge rather than a wrong one, so this
+ * client is safe to deploy before the migration is applied.
  */
 function readCommunity(value: unknown): CommunityBadge | null {
   if (!value || typeof value !== "object") return null;
-  return sumBadge(value as Record<string, unknown>);
+  return toCommunityBadge(value as Record<string, unknown>);
 }

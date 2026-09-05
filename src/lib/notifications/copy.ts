@@ -28,6 +28,7 @@ export const NOTIFICATION_TYPES = [
   "comment_reply",
   "community_approved",
   "community_join_approved",
+  "community_join_rejected",
   "community_join_request",
   "community_message",
   "community_post",
@@ -43,6 +44,7 @@ export const NOTIFICATION_TYPES = [
   "event_post_request",
   "event_rejected",
   "event_reminder",
+  "event_updated",
   "help_follow",
   "help_offer_accepted",
   "help_resolved",
@@ -129,6 +131,7 @@ export const ACTIVITY_VISIBLE_TYPES = [
   "event_organizer_added",
   "event_organizer_removed",
   "event_reminder",
+  "event_updated",
   "waitlist_promoted",
   // 7. Campus Help
   "help_response",
@@ -156,6 +159,7 @@ export const ACTIVITY_VISIBLE_TYPES = [
   "community_post_rejected",
   "community_join_request",
   "community_join_approved",
+  "community_join_rejected",
   "community_approved",
   "community_rejected",
   "society_role",
@@ -290,6 +294,8 @@ export function notificationCopy(
       return `${who} asked to join${inCommunity || " your community"}`;
     case "community_join_approved":
       return `Your join request for ${community ?? "the community"} was approved 🎉`;
+    case "community_join_rejected":
+      return `Your join request for ${community ?? "the community"} wasn't accepted`;
     case "community_approved":
       return `Your community ${community ?? ""} was approved 🎉`.replace("  ", " ");
     case "community_rejected":
@@ -318,6 +324,20 @@ export function notificationCopy(
       return data.kind === "1h"
         ? "An event you're attending starts within the hour ⏰"
         : "An event you're attending is coming up tomorrow ⏰";
+    case "event_updated": {
+      const title = snippet(str(data, "title"), 34);
+      const what = title ? `“${title}”` : "An event you're going to";
+      switch (data.change) {
+        case "cancelled":
+          return `${what} was cancelled`;
+        case "rescheduled":
+          return `${what} moved to a new time`;
+        case "venue":
+          return `${what} changed venue`;
+        default:
+          return `${what} was updated`;
+      }
+    }
     case "waitlist_promoted":
       return "A seat opened up — you're in! 🎟️";
 
@@ -449,6 +469,7 @@ export function notificationHref(
     case "community_post_approved":
     case "community_post_rejected":
     case "community_join_approved":
+    case "community_join_rejected":
     case "community_approved":
     case "community_rejected":
     case "society_announcement":
@@ -464,6 +485,7 @@ export function notificationHref(
     case "event_organizer_added":
     case "event_organizer_removed":
     case "event_reminder":
+    case "event_updated":
     case "waitlist_promoted":
       return eventHref(data);
 

@@ -51,8 +51,14 @@ export async function loadInbox(): Promise<InboxData> {
   ] = await Promise.all([
     supabase
       .from("conversations")
-      .select("id, user_low, user_high, created_at, last_message_at")
+      .select("id, user_low, user_high, created_at, last_message_at, closed_at")
       .or(`user_low.eq.${me},user_high.eq.${me}`)
+      // A conversation closed by an unmatch (mig 0182) leaves the inbox for
+      // both parties. The thread and its history survive — report evidence
+      // points at those rows — but it takes no new messages and stops
+      // occupying the list. `closed_at` is selected rather than filtered in
+      // PostgREST so this keeps working against a pre-0182 database, where the
+      // column is simply absent and every row reads as open.
       .order("last_message_at", { ascending: false }),
     supabase
       .from("message_requests")
@@ -125,7 +131,9 @@ export async function loadInbox(): Promise<InboxData> {
   }
   const spaceIds = [...spaces.keys()];
 
-  const conversations = convRows ?? [];
+  const conversations = (convRows ?? []).filter(
+    (c) => !(c as { closed_at?: string | null }).closed_at
+  );
   const requests = reqRows ?? [];
   const matches = matchRows ?? [];
   const convIds = conversations.map((c) => c.id);

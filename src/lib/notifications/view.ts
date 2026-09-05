@@ -24,6 +24,7 @@ export const SYSTEM_NOTIFICATION_TYPES = new Set<ActivityVisibleType>([
   "event_approved",
   "event_rejected",
   "event_reminder",
+  "event_updated",
   "waitlist_promoted",
   "level_up",
   "achievement",
@@ -42,6 +43,7 @@ export const SYSTEM_NOTIFICATION_TYPES = new Set<ActivityVisibleType>([
   "community_approved",
   "community_rejected",
   "community_join_approved",
+  "community_join_rejected",
   "community_post_approved",
   "community_post_rejected",
   "society_role",
@@ -101,6 +103,10 @@ export function notificationActionPhrase(type: string): string {
       return "submitted a post for review";
     case "community_join_request":
       return "asked to join a community";
+    case "community_join_rejected":
+      return "declined your join request";
+    case "event_updated":
+      return "changed an event you're going to";
     case "event_post_request":
       return "asked to post in an event";
     default:
@@ -174,6 +180,7 @@ export function notificationCategory(type: string): ActivityCategory | null {
     case "event_organizer_added":
     case "event_organizer_removed":
     case "event_reminder":
+    case "event_updated":
     case "waitlist_promoted":
       return "event_updates";
     case "help_response":
@@ -201,6 +208,7 @@ export function notificationCategory(type: string): ActivityCategory | null {
     case "community_post_rejected":
     case "community_join_request":
     case "community_join_approved":
+    case "community_join_rejected":
     case "community_approved":
     case "community_rejected":
     case "society_role":

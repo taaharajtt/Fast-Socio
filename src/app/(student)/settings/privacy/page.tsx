@@ -11,7 +11,7 @@ export default async function PrivacySettingsPage() {
   const { data: p } = await supabase
     .from("profiles")
     .select(
-      "discoverable, searchable, show_online, read_receipts, show_aura, show_department, show_semester, profile_visibility"
+      "discoverable, searchable, show_online, read_receipts, show_aura, show_department, show_semester, show_matches, profile_visibility"
     )
     .eq("id", userId!)
     .single();
@@ -38,6 +38,8 @@ export default async function PrivacySettingsPage() {
           show_aura: p?.show_aura ?? true,
           show_department: p?.show_department ?? true,
           show_semester: p?.show_semester ?? true,
+          // mig 0182 — defaults open, like every other privacy column.
+          show_matches: p?.show_matches ?? true,
         }}
         initialVisibility={
           (p?.profile_visibility as "public" | "university") ?? "public"

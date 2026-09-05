@@ -11,6 +11,7 @@ import {
   TrophySolid,
 } from "@/components/dock-glyphs";
 import { useChatBadge } from "@/lib/chat/badge-store";
+import { useCommunityBadge } from "@/lib/community/badge-store";
 import { markDockTap, reportDockNavigation } from "@/lib/nav-perf";
 import { cn } from "@/lib/utils";
 
@@ -132,6 +133,10 @@ export function FloatingDock({
   // it comes from the realtime store (seeded by, and falling back to, the
   // server-rendered value) rather than waiting for the next navigation.
   const chatBadge = useChatBadge(badges["/chat"] ?? 0);
+  // Same treatment for Community (mig 0183): its realtime island publishes an
+  // authoritative recount here, so the number moves as updates arrive and as
+  // they are read, without a router.refresh() of the whole tree.
+  const communityBadge = useCommunityBadge(badges["/communities"] ?? 0);
 
   // Optimistic active tab. A tab switch still has to reach the server for the
   // new segment, and until it commits `pathname` is the OLD route — so without
@@ -182,7 +187,12 @@ export function FloatingDock({
       <div className="mx-auto flex h-[var(--dock-h)] max-w-md items-stretch">
         {items.map(({ href, label, icon: Icon }) => {
           const active = activeHref === href;
-          const badge = href === "/chat" ? chatBadge : (badges[href] ?? 0);
+          const badge =
+            href === "/chat"
+              ? chatBadge
+              : href === "/communities"
+                ? communityBadge
+                : (badges[href] ?? 0);
           return (
             <Link
               key={href}

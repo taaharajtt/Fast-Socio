@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { cache } from "react";
 import Link from "next/link";
 import { Settings, Pencil } from "lucide-react";
-import { ProfileTabs, type ProfileCommunity } from "@/components/profile/profile-tabs";
+import { ProfilePosts } from "@/components/profile/profile-posts";
 import { BadgeStrip } from "@/components/profile/badge-strip";
 import {
   CoverFallback,
@@ -20,10 +20,6 @@ import { FEED_COLUMNS, type FeedPost } from "@/lib/feed/types";
 import { semesterLabel } from "@/lib/profile/constants";
 import { deriveSemester } from "@/lib/profile/semester";
 
-type SP = Record<string, string | string[] | undefined>;
-const one = (v: string | string[] | undefined) =>
-  (Array.isArray(v) ? v[0] : v) ?? "";
-
 // No `unstable_instant` export here — it only adds build-time validation, and
 // that validation currently trips on @sentry/nextjs reading the `sentry-trace`
 // header during every server render. See the note in next.config.ts; the static
@@ -36,17 +32,20 @@ const one = (v: string | string[] | undefined) =>
  * Settings and Edit affordances and the section geometry are the same on every
  * visit and prerender into the shell. Then the hero (cover art, avatar, name,
  * department) streams as one small single-row read, and the heavier tail —
- * badges, counts, your posts, your communities — streams behind it, so the top
- * of the page is never waiting on the bottom of it.
+ * badges, counts, your posts — streams behind it, so the top of the page is
+ * never waiting on the bottom of it.
+ *
+ * There is no tab switcher: this screen is Posts-only, exactly like a public
+ * profile. The Stats tab it used to carry is gone — its level/XP progress is
+ * /profile/aura, its counts are the Aura and Matches cards above (which link
+ * to those pages), and its badges shortcut is the badge strip. Nothing here
+ * reads a search param, so a legacy /profile?tab=stats link renders this page
+ * unchanged.
  *
  * Every slot reads the profile row through `loadProfile`, which is
  * request-memoized: three components, one query.
  */
-export default function ProfilePage({
-  searchParams,
-}: {
-  searchParams: Promise<SP>;
-}) {
+export default function ProfilePage() {
   return (
     <div className="mx-auto w-full max-w-md -mt-[var(--safe-top)]">
       {/* Cover banner (150px) — the user's cover photo scaled to fill, or a
@@ -119,7 +118,7 @@ export default function ProfilePage({
         </Suspense>
 
         <Suspense fallback={<SkeletonCards count={3} />}>
-          <Tabs searchParams={searchParams} />
+          <Posts />
         </Suspense>
       </main>
     </div>
@@ -127,7 +126,7 @@ export default function ProfilePage({
 }
 
 /** The viewer's own profile row. Memoized for the request so the cover, name,
- *  avatar, identity block, stats and tabs share a single read. */
+ *  avatar, identity block and stat cards share a single read. */
 const loadProfile = cache(async () => {
   const supabase = await createClient();
   // Verified locally from the JWT — no Auth API round trip; RLS is authoritative.
@@ -135,7 +134,9 @@ const loadProfile = cache(async () => {
   const { data } = await supabase
     .from("profiles")
     .select(
-      "full_name, username, department, degree, bio, avatar_url, gender, cover_url, aura_score, verified, level, xp"
+      // `level`/`xp` are deliberately absent: the only thing that read them was
+      // the Stats tab's progress bar, and that lives on /profile/aura now.
+      "full_name, username, department, degree, bio, avatar_url, gender, cover_url, aura_score, verified"
     )
     .eq("id", me)
     .single();
@@ -248,6 +249,8 @@ async function Stats() {
       aura={profile?.aura_score ?? 0}
       matches={matchCount ?? 0}
       auraHref="/profile/aura"
+      // The owner always reaches their own list, whatever show_matches says.
+      matchesHref="/profile/matches"
       className="mb-5 mt-5"
     />
   );
@@ -262,68 +265,21 @@ function StatsSkeleton() {
   );
 }
 
-async function Tabs({ searchParams }: { searchParams: Promise<SP> }) {
+/** Your posts. Attributed posts only — an anonymous post is kept off every
+ *  profile so this list can never reveal that this account authored one. */
+async function Posts() {
   const supabase = await createClient();
-  const { me, profile } = await loadProfile();
-  const sp = await searchParams;
-  const initialTab = one(sp.tab);
+  const { me } = await loadProfile();
 
-  const [
-    { data: postRows },
-    { data: matchCount },
-    { data: commRows },
-    // `rpc()` returns its scalar in `data` — NOT in `count`, which PostgREST only
-    // populates for `.select()` with a count option. Destructuring `count` here
-    // silently yielded undefined -> `?? 0` -> a permanent zero (fix-036/fix-042 round 2).
-    { data: postCount },
-    { count: eventCount },
-  ] = await Promise.all([
-    // Your Posts tab shows attributed posts only — anonymous posts are kept off
-    // every profile so the tab can never reveal that this account authored one
-    // (matches the is_anonymous=false stats count below).
-    supabase
-      .from("feed_posts")
-      .select(FEED_COLUMNS)
-      .eq("author_id", me)
-      .eq("is_anonymous", false)
-      .order("created_at", { ascending: false })
-      .limit(30),
-    supabase.rpc("get_match_count", { p_user_id: me }),
-    supabase
-      .from("community_members")
-      .select("community:communities(id, name, member_count, status)")
-      .eq("user_id", me),
-    // Stats tab counts (Refactor Phase 10). This MUST go through the definer
-    // RPC: `posts` has RLS on with no SELECT policy, so counting the table
-    // directly returned 0 for everyone, forever (fix-036, mig 0133).
-    supabase.rpc("get_profile_post_count", { p_user: me }),
-    supabase
-      .from("event_attendees")
-      .select("event_id", { count: "exact", head: true })
-      .eq("user_id", me),
-  ]);
+  const { data: postRows } = await supabase
+    .from("feed_posts")
+    .select(FEED_COLUMNS)
+    .eq("author_id", me)
+    .eq("is_anonymous", false)
+    .order("created_at", { ascending: false })
+    .limit(30);
 
   const posts = (postRows as unknown as FeedPost[]) ?? [];
-  const communities = ((commRows ?? [])
-    .map((r) => r.community as unknown as (ProfileCommunity & { status: string }) | null)
-    .filter((c): c is ProfileCommunity & { status: string } =>
-      Boolean(c) && c!.status === "approved"
-    )) as ProfileCommunity[];
 
-  return (
-    <ProfileTabs
-      posts={posts}
-      currentUserId={me}
-      initialTab={initialTab}
-      stats={{
-        posts: postCount ?? 0,
-        communities: communities.length,
-        matches: matchCount ?? 0,
-        events: eventCount ?? 0,
-        aura: profile?.aura_score ?? 0,
-        level: profile?.level ?? 1,
-        xp: profile?.xp ?? 0,
-      }}
-    />
-  );
+  return <ProfilePosts posts={posts} currentUserId={me} />;
 }

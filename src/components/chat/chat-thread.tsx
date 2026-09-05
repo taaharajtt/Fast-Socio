@@ -155,6 +155,7 @@ export function ChatThread({
   showReadReceipts = true,
   otherName = null,
   reportParam = null,
+  closed = false,
 }: {
   conversationId: string;
   meId: string;
@@ -174,6 +175,13 @@ export function ChatThread({
   /** The `?report` search param. The thread menu sets it to open selection
    *  mode; ChatThread clears it when selection ends. */
   reportParam?: string | null;
+  /**
+   * The pair unmatched (mig 0182): the conversation is read-only. The composer
+   * is replaced by a notice and the long-press action sheet is suppressed, so
+   * nothing here offers a write. The database refuses one regardless — this is
+   * the UI half of a rule enforced in the messages INSERT policy.
+   */
+  closed?: boolean;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [signedAttachments, setSignedAttachments] = useState<
@@ -1162,10 +1170,12 @@ export function ChatThread({
    */
   const pressFor = useMessagePress({
     onLongPress: (id) => {
+      if (closed) return;
       const m = messagesRef.current.find((x) => x.id === id);
       if (m) setActionsFor(m);
     },
     onDoubleTap: (id) => {
+      if (closed) return;
       const m = messagesRef.current.find((x) => x.id === id);
       if (m) likeMessage(m);
     },
@@ -1681,6 +1691,15 @@ export function ChatThread({
             </GlassButton>
           </div>
         </form>
+      ) : closed ? (
+        <div
+          role="status"
+          className="sticky bottom-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2"
+        >
+          <p className="glass rounded-[var(--radius-md)] px-4 py-3 text-center text-sm text-fg-muted">
+            You&rsquo;re no longer matched. This conversation is read-only.
+          </p>
+        </div>
       ) : recording ? (
         <div className="sticky bottom-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
           {/* No <form> here: every control in the recording strip is a

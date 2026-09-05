@@ -12,6 +12,12 @@ import { MatchRow, type MatchListRow } from "@/components/profile/match-row";
  *
  * Reads `get_my_matches()`, which resolves the pair from either side of the
  * canonical `matches` row and carries fix-037's percentage.
+ *
+ * Two things this list deliberately does NOT have (mig 0182): a Message button
+ * — chat lives on the profile and in Chat, and it competed with the one action
+ * that belongs here — and the chevron that used to open a match's own matches.
+ * That hop now goes through their profile's Matches stat, which is the only
+ * place that can honour their `show_matches` setting.
  */
 export default async function MatchesPage() {
   const supabase = await createClient();
@@ -53,13 +59,7 @@ export default async function MatchesPage() {
       ) : (
         <div className="divide-y divide-glass-border border-y border-glass-border">
           {rows.map((row) => (
-            <MatchRow
-              key={row.id}
-              row={row}
-              // One hop: from a person you matched with, you may look at THEIR
-              // matches. The boundary is enforced in get_matches_of(), not here.
-              hopHref={`/profile/matches/${row.id}`}
-            />
+            <MatchRow key={row.id} row={row} showUnmatch />
           ))}
         </div>
       )}

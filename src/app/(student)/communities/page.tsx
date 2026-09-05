@@ -13,7 +13,8 @@ import type { ChatRoomCardVM } from "@/components/communities/chat-room-card";
 import type { JoinState } from "@/app/(student)/communities/actions";
 import { onlineSinceIso } from "@/lib/time";
 import { ScreenHeader } from "@/components/ui";
-import { markCommunityHubSeen } from "@/lib/community/seen";
+import { UpdatesEntry } from "@/components/communities/updates-entry";
+import { getHomeBootstrap } from "@/lib/home/bootstrap";
 
 type CommunityLite = {
   id: string;
@@ -69,6 +70,14 @@ export default function CommunitiesPage() {
         action={<CreateSpaceButton />}
         className="mb-5"
       />
+      {/* First thing under the header, so the answer to "why does the dock say
+          6" is one tap away from the tab that shows the 6. It streams on its
+          own: the sections below must not wait on it, and it must not wait on
+          them. */}
+      <Suspense fallback={null}>
+        <UpdatesLink />
+      </Suspense>
+
       <Suspense fallback={<SkeletonRows count={5} />}>
         <CommunitySections />
       </Suspense>
@@ -98,16 +107,27 @@ async function CommunitySubtext() {
   return <>{text}</>;
 }
 
+/**
+ * The Updates entry row.
+ *
+ * Reads the count through `getHomeBootstrap`, which the student shell has
+ * already called this request and which is memoised with React `cache` — so
+ * this costs no extra round trip, and the number here is by construction the
+ * same one the dock is rendering.
+ *
+ * OPENING THIS PAGE MARKS NOTHING READ. The hub used to stamp a "seen"
+ * timestamp on arrival (mig 0170), which silenced whole categories the student
+ * had never looked at. Reading is now something they do to an item, on the
+ * Updates screen.
+ */
+async function UpdatesLink() {
+  const { community } = await getHomeBootstrap();
+  return <UpdatesEntry unread={community.total} />;
+}
+
 async function CommunitySections() {
   const supabase = await createClient();
   const me = (await getAuthUserId())!;
-
-  // Opening the hub clears the hub-level Community badge items (new spaces,
-  // memberships you were approved into, your own approvals) and the events
-  // mark. It runs in `after()`, so THIS render still shows what was new and the
-  // badge is gone by the next navigation — the same deferral the Notifications
-  // panel uses. Items that live inside a specific space are untouched.
-  markCommunityHubSeen();
 
   const [
     { data: memberRows },

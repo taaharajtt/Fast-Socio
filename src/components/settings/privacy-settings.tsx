@@ -28,6 +28,11 @@ const GROUPS: { title: string; items: { key: string; label: string; hint?: strin
       { key: "show_aura", label: "Show Aura" },
       { key: "show_department", label: "Show department" },
       { key: "show_semester", label: "Show semester" },
+      {
+        key: "show_matches",
+        label: "Show my matches",
+        hint: "Allow your matches to view your matches list",
+      },
     ],
   },
 ];

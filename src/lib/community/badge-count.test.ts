@@ -1,99 +1,82 @@
 import { describe, expect, it } from "vitest";
-import { fetchCommunityBadge, sumBadge } from "./badge-count";
+import { fetchCommunityBadge, toCommunityBadge } from "./badge-count";
 
 /**
- * The product rule under test: the Community badge counts grouped
- * Community/Event/Broadcast ITEMS, never raw messages.
+ * The product rule under test: the Community badge is the number of UNREAD
+ * COMMUNITY UPDATES — the exact rows /communities/updates renders — and never
+ * anything else.
  *
- * The grouping itself (one item per community needing management, one item per
- * broadcasting space) happens in SQL — `community_badge_count()`, migration
- * 0170 — so what is asserted here is the contract on this side of it: the
- * breakdown sums into the rendered total, every kind contributes, and a bad or
- * missing answer produces no badge rather than a wrong one.
+ * The set itself is defined in SQL (`public.community_updates`, migration
+ * 0183): which types count, whether an item is still live, and whether the
+ * reader may still act on it. What is asserted here is the contract on this
+ * side of the boundary — the payload becomes the rendered number, a bad answer
+ * produces NO badge rather than a wrong one, and a pre-0183 database (0170's
+ * grouped breakdown) resolves to zero instead of being mis-summed.
  */
 
 function rpcClient(data: unknown, error: unknown = null) {
   return { rpc: async () => ({ data, error }) } as never;
 }
 
-describe("sumBadge", () => {
-  it("sums every item kind into the rendered total", () => {
-    const badge = sumBadge({
-      manage: 2,
+describe("toCommunityBadge", () => {
+  it("renders the unread update count", () => {
+    expect(toCommunityBadge({ updates: 6, total: 6 })).toEqual({
+      updates: 6,
+      total: 6,
+    });
+  });
+
+  it("renders no badge at zero", () => {
+    expect(toCommunityBadge({ updates: 0, total: 0 }).total).toBe(0);
+  });
+
+  it("counts items, so two of the same kind are two", () => {
+    // Two pending join requests in ONE community are two things to decide, and
+    // the old badge collapsed them to one. The count is per ITEM now.
+    expect(toCommunityBadge({ updates: 2 }).total).toBe(2);
+  });
+
+  it("never renders a negative, a fraction or a NaN", () => {
+    expect(toCommunityBadge({ updates: -4 }).total).toBe(0);
+    expect(toCommunityBadge({ updates: "oops" }).total).toBe(0);
+    expect(toCommunityBadge({ updates: Number.NaN }).total).toBe(0);
+    expect(toCommunityBadge({ updates: 2.7 }).total).toBe(2);
+  });
+
+  it("resolves a pre-0183 grouped payload to no badge", () => {
+    // Migration 0170's shape. A client meeting an older database must show no
+    // badge rather than a number computed from a different definition.
+    const legacy = {
+      manage: 3,
       joined: 1,
-      communities: 1,
-      events: 3,
+      communities: 12,
+      events: 4,
       broadcasts: 2,
       approvals: 1,
-    });
-    expect(badge.total).toBe(10);
-  });
-
-  it("counts one community needing management as 1 and two as 2", () => {
-    expect(sumBadge({ manage: 1 }).total).toBe(1);
-    expect(sumBadge({ manage: 2 }).total).toBe(2);
-  });
-
-  it("takes the grouped broadcast count as given — one item per space", () => {
-    // Twenty announcements from one society reach this helper as `1`; the
-    // collapse is the RPC's job and must not be re-derived from row counts.
-    expect(sumBadge({ broadcasts: 1 }).total).toBe(1);
-  });
-
-  it("has no key for chat messages at all", () => {
-    // A community chat message can only inflate the badge if some key carries
-    // it. Passing one is silently ignored, which is the point.
-    expect(sumBadge({ community_messages: 40 }).total).toBe(0);
-  });
-
-  it("treats a missing kind as zero", () => {
-    expect(sumBadge({ events: 2 })).toMatchObject({
-      manage: 0,
-      events: 2,
-      total: 2,
-    });
-  });
-
-  it("never renders NaN or a negative from a miscoded answer", () => {
-    const badge = sumBadge({ manage: "oops", joined: -4, events: 2.7 });
-    expect(badge.manage).toBe(0);
-    expect(badge.joined).toBe(0);
-    expect(badge.events).toBe(2);
-    expect(badge.total).toBe(2);
+    };
+    expect(toCommunityBadge(legacy).total).toBe(0);
   });
 });
 
 describe("fetchCommunityBadge", () => {
-  it("returns the summed breakdown from the RPC", async () => {
-    const badge = await fetchCommunityBadge(
-      rpcClient({
-        manage: 1,
-        joined: 0,
-        communities: 2,
-        events: 1,
-        broadcasts: 1,
-        approvals: 0,
-      })
-    );
-    expect(badge.total).toBe(5);
-    expect(badge.manage).toBe(1);
+  it("reads the RPC payload", async () => {
+    const badge = await fetchCommunityBadge(rpcClient({ updates: 3, total: 3 }));
+    expect(badge.total).toBe(3);
   });
 
-  it("shows no badge when the RPC is missing — never a guess", async () => {
-    // Without migration 0170 there is no seen model, so any invented number
-    // would point students at surfaces they have already read.
+  it("falls back to no badge when the RPC errors", async () => {
     const badge = await fetchCommunityBadge(
       rpcClient(null, { message: "function does not exist" })
     );
     expect(badge.total).toBe(0);
   });
 
-  it("shows no badge when the call throws", async () => {
-    const badge = await fetchCommunityBadge({
+  it("falls back to no badge when the call throws", async () => {
+    const client = {
       rpc: async () => {
         throw new Error("network");
       },
-    } as never);
-    expect(badge.total).toBe(0);
+    } as never;
+    expect((await fetchCommunityBadge(client)).total).toBe(0);
   });
 });

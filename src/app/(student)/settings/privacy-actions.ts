@@ -14,6 +14,9 @@ const BOOL_PRIVACY = [
   "show_aura",
   "show_department",
   "show_semester",
+  // mig 0182. Only your CURRENT matches could ever open your list; turning this
+  // off means nobody but you can. Enforced in get_matches_of(), not here.
+  "show_matches",
 ] as const;
 
 export type PrivacyKey = (typeof BOOL_PRIVACY)[number];
@@ -36,6 +39,12 @@ export async function setPrivacy(
     .eq("id", userId);
   if (error) return { error: error.message };
   revalidatePath("/settings/privacy");
+  // show_matches decides whether the Matches stat links on the viewer's copy of
+  // this profile, so the profile surfaces have to be re-rendered too.
+  if (key === "show_matches") {
+    revalidatePath("/profile");
+    revalidatePath(`/profile/${userId}`);
+  }
 }
 
 /** Set profile visibility ('public' | 'university'). */
