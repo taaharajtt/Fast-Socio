@@ -8,7 +8,10 @@ import {
 } from "@/app/(student)/settings/notification-actions";
 
 const ITEMS: { key: string; label: string }[] = [
-  { key: "matches", label: "Matches" },
+  // One switch for the whole matching family: the named "you matched with X"
+  // notification and the anonymous "someone tried to match with you" aggregate
+  // (mig 0185). Turning it off also resolves any unread anonymous row.
+  { key: "matches", label: "Matches & interest" },
   { key: "messages", label: "Messages & requests" },
   { key: "likes", label: "Likes & comments" },
   { key: "events", label: "Events" },

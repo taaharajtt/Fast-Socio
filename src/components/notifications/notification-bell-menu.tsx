@@ -19,6 +19,7 @@ import {
   Gavel,
   HandHelping,
   Image as ImageIcon,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -50,6 +51,8 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   smart_match_application: UserPlus,
   smart_match_accepted: Zap,
   smart_match_mention: AtSign,
+  // Anonymous incoming likes (mig 0185): a generic spark, never an avatar.
+  incoming_match_interest: Sparkles,
   event_approved: Megaphone,
   event_rejected: Megaphone,
   event_organizer_added: Megaphone,

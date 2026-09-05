@@ -50,6 +50,7 @@ export const NOTIFICATION_TYPES = [
   "help_resolved",
   "help_response",
   "help_thanked",
+  "incoming_match_interest",
   "leaderboard_top_finish",
   "level_up",
   "match",
@@ -124,6 +125,8 @@ export const ACTIVITY_VISIBLE_TYPES = [
   "smart_match_application",
   "smart_match_accepted",
   "smart_match_mention",
+  // An anonymous aggregate, never an actor action (mig 0185).
+  "incoming_match_interest",
   // 5. Event approved / declined
   "event_approved",
   "event_rejected",
@@ -278,6 +281,16 @@ export function notificationCopy(
       return `${who} accepted your request to join 🎉`;
     case "smart_match_mention":
       return `${who} tagged you as a teammate`;
+    case "incoming_match_interest": {
+      // Deliberately mysterious, and deliberately actor-free: `who` is not read
+      // here at all, so no name can reach this string even if a future row
+      // somehow carried an actor. A missing, fractional or nonsensical count
+      // reads as the singular rather than "0 people" or "NaN people".
+      const n = Number.isFinite(count) ? Math.floor(count) : 1;
+      return n > 1
+        ? `${n} people tried to match with you.`
+        : "Someone tried to match with you.";
+    }
 
     // — Communities & societies ——————————————————————————————————
     case "community_message":
@@ -454,6 +467,9 @@ export function notificationHref(
 
     // Discover.
     case "matching_request":
+    // The deck, never a person (mig 0185). There is no id in the payload to
+    // route to even if this wanted to.
+    case "incoming_match_interest":
       return "/discover";
     case "smart_match_application":
     case "smart_match_accepted":

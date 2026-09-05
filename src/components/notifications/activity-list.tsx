@@ -14,6 +14,7 @@ import {
   Gavel,
   HandHelping,
   Image as ImageIcon,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 import { AuraIcon } from "@/components/ui/aura-icon";
@@ -54,6 +55,8 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   smart_match_application: UserPlus,
   smart_match_accepted: Zap,
   smart_match_mention: AtSign,
+  // Anonymous incoming likes (mig 0185): a generic spark, never an avatar.
+  incoming_match_interest: Sparkles,
   // Events
   event_approved: Megaphone,
   event_rejected: Megaphone,

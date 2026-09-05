@@ -38,6 +38,8 @@ export const SYSTEM_NOTIFICATION_TYPES = new Set<ActivityVisibleType>([
   "help_offer_accepted",
   "matching_accepted",
   "smart_match_accepted",
+  // Anonymous aggregate — there is no actor, so it can never be bundled.
+  "incoming_match_interest",
   // Space lifecycle decisions ABOUT the reader — an approval or a rejection is
   // a single fact, not an actor doing something repeatedly.
   "community_approved",
@@ -75,6 +77,10 @@ export function notificationActionPhrase(type: string): string {
       return "accepted your request";
     case "smart_match_mention":
       return "tagged you as a teammate";
+    case "incoming_match_interest":
+      // Never used for this type (it has no actor to prefix), but the map is
+      // consulted by type, so it must not fall through to "interacted with you".
+      return "tried to match with you";
     case "event_organizer_added":
       return "added you as an event co-organizer";
     case "event_organizer_removed":
@@ -173,6 +179,7 @@ export function notificationCategory(type: string): ActivityCategory | null {
     case "smart_match_application":
     case "smart_match_accepted":
     case "smart_match_mention":
+    case "incoming_match_interest":
       return "discover";
     case "event_approved":
     case "event_rejected":
