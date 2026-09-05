@@ -5,6 +5,7 @@ import { Send, Smile, X } from "lucide-react";
 import { GlassButton } from "@/components/ui";
 import { AppImage } from "@/components/ui/app-image";
 import { addComment } from "@/app/(student)/home/actions";
+import { COMMENT_LIMIT_MESSAGES } from "@/lib/feed/comment-guard";
 import { MentionMenu } from "@/components/feed/mention-menu";
 import { useMentionAutocomplete } from "@/components/feed/use-mention-autocomplete";
 import type { ReplyTarget } from "@/components/feed/comment-thread";
@@ -25,6 +26,7 @@ export function AddComment({
   replyingTo = null,
   onCancelReply,
   onSubmitted,
+  onPostFull,
 }: {
   postId: string;
   /** Viewer's avatar, shown to the left of the field (IG comment sheet). */
@@ -37,6 +39,8 @@ export function AddComment({
   onCancelReply?: () => void;
   /** Fired after a successful post; parentId is set for a reply, null otherwise. */
   onSubmitted?: (parentId: string | null) => void;
+  /** The post filled up while this composer was on screen. */
+  onPostFull?: () => void;
 }) {
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -78,8 +82,14 @@ export function AddComment({
     const serialized = mention.serialize(text);
     start(async () => {
       const res = await addComment(postId, serialized, parentId);
-      if (!res.ok) setError(res.error);
-      else {
+      if (!res.ok) {
+        setError(res.error);
+        // STALE UI. The page may still show 29 while another reader has just
+        // taken the last slot; the database is what noticed. Tell the parent so
+        // the composer closes rather than inviting a second doomed attempt.
+        if (res.error === COMMENT_LIMIT_MESSAGES.comment_post_full)
+          onPostFull?.();
+      } else {
         setBody("");
         mention.reset();
         setShowEmoji(false);

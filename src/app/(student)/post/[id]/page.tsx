@@ -97,7 +97,7 @@ async function PostBody({ params }: { params: Promise<{ id: string }> }) {
 
   // Same enriched load as the in-feed sheet (top-level comments + authors +
   // the viewer's like state); replies are lazy-loaded client-side.
-  const { comments, authors } = await fetchComments(id);
+  const { comments, authors, total } = await fetchComments(id);
 
   return (
     <>
@@ -109,6 +109,7 @@ async function PostBody({ params }: { params: Promise<{ id: string }> }) {
           postId={id}
           initialComments={comments}
           initialAuthors={authors}
+          totalComments={total}
           viewerId={me ?? undefined}
         />
       </div>

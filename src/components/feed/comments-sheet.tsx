@@ -52,6 +52,8 @@ function CommentsSheetContent({
     authors: Record<string, Author>;
     viewerAvatar: string | null;
     viewerId: string | null;
+    /** All rows including replies — gates the composer at the 30 cap. */
+    total: number;
   } | null>(null);
 
   useEffect(() => {
@@ -83,6 +85,7 @@ function CommentsSheetContent({
           postId={postId}
           initialComments={data.comments}
           initialAuthors={data.authors}
+          totalComments={data.total}
           viewerAvatar={data.viewerAvatar}
           viewerId={data.viewerId}
           onCommentAdded={onCommentAdded}

@@ -7,15 +7,18 @@ import { getAuthUserId } from "@/lib/auth/user";
 import {
   checkRateLimit,
   checkRateLimitResult,
-  limitedMessage,
   RATE_LIMITS,
 } from "@/lib/rate-limit";
 import {
   COMMENT_LIMITS,
+  COMMENT_LIMIT_MESSAGES,
   DUPLICATE_COMMENT_MESSAGE,
+  commentLimitMessage,
   isDuplicateComment,
   isFloodingComments,
+  postCapExceeded,
   postScopedAction,
+  userPostCapExceeded,
 } from "@/lib/feed/comment-guard";
 import { isAppStorageUrl } from "@/lib/url-safety";
 import { FEED_COLUMNS, FEED_PAGE_SIZE, type FeedPost } from "@/lib/feed/types";
@@ -480,19 +483,35 @@ export async function fetchComments(postId: string): Promise<{
   viewerAvatar: string | null;
   /** The signed-in viewer's id — used to attribute their own replies. */
   viewerId: string | null;
+  /**
+   * EVERY comment row on the post, replies included — the unit the 30-comment
+   * cap counts and the unit `posts.comment_count` stores. `comments.length`
+   * cannot stand in for it: that array is top-level only, because replies load
+   * lazily, so using it would let a post with 25 top-level comments and 10
+   * replies keep offering a composer the database will refuse.
+   */
+  total: number;
 }> {
   const supabase = await createClient();
   // Local JWT verification — no Auth API round trip on this hot path.
   const userId = await getAuthUserId();
   const viewerId = userId;
 
-  const { data: rows } = await supabase
-    .from("post_comments")
-    .select("id, author_id, body, created_at, parent_id, like_count, reply_count")
-    .eq("post_id", postId)
-    .is("parent_id", null)
-    .eq("hidden", false)
-    .order("created_at", { ascending: true });
+  const [{ data: rows }, { count: total }] = await Promise.all([
+    supabase
+      .from("post_comments")
+      .select("id, author_id, body, created_at, parent_id, like_count, reply_count")
+      .eq("post_id", postId)
+      .is("parent_id", null)
+      .eq("hidden", false)
+      .order("created_at", { ascending: true }),
+    // Unfiltered by `hidden` and by `parent_id`: the cap counts ROWS, which is
+    // what the database trigger counts too.
+    supabase
+      .from("post_comments")
+      .select("id", { count: "exact", head: true })
+      .eq("post_id", postId),
+  ]);
 
   const { comments, authors } = await hydrateComments(
     supabase,
@@ -510,7 +529,7 @@ export async function fetchComments(postId: string): Promise<{
     viewerAvatar = resolveAvatarUrl(me?.avatar_url, me?.gender);
   }
 
-  return { comments, authors, viewerAvatar, viewerId };
+  return { comments, authors, viewerAvatar, viewerId, total: total ?? 0 };
 }
 
 /**
@@ -654,6 +673,8 @@ export async function addComment(
   if (visible.length < 1 || visible.length > 1000)
     return { ok: false, error: "Comment must be 1–1000 characters." };
 
+  // Global backstop across ALL posts, unchanged. The per-post rules below are
+  // stricter wherever they overlap; this only bounds feed-wide flooding.
   const allowed = await checkRateLimit("comment", 60, 60 * 60);
   if (!allowed) return { ok: false, error: "You're commenting too fast." };
 
@@ -669,7 +690,7 @@ export async function addComment(
   if (cooldown.status === "limited")
     return {
       ok: false,
-      error: limitedMessage(cooldown, "Slow down between comments."),
+      error: COMMENT_LIMIT_MESSAGES.comment_cooldown,
     };
   if (cooldown.status === "error")
     return { ok: false, error: "Couldn't post that comment. Try again." };
@@ -682,10 +703,7 @@ export async function addComment(
   if (postWindow.status === "limited")
     return {
       ok: false,
-      error: limitedMessage(
-        postWindow,
-        "You've commented on this post a lot just now."
-      ),
+      error: COMMENT_LIMIT_MESSAGES.comment_hourly_limit,
     };
   if (postWindow.status === "error")
     return { ok: false, error: "Couldn't post that comment. Try again." };
@@ -736,6 +754,27 @@ export async function addComment(
   if (storedBody.length > 4000)
     return { ok: false, error: "Too many mentions in one comment." };
 
+  // The two count-based caps, checked here for a friendly message. These are
+  // ADVISORY: `enforce_comment_spam_limits()` (mig 0193) re-checks both under a
+  // post-scoped advisory lock, so the answer below being stale — someone else
+  // taking the last slot between this read and the insert — is caught by the
+  // database and mapped to the same copy at the bottom of this function.
+  const [{ count: totalComments }, { count: ownComments }] = await Promise.all([
+    supabase
+      .from("post_comments")
+      .select("id", { count: "exact", head: true })
+      .eq("post_id", postId),
+    supabase
+      .from("post_comments")
+      .select("id", { count: "exact", head: true })
+      .eq("post_id", postId)
+      .eq("author_id", userId),
+  ]);
+  if (postCapExceeded(totalComments ?? 0))
+    return { ok: false, error: COMMENT_LIMIT_MESSAGES.comment_post_full };
+  if (userPostCapExceeded(ownComments ?? 0))
+    return { ok: false, error: COMMENT_LIMIT_MESSAGES.comment_user_post_limit };
+
   const { error } = await supabase.from("post_comments").insert({
     post_id: postId,
     author_id: userId,
@@ -744,7 +783,9 @@ export async function addComment(
     risk_score: risk.score,
     hidden: risk.action === "hold",
   });
-  if (error) return { ok: false, error: error.message };
+  // Never surface a raw PostgreSQL error: the database raises a stable token
+  // and `commentLimitMessage` owns the wording.
+  if (error) return { ok: false, error: commentLimitMessage(error.message) };
 
   revalidatePath(`/post/${postId}`);
   return { ok: true };
