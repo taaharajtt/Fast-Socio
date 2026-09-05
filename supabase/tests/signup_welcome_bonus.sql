@@ -74,7 +74,7 @@ do $$
 declare
   uid   uuid := gen_random_uuid();
   email text := 'i' || (floor(random() * 900000 + 100000))::int || '@nu.edu.pk';
-  n int; total int; cached int; xp int; lvl int;
+  n int; total int; cached int; v_xp int; v_lvl int;
 begin
   insert into auth.users (id, email, raw_user_meta_data, aud, role,
                           instance_id, created_at, updated_at)
@@ -128,13 +128,15 @@ begin
   if exists (select 1 from public.aura_grants where user_id = uid) then
     raise exception 'FAIL: the welcome gift created an XP-bearing grant';
   end if;
-  select coalesce(xp,0), coalesce(level,1) into xp, lvl
-    from public.profiles where id = uid;
-  if xp <> 0 then
-    raise exception 'FAIL: the welcome gift granted % XP, expected 0', xp;
+  -- Qualified, and the locals renamed: bare `xp`/`level` are ambiguous between
+  -- a PL/pgSQL variable and the column of the same name.
+  select coalesce(p.xp, 0), coalesce(p.level, 1) into v_xp, v_lvl
+    from public.profiles p where p.id = uid;
+  if v_xp <> 0 then
+    raise exception 'FAIL: the welcome gift granted % XP, expected 0', v_xp;
   end if;
-  if lvl <> 1 then
-    raise exception 'FAIL: a brand-new account is level %, expected 1', lvl;
+  if v_lvl <> 1 then
+    raise exception 'FAIL: a brand-new account is level %, expected 1', v_lvl;
   end if;
 
   -- 1f. It unlocks no contribution achievement.
@@ -203,7 +205,7 @@ begin
   -- The account has 100 Aura, all of it from this week's welcome gift. If the
   -- leaderboard counted it, this brand-new user would appear on it.
   if exists (
-    select 1 from public.get_weekly_leaderboard(100) w where w.id = uid
+    select 1 from public.get_weekly_leaderboard(100) w where w.user_id = uid
   ) then
     raise exception 'FAIL: the welcome gift put a new account on the leaderboard';
   end if;
