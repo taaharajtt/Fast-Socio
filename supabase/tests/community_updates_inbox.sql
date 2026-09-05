@@ -1,8 +1,8 @@
 -- =============================================================================
--- Verification for migration 0192 — Updates as the space inbox, Notifications
--- as its complement.
+-- Verification for migrations 0192 and 0195 — Updates as the SPACE inbox,
+-- Notifications as the platform-level surface, Chat as its own domain.
 --
--- Run against a database with 0192 applied. Everything is inside a transaction
+-- Run against a database with 0195 applied. Everything is inside a transaction
 -- that is ROLLED BACK.
 --
 --   psql "$DB_URL" -f supabase/tests/community_updates_inbox.sql
@@ -10,9 +10,10 @@
 -- Every check raises on failure; a run ending in "ALL CHECKS PASSED" is the
 -- pass condition.
 --
--- The two surfaces must PARTITION notifications_live: no row on both, no row on
--- neither (of the types either renders). That is the property the whole
--- refactor rests on, and section 1 asserts it globally over real data.
+-- The THREE surfaces must PARTITION notifications_live: no row on two of them,
+-- no row without a domain. That is the property the whole refactor rests on,
+-- and section 1 asserts it globally over real data. The DM-exclusion rules
+-- specifically live in supabase/tests/notification_domain_routing.sql.
 -- =============================================================================
 
 begin;
@@ -28,6 +29,9 @@ begin
   if not exists (select 1 from pg_views where schemaname='public' and viewname='activity_notifications') then
     raise exception 'FAIL: activity_notifications is missing';
   end if;
+  if not exists (select 1 from pg_views where schemaname='public' and viewname='chat_notifications') then
+    raise exception 'FAIL: chat_notifications is missing';
+  end if;
 
   -- Both views must be security_invoker, or RLS on notifications stops
   -- scoping them and one student reads another's inbox.
@@ -35,6 +39,7 @@ begin
     select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
      where n.nspname='public'
        and c.relname in ('community_updates','activity_notifications',
+                         'chat_notifications',
                          -- notifications_live too: both surfaces are built on
                          -- it, and if IT loses security_invoker their own
                          -- setting does not save them — the inner view is what
@@ -47,6 +52,7 @@ begin
   end if;
 
   if has_table_privilege('anon','public.community_updates','select')
+     or has_table_privilege('anon','public.chat_notifications','select')
      or has_table_privilege('anon','public.activity_notifications','select') then
     raise exception 'FAIL: anon can read a notification surface';
   end if;
@@ -68,11 +74,16 @@ end $$;
 do $$
 declare overlap int; orphan int;
 begin
-  select count(*) into overlap
-    from public.community_updates u
-    join public.activity_notifications a on a.id = u.id;
+  select (
+      (select count(*) from public.community_updates u
+         join public.activity_notifications a on a.id = u.id)
+    + (select count(*) from public.community_updates u
+         join public.chat_notifications c on c.id = u.id)
+    + (select count(*) from public.chat_notifications c
+         join public.activity_notifications a on a.id = c.id)
+  ) into overlap;
   if overlap <> 0 then
-    raise exception 'FAIL: % rows appear on BOTH surfaces', overlap;
+    raise exception 'FAIL: % rows appear on more than one surface', overlap;
   end if;
 
   -- Every row of a type either surface renders must land on exactly one. The
@@ -80,8 +91,9 @@ begin
   -- two views built on it.
   select count(*) into orphan
     from public.notifications_live n
-   where public.notification_domain(n.type, n.subject_community_id, n.subject_event_id)
-         not in ('community','activity');
+   where public.notification_domain(n.type, n.subject_community_id,
+                                    n.subject_event_id, n.subject_conversation_id)
+         not in ('community_updates','chat','general_notifications','system');
   if orphan <> 0 then
     raise exception 'FAIL: % rows have no domain', orphan;
   end if;
@@ -98,41 +110,49 @@ declare
 begin
   -- The heart of the refactor: a like on a feed post and a like on a community
   -- post share the type `post_like`.
-  d_feed  := public.notification_domain('post_like', null, null);
-  d_comm  := public.notification_domain('post_like', gen_random_uuid(), null);
-  d_event := public.notification_domain('post_like', null, gen_random_uuid());
-  if d_feed <> 'activity' then
+  d_feed  := public.notification_domain('post_like', null, null, null);
+  d_comm  := public.notification_domain('post_like', gen_random_uuid(), null, null);
+  d_event := public.notification_domain('post_like', null, gen_random_uuid(), null);
+  if d_feed <> 'general_notifications' then
     raise exception 'FAIL: a feed like routed to %', d_feed;
   end if;
-  if d_comm <> 'community' or d_event <> 'community' then
+  if d_comm <> 'community_updates' or d_event <> 'community_updates' then
     raise exception 'FAIL: a space-scoped like routed to %/%', d_comm, d_event;
   end if;
 
   -- Comments, replies, mentions and comment likes follow the same rule.
-  if public.notification_domain('comment', null, null) <> 'activity'
-     or public.notification_domain('comment', gen_random_uuid(), null) <> 'community'
-     or public.notification_domain('mention', null, null) <> 'activity'
-     or public.notification_domain('mention', gen_random_uuid(), null) <> 'community'
-     or public.notification_domain('comment_reply', gen_random_uuid(), null) <> 'community'
-     or public.notification_domain('comment_like', null, null) <> 'activity' then
+  if public.notification_domain('comment', null, null, null) <> 'general_notifications'
+     or public.notification_domain('comment', gen_random_uuid(), null, null) <> 'community_updates'
+     or public.notification_domain('mention', null, null, null) <> 'general_notifications'
+     or public.notification_domain('mention', gen_random_uuid(), null, null) <> 'community_updates'
+     or public.notification_domain('comment_reply', gen_random_uuid(), null, null) <> 'community_updates'
+     or public.notification_domain('comment_like', null, null, null) <> 'general_notifications' then
     raise exception 'FAIL: social routing is inconsistent';
   end if;
 
   -- Always-community types go to Updates with or without a subject.
-  if public.notification_domain('community_message', null, null) <> 'community'
-     or public.notification_domain('event_message', null, null) <> 'community'
-     or public.notification_domain('society_announcement', null, null) <> 'community'
-     or public.notification_domain('community_post', null, null) <> 'community'
-     or public.notification_domain('message', null, null) <> 'community'
-     or public.notification_domain('community_join_request', null, null) <> 'community' then
+  if public.notification_domain('community_message', null, null, null) <> 'community_updates'
+     or public.notification_domain('event_message', null, null, null) <> 'community_updates'
+     or public.notification_domain('society_announcement', null, null, null) <> 'community_updates'
+     or public.notification_domain('community_post', null, null, null) <> 'community_updates'
+     or public.notification_domain('community_join_request', null, null, null) <> 'community_updates' then
     raise exception 'FAIL: an always-community type escaped Updates';
+  end if;
+
+  -- ...and the DM family, which 0192 wrongly listed as always-community, is
+  -- Chat whatever subject it carries.
+  if public.notification_domain('message', null, null, gen_random_uuid()) <> 'chat'
+     or public.notification_domain('message_request', null, null, null) <> 'chat'
+     or public.notification_domain('message_request_accepted', null, null, null) <> 'chat'
+     or public.notification_domain('message_reaction', gen_random_uuid(), null, null) <> 'chat' then
+    raise exception 'FAIL: a direct-message type escaped Chat';
   end if;
 
   -- ...and genuinely unrelated things stay on Notifications even if some
   -- payload happens to name a community.
-  if public.notification_domain('match', gen_random_uuid(), null) <> 'activity'
-     or public.notification_domain('help_response', gen_random_uuid(), null) <> 'activity'
-     or public.notification_domain('achievement', null, null) <> 'activity' then
+  if public.notification_domain('match', gen_random_uuid(), null, null) <> 'general_notifications'
+     or public.notification_domain('help_response', gen_random_uuid(), null, null) <> 'general_notifications'
+     or public.notification_domain('achievement', null, null, null) <> 'general_notifications' then
     raise exception 'FAIL: an unrelated type was pulled into Updates';
   end if;
 

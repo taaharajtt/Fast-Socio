@@ -18,11 +18,11 @@ import {
 } from "@/lib/notifications/copy";
 
 const ROOT = process.cwd();
-// The EFFECTIVE definition, which 0192 replaced. Parsing 0183 would assert
-// against a superseded list — the exact "the file that defines a function is
-// not the one running" trap this repo keeps hitting.
+// The EFFECTIVE definition, which 0195 replaced 0192's copy of. Parsing an
+// older file would assert against a superseded list — the exact "the file that
+// defines a function is not the one running" trap this repo keeps hitting.
 const MIGRATION = readFileSync(
-  join(ROOT, "supabase/migrations/0192_community_updates_inbox.sql"),
+  join(ROOT, "supabase/migrations/0195_notification_domain_routing.sql"),
   "utf8"
 );
 
@@ -95,6 +95,14 @@ describe("what the always-community list must never contain", () => {
     "mention",
     // Admin broadcasts are a cold-open modal, not an inbox row.
     "announcement",
+    // Chat. Migration 0192 put these four here and that was the bug: private
+    // conversation traffic rendered on a community screen and counted towards
+    // the Community dock badge. See notifications/domain.test.ts for the full
+    // fence around the regression.
+    "message",
+    "message_request",
+    "message_request_accepted",
+    "message_reaction",
   ];
 
   for (const type of FORBIDDEN) {
@@ -108,25 +116,31 @@ describe("what the always-community list must never contain", () => {
   it("routes the generic social types by subject instead", () => {
     for (const type of SOCIAL_NOTIFICATION_TYPES) {
       // In a space -> Updates. On the open feed -> Notifications.
-      expect(notificationDomain(type, { communityId: "c1" })).toBe("community");
-      expect(notificationDomain(type, { eventId: "e1" })).toBe("community");
-      expect(notificationDomain(type, {})).toBe("activity");
+      expect(notificationDomain(type, { communityId: "c1" })).toBe(
+        "community_updates"
+      );
+      expect(notificationDomain(type, { eventId: "e1" })).toBe(
+        "community_updates"
+      );
+      expect(notificationDomain(type, {})).toBe("general_notifications");
       expect(
         notificationDomain(type, { communityId: null, eventId: null })
-      ).toBe("activity");
+      ).toBe("general_notifications");
     }
   });
 
   it("sends every always-community type to Updates whatever its subject", () => {
     for (const type of COMMUNITY_UPDATE_TYPES) {
-      expect(notificationDomain(type, {})).toBe("community");
+      expect(notificationDomain(type, {})).toBe("community_updates");
     }
   });
 
   it("leaves genuinely unrelated types on Notifications", () => {
     for (const type of ["match", "help_response", "achievement", "appeal_result"]) {
-      expect(notificationDomain(type, {})).toBe("activity");
-      expect(notificationDomain(type, { communityId: "c1" })).toBe("activity");
+      expect(notificationDomain(type, {})).toBe("general_notifications");
+      expect(notificationDomain(type, { communityId: "c1" })).toBe(
+        "general_notifications"
+      );
     }
   });
 
@@ -157,7 +171,6 @@ describe("required triggers are all represented", () => {
     ["a community chat-room message", "community_message"],
     ["an event chat message", "event_message"],
     ["a post in a community", "community_post"],
-    ["a direct message", "message"],
     ["a waitlist promotion", "waitlist_promoted"],
   ];
 
