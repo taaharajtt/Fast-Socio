@@ -93,27 +93,33 @@ declare
   aura_before int;
   ok boolean;
 begin
+  -- UNINVOLVED accounts only. An earlier version took the first four profiles
+  -- and deleted whatever relationships they had, which on a real database meant
+  -- deleting a live conversation — and `dm_report_evidence_immutable` (mig
+  -- 0161) correctly refuses to let a filed DM report's evidence be unlinked.
+  -- The fixture must not need to destroy anything: pick accounts that are in no
+  -- match, no conversation, no message request and no block to begin with.
   select array_agg(id) into ids from (
-    select id from public.profiles
-     where deactivated_at is null and coalesce(is_banned, false) = false
-     order by created_at
+    select p.id from public.profiles p
+     where p.deactivated_at is null and coalesce(p.is_banned, false) = false
+       and not exists (select 1 from public.matches m
+                        where m.user_low = p.id or m.user_high = p.id)
+       and not exists (select 1 from public.conversations c
+                        where c.user_low = p.id or c.user_high = p.id)
+       and not exists (select 1 from public.message_requests r
+                        where r.sender_id = p.id or r.recipient_id = p.id)
+       and not exists (select 1 from public.blocked_users b
+                        where b.blocker_id = p.id or b.blocked_id = p.id)
+       and not exists (select 1 from public.swipes s
+                        where s.swiper_id = p.id or s.target_id = p.id)
+     order by p.created_at
      limit 4
   ) s;
   if coalesce(array_length(ids, 1), 0) < 4 then
-    raise exception 'need at least 4 live profiles to run this verification';
+    raise exception 'need 4 profiles with no existing match/chat/request/block to run this verification';
   end if;
   a := ids[1]; b := ids[2]; c := ids[3]; d := ids[4];
 
-  delete from public.matches
-   where user_low in (a, b, c, d) and user_high in (a, b, c, d);
-  delete from public.swipes
-   where swiper_id in (a, b, c, d) and target_id in (a, b, c, d);
-  delete from public.conversations
-   where user_low in (a, b, c, d) and user_high in (a, b, c, d);
-  delete from public.message_requests
-   where sender_id in (a, b, c, d) and recipient_id in (a, b, c, d);
-  delete from public.blocked_users
-   where blocker_id in (a, b, c, d) and blocked_id in (a, b, c, d);
   update public.profiles set show_matches = true where id in (a, b, c, d);
 
   -- Matches are created the only way they can be: two explicit likes (0178's
@@ -326,12 +332,31 @@ declare
   conv uuid;
   ids uuid[];
 begin
+  -- The same pair section 1 used, found the same way (its fixtures were rolled
+  -- back with that block, so this re-creates what it needs).
   select array_agg(id) into ids from (
-    select id from public.profiles
-     where deactivated_at is null and coalesce(is_banned, false) = false
-     order by created_at limit 2
+    select p.id from public.profiles p
+     where p.deactivated_at is null and coalesce(p.is_banned, false) = false
+       and not exists (select 1 from public.matches m
+                        where m.user_low = p.id or m.user_high = p.id)
+       and not exists (select 1 from public.conversations c
+                        where c.user_low = p.id or c.user_high = p.id)
+       and not exists (select 1 from public.message_requests r
+                        where r.sender_id = p.id or r.recipient_id = p.id)
+       and not exists (select 1 from public.blocked_users b
+                        where b.blocker_id = p.id or b.blocked_id = p.id)
+       and not exists (select 1 from public.swipes s
+                        where s.swiper_id = p.id or s.target_id = p.id)
+     order by p.created_at limit 2
   ) s;
+  if coalesce(array_length(ids, 1), 0) < 2 then
+    raise exception 'need 2 uninvolved profiles for the RLS section';
+  end if;
   a := ids[1]; b := ids[2];
+
+  insert into public.conversations (user_low, user_high)
+    values (least(a, b), greatest(a, b))
+  on conflict (user_low, user_high) do nothing;
 
   select id into conv from public.conversations
    where user_low = least(a, b) and user_high = greatest(a, b);

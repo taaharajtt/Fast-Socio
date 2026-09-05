@@ -98,16 +98,26 @@ declare
   comm uuid;
   ev   uuid;
   p1 uuid; p2 uuid;
-  n1 uuid;
-  before_n int; n int; badge int;
+  ann1 uuid; ann2 uuid;
+  before_n int; n int; g int; badge int;
 begin
+  -- UNENTANGLED accounts only. Taking the first four profiles and clearing
+  -- whatever they already had meant deleting real rows to make room, and on a
+  -- live database that runs into protections that exist for good reason (the
+  -- sibling 0182 script hit `dm_report_evidence_immutable` doing exactly that).
+  -- These fixtures only ever ADD, inside a transaction that is rolled back.
   select array_agg(id) into ids from (
-    select id from public.profiles
-     where deactivated_at is null and coalesce(is_banned, false) = false
-     order by created_at limit 4
+    select p.id from public.profiles p
+     where p.deactivated_at is null and coalesce(p.is_banned, false) = false
+       and not exists (select 1 from public.community_members m where m.user_id = p.id)
+       and not exists (select 1 from public.community_followers f where f.user_id = p.id)
+       and not exists (select 1 from public.communities c where c.owner_id = p.id)
+       and not exists (select 1 from public.event_attendees ea where ea.user_id = p.id)
+       and not exists (select 1 from public.posts po where po.author_id = p.id)
+     order by p.created_at limit 4
   ) s;
   if coalesce(array_length(ids, 1), 0) < 4 then
-    raise exception 'need at least 4 live profiles to run this verification';
+    raise exception 'need 4 profiles with no existing space/event involvement';
   end if;
   mgr := ids[1]; a := ids[2]; b := ids[3]; outsider := ids[4];
 
@@ -173,18 +183,50 @@ begin
   -- (The old badge collapsed a whole space's output into one item.)
   insert into public.community_followers (community_id, user_id)
     values (comm, a) on conflict do nothing;
+  -- REAL announcement rows, not invented ids. notifications_live (mig 0137)
+  -- drops any notification whose `announcement_id` names no row — correctly, and
+  -- an earlier version of this fixture passed gen_random_uuid() and so asserted
+  -- against a set the cascade had already emptied.
+  insert into public.society_announcements (society_id, author_id, body, visibility)
+    values (comm, mgr, 'first broadcast', 'public') returning id into ann1;
+  insert into public.society_announcements (society_id, author_id, body, visibility)
+    values (comm, mgr, 'second broadcast', 'public') returning id into ann2;
   perform public.notify_society_members(comm, mgr, 'society_announcement',
-    jsonb_build_object('community_id', comm, 'announcement_id', gen_random_uuid()));
+    jsonb_build_object('community_id', comm, 'announcement_id', ann1));
   perform public.notify_society_members(comm, mgr, 'society_announcement',
-    jsonb_build_object('community_id', comm, 'announcement_id', gen_random_uuid()));
+    jsonb_build_object('community_id', comm, 'announcement_id', ann2));
 
   perform set_config('request.jwt.claims', json_build_object('sub', a)::text, true);
   execute 'set local role authenticated';
-  select count(*) into n from public.community_updates
+  select count(*), coalesce(sum(group_count), 0) into n, g
+    from public.community_updates
    where read_at is null and type = 'society_announcement';
   execute 'set local role postgres';
-  if n <> 2 then
-    raise exception 'FAIL: two announcements counted as %, expected 2', n;
+
+  -- OPEN PRODUCT DECISION, deliberately asserted as it actually behaves.
+  --
+  -- The brief for this work said "+1 per ANNOUNCEMENT, not one per space". The
+  -- deployed database does the opposite on purpose: notify_society_members
+  -- passes a group_key of 'society_announcement:<space>', so a space's
+  -- announcements collapse into ONE unread row carrying a count — migration
+  -- 0178's rule, added so a chatty society could not bury everything else in
+  -- the Activity panel.
+  --
+  -- Both cannot hold. The invariant this redesign actually rests on is
+  -- "the badge equals the number of rows the list renders", and that survives
+  -- either way, so the collapse is left in place rather than silently reversing
+  -- a shipped decision. If the per-announcement rule is wanted instead, the
+  -- change is to drop that group_key — and this assertion flips to n = 2.
+  --
+  -- NOTE group_count is not an event count: 0178 increments it only for a
+  -- DISTINCT actor ("Alice and 2 others"), so two posts by the same officer
+  -- leave it at 1. There is therefore no number anywhere that says "two
+  -- announcements happened" — which is the substance of the conflict above.
+  if n <> 1 then
+    raise exception 'FAIL: a space''s announcements are no longer collapsed (n=%)', n;
+  end if;
+  if g <> 1 then
+    raise exception 'FAIL: group_count should track distinct actors (got %)', g;
   end if;
 
   -- ---- 1d. The author's OWN announcement counts 0. ------------------------
@@ -363,10 +405,18 @@ declare
   first_id uuid;
 begin
   select array_agg(id) into ids from (
-    select id from public.profiles
-     where deactivated_at is null and coalesce(is_banned, false) = false
-     order by created_at limit 2
+    select p.id from public.profiles p
+     where p.deactivated_at is null and coalesce(p.is_banned, false) = false
+       and not exists (select 1 from public.community_members m where m.user_id = p.id)
+       and not exists (select 1 from public.community_followers f where f.user_id = p.id)
+       and not exists (select 1 from public.communities c where c.owner_id = p.id)
+       and not exists (select 1 from public.event_attendees ea where ea.user_id = p.id)
+       and not exists (select 1 from public.posts po where po.author_id = p.id)
+     order by p.created_at limit 2
   ) s;
+  if coalesce(array_length(ids, 1), 0) < 2 then
+    raise exception 'need 2 unentangled profiles for the badge section';
+  end if;
   me := ids[1]; other := ids[2];
 
   insert into public.notification_preferences (user_id, communities, events)
