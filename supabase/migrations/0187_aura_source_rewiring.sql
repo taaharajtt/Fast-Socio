@@ -372,8 +372,13 @@ comment on table public.event_checkins is
 -- check_in_attendee, carried forward from 0101 with the award replaced.
 -- Authorization is unchanged (host / organizer / admin, enforced by the caller
 -- chain that 0101 established) and so are all four result codes.
+-- The OUT column is `status`, NOT `result`: that is what the deployed function
+-- returns and what src/app/(student)/events/actions.ts reads. Postgres refuses
+-- to change an existing function's OUT parameter names via CREATE OR REPLACE,
+-- which is what caught this — renaming it would have silently broken check-in
+-- for the whole app.
 create or replace function public.check_in_attendee(p_event uuid, p_code uuid)
-returns table(result text, attendee_name text)
+returns table(status text, attendee_name text)
 language plpgsql
 security definer
 set search_path = public
@@ -383,14 +388,16 @@ declare
   v_checked timestamptz;
   v_title   text;
 begin
+  -- `status` is now an OUT parameter name, so the local reads below qualify
+  -- their source table to keep it unambiguous.
   if not (public.is_event_organizer(p_event, auth.uid())
           or public.is_admin(auth.uid())) then
     return query select 'unauthorized'::text, null::text; return;
   end if;
 
-  select user_id, checked_in_at into v_user, v_checked
-    from public.event_attendees
-   where event_id = p_event and check_in_code = p_code;
+  select ea.user_id, ea.checked_in_at into v_user, v_checked
+    from public.event_attendees ea
+   where ea.event_id = p_event and ea.check_in_code = p_code;
   if not found then
     return query select 'invalid'::text, null::text; return;
   end if;
@@ -401,11 +408,11 @@ begin
     return;
   end if;
 
-  update public.event_attendees
+  update public.event_attendees ea
      set checked_in_at = now()
-   where event_id = p_event and check_in_code = p_code;
+   where ea.event_id = p_event and ea.check_in_code = p_code;
 
-  select title into v_title from public.events where id = p_event;
+  select e.title into v_title from public.events e where e.id = p_event;
 
   -- Evidence first, then the reward. Both are idempotent, so a retried scan or
   -- two organizers scanning the same badge at once produce one of each.
@@ -567,44 +574,15 @@ create trigger help_responses_reverse_aura
   for each row execute function public.reverse_help_aura_on_delete();
 
 -- ===========================================================================
--- 6. PROFILE COMPLETION — the race, closed by the index.
+-- 6. PROFILE COMPLETION — nothing to fix; the feature does not exist.
 -- ===========================================================================
--- 0051 read `select exists(... reason = 'profile_completed')` and then
--- inserted. Two concurrent saves both read false and both paid. The unique
--- index on the source key now decides, and the completeness threshold and the
--- server-derived identity are unchanged. Deliberately never reversed: falling
--- below 90% later does not undo having completed the profile.
-create or replace function public.award_completion_bonus()
-returns integer
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_uid uuid := auth.uid();
-  v_pct integer;
-begin
-  if v_uid is null then
-    return 0;
-  end if;
-
-  v_pct := public.compute_profile_completeness(v_uid);
-  update public.profiles set completeness = v_pct where id = v_uid;
-
-  if v_pct >= 90 then
-    perform public.aura_award(
-      v_uid, 25, 'profile_completed', 'profile',
-      'profile-completed:' || v_uid::text,
-      jsonb_build_object('completeness', v_pct)
-    );
-  end if;
-
-  return v_pct;
-end;
-$$;
-
-revoke all on function public.award_completion_bonus() from public, anon;
-grant execute on function public.award_completion_bonus() to authenticated;
+-- An earlier draft of this migration "fixed the race" in
+-- award_completion_bonus() by carrying 0051's body forward. That was wrong:
+-- migration 0064 dropped the function, its helper and profiles.completeness
+-- outright, so 0051 is not the effective definition and there is no live
+-- profile-completion reward to secure. Migration 0189 removes the resurrected
+-- copy. `profile_completed` is documented as an inactive reason at the end of
+-- this file.
 
 -- ===========================================================================
 -- 7. ACHIEVEMENTS — reversible metrics lose the badge AND the reward.

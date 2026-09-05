@@ -300,76 +300,100 @@ revoke all on function public.trg_reconcile_achievements_member() from public, a
 -- NOTHING IS DEDUCTED HERE. No ledger row is written, none is deleted, and no
 -- historical grant is reversed. Suspicious history is reported by the views in
 -- section 5 and left for an operator to act on deliberately.
+-- ONE grant per key, chosen deterministically. The naive form of this update
+-- collided immediately on real data: before 0181, EVERY comment paid +2, so a
+-- single (post, commenter) pair can have a dozen positive ledger rows and
+-- therefore a dozen legacy grants — all mapping to one source key. A
+-- `not exists` guard cannot fix that, because every row in one UPDATE sees the
+-- same pre-statement snapshot and they all pass it.
+--
+-- `distinct on (key)` picks the EARLIEST grant per key and upgrades only that
+-- one; its duplicates stay `legacy`, which is the honest outcome — they are
+-- historical over-payments that this migration reports rather than deducts
+-- (see aura_audit_findings), and leaving them legacy keeps XP unchanged.
+--
+-- The final `not exists` excludes keys that already hold a live typed grant,
+-- because 0187 is applied before this and new activity may already have created
+-- one properly.
+with cand as (
+  select g.id,
+         'comment:' || (t.metadata->>'post_id') || ':' || (t.metadata->>'commenter_id') as k,
+         t.created_at
+    from public.aura_grants g
+    join public.aura_transactions t on t.id = g.grant_tx_id
+   where g.source_type = 'legacy' and g.reversed_at is null
+     and t.reason = 'comment_received' and t.delta > 0
+     and t.metadata ? 'post_id' and t.metadata ? 'commenter_id'
+     and exists (select 1 from public.posts p
+                  where p.id = (t.metadata->>'post_id')::uuid)
+     and exists (select 1 from public.post_comments c
+                  where c.post_id = (t.metadata->>'post_id')::uuid
+                    and c.author_id = (t.metadata->>'commenter_id')::uuid)
+), pick as (
+  select distinct on (k) id, k from cand order by k, created_at
+)
 update public.aura_grants g
-   set source_type = 'comment',
-       source_key  = 'comment:' || (t.metadata->>'post_id') || ':' || (t.metadata->>'commenter_id')
-  from public.aura_transactions t
- where g.grant_tx_id = t.id
-   and g.source_type = 'legacy'
-   and g.reversed_at is null
-   and t.reason = 'comment_received'
-   and t.metadata ? 'post_id' and t.metadata ? 'commenter_id'
-   and exists (select 1 from public.posts p where p.id = (t.metadata->>'post_id')::uuid)
-   and exists (
-     select 1 from public.post_comments c
-      where c.post_id = (t.metadata->>'post_id')::uuid
-        and c.author_id = (t.metadata->>'commenter_id')::uuid
-   )
-   -- Skip any pair that already has a typed grant (re-run safety).
-   and not exists (
-     select 1 from public.aura_grants g2
-      where g2.source_key = 'comment:' || (t.metadata->>'post_id') || ':' || (t.metadata->>'commenter_id')
-        and g2.reversed_at is null and g2.id <> g.id
-   );
+   set source_type = 'comment', source_key = pick.k
+  from pick
+ where pick.id = g.id
+   and not exists (select 1 from public.aura_grants x
+                    where x.source_key = pick.k and x.reversed_at is null);
 
+with cand as (
+  select g.id, 'help:' || (t.metadata->>'request_id') as k, t.created_at
+    from public.aura_grants g
+    join public.aura_transactions t on t.id = g.grant_tx_id
+   where g.source_type = 'legacy' and g.reversed_at is null
+     and t.reason = 'help_thanked' and t.delta > 0
+     and t.metadata ? 'request_id'
+     and exists (select 1 from public.help_requests r
+                  where r.id = (t.metadata->>'request_id')::uuid)
+), pick as (
+  select distinct on (k) id, k from cand order by k, created_at
+)
 update public.aura_grants g
-   set source_type = 'help',
-       source_key  = 'help:' || (t.metadata->>'request_id')
-  from public.aura_transactions t
- where g.grant_tx_id = t.id
-   and g.source_type = 'legacy'
-   and g.reversed_at is null
-   and t.reason = 'help_thanked'
-   and t.metadata ? 'request_id'
-   and exists (select 1 from public.help_requests r where r.id = (t.metadata->>'request_id')::uuid)
-   and not exists (
-     select 1 from public.aura_grants g2
-      where g2.source_key = 'help:' || (t.metadata->>'request_id')
-        and g2.reversed_at is null and g2.id <> g.id
-   );
+   set source_type = 'help', source_key = pick.k
+  from pick
+ where pick.id = g.id
+   and not exists (select 1 from public.aura_grants x
+                    where x.source_key = pick.k and x.reversed_at is null);
 
+with cand as (
+  select g.id, 'profile-completed:' || g.user_id::text as k, t.created_at
+    from public.aura_grants g
+    join public.aura_transactions t on t.id = g.grant_tx_id
+   where g.source_type = 'legacy' and g.reversed_at is null
+     and t.reason = 'profile_completed' and t.delta > 0
+), pick as (
+  select distinct on (k) id, k from cand order by k, created_at
+)
 update public.aura_grants g
-   set source_type = 'profile',
-       source_key  = 'profile-completed:' || g.user_id::text
-  from public.aura_transactions t
- where g.grant_tx_id = t.id
-   and g.source_type = 'legacy'
-   and g.reversed_at is null
-   and t.reason = 'profile_completed'
-   and not exists (
-     select 1 from public.aura_grants g2
-      where g2.source_key = 'profile-completed:' || g.user_id::text
-        and g2.reversed_at is null and g2.id <> g.id
-   );
+   set source_type = 'profile', source_key = pick.k
+  from pick
+ where pick.id = g.id
+   and not exists (select 1 from public.aura_grants x
+                    where x.source_key = pick.k and x.reversed_at is null);
 
+with cand as (
+  select g.id,
+         'achievement:' || g.user_id::text || ':' || (t.metadata->>'code') as k,
+         t.created_at
+    from public.aura_grants g
+    join public.aura_transactions t on t.id = g.grant_tx_id
+   where g.source_type = 'legacy' and g.reversed_at is null
+     and t.reason = 'achievement' and t.delta > 0
+     and t.metadata ? 'code'
+     and exists (select 1 from public.user_achievements ua
+                  where ua.user_id = g.user_id and ua.code = t.metadata->>'code')
+), pick as (
+  select distinct on (k) id, k from cand order by k, created_at
+)
 update public.aura_grants g
-   set source_type = 'achievement',
-       source_key  = 'achievement:' || g.user_id::text || ':' || (t.metadata->>'code')
-  from public.aura_transactions t
- where g.grant_tx_id = t.id
-   and g.source_type = 'legacy'
-   and g.reversed_at is null
-   and t.reason = 'achievement'
-   and t.metadata ? 'code'
-   and exists (
-     select 1 from public.user_achievements ua
-      where ua.user_id = g.user_id and ua.code = t.metadata->>'code'
-   )
-   and not exists (
-     select 1 from public.aura_grants g2
-      where g2.source_key = 'achievement:' || g.user_id::text || ':' || (t.metadata->>'code')
-        and g2.reversed_at is null and g2.id <> g.id
-   );
+   set source_type = 'achievement', source_key = pick.k
+  from pick
+ where pick.id = g.id
+   and not exists (select 1 from public.aura_grants x
+                    where x.source_key = pick.k and x.reversed_at is null);
 
 -- ---------------------------------------------------------------------------
 -- 6. AUDIT — read-only. Nothing here changes a number.

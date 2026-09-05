@@ -82,27 +82,38 @@ declare
   ids uuid[];
   n int; cnt int; v_actor uuid; v_data jsonb; v_id uuid; v_group text;
 begin
+  -- WHAT THE FIXTURE ACTUALLY NEEDS, rather than pristine accounts (on a real
+  -- database with 1,600+ matches there are none): a recipient with NO pending
+  -- incoming likes, so the counts below describe only what this script creates,
+  -- and four likers the recipient has not already swiped on.
+  select p.id into me from public.profiles p
+   where p.deactivated_at is null and coalesce(p.is_banned,false) = false
+     and not exists (select 1 from public.swipes s where s.target_id = p.id)
+   order by p.created_at limit 1;
+  if me is null then
+    raise exception 'need a profile with no incoming swipes';
+  end if;
+
   select array_agg(id) into ids from (
     select p.id from public.profiles p
-     where p.deactivated_at is null
+     where p.id <> me
+       and p.deactivated_at is null
        and coalesce(p.is_banned, false) = false
        and coalesce(p.shadow_banned, false) = false
        and p.onboarding_completed = true
        and p.discoverable = true
        and not exists (select 1 from public.swipes s
-                        where s.swiper_id = p.id or s.target_id = p.id)
-       and not exists (select 1 from public.matches m
-                        where m.user_low = p.id or m.user_high = p.id)
+                        where s.swiper_id = me and s.target_id = p.id)
        and not exists (select 1 from public.blocked_users b
-                        where b.blocker_id = p.id or b.blocked_id = p.id)
-       and not exists (select 1 from public.muted_users mu
-                        where mu.muter_id = p.id or mu.muted_id = p.id)
-     order by p.created_at limit 5
+                        where (b.blocker_id = me and b.blocked_id = p.id)
+                           or (b.blocker_id = p.id and b.blocked_id = me))
+     order by p.created_at limit 4
   ) s;
-  if coalesce(array_length(ids, 1), 0) < 5 then
-    raise exception 'need 5 profiles with no swipe/match/block/mute history';
+  if coalesce(array_length(ids, 1), 0) < 4 then
+    raise exception 'need 4 eligible likers for the chosen recipient';
   end if;
-  me := ids[1]; l1 := ids[2]; l2 := ids[3]; l3 := ids[4]; l4 := ids[5];
+  l1 := ids[1]; l2 := ids[2]; l3 := ids[3]; l4 := ids[4];
+  ids := array[me, l1, l2, l3, l4];
 
   insert into public.notification_preferences (user_id, matches)
     select unnest(ids), true
@@ -272,17 +283,27 @@ declare
   ids uuid[];
   n int; cnt int; aura_before int;
 begin
+  -- Same relaxation as section 1: what matters is that the RECIPIENT has no
+  -- pending incoming likes and no existing relationship with the two chosen
+  -- likers — not that any account is pristine.
+  select p.id into me from public.profiles p
+   where p.deactivated_at is null and coalesce(p.is_banned,false) = false
+     and not exists (select 1 from public.swipes s where s.target_id = p.id)
+   order by p.created_at limit 1;
   select array_agg(id) into ids from (
     select p.id from public.profiles p
-     where p.deactivated_at is null and coalesce(p.is_banned,false) = false
+     where p.id <> me
+       and p.deactivated_at is null and coalesce(p.is_banned,false) = false
        and coalesce(p.shadow_banned,false) = false
        and p.onboarding_completed = true and p.discoverable = true
        and not exists (select 1 from public.swipes s
-                        where s.swiper_id = p.id or s.target_id = p.id)
+                        where s.swiper_id = me and s.target_id = p.id)
        and not exists (select 1 from public.matches m
-                        where m.user_low = p.id or m.user_high = p.id)
-     order by p.created_at limit 3
+                        where m.user_low = least(me, p.id)
+                          and m.user_high = greatest(me, p.id))
+     order by p.created_at limit 2
   ) s;
+  ids := array[me] || ids;
   if coalesce(array_length(ids,1),0) < 3 then
     raise exception 'need 3 clean profiles for the matching section';
   end if;
@@ -376,17 +397,27 @@ declare
   ids uuid[];
   n int; cnt int;
 begin
+  -- Same relaxation as section 1: what matters is that the RECIPIENT has no
+  -- pending incoming likes and no existing relationship with the two chosen
+  -- likers — not that any account is pristine.
+  select p.id into me from public.profiles p
+   where p.deactivated_at is null and coalesce(p.is_banned,false) = false
+     and not exists (select 1 from public.swipes s where s.target_id = p.id)
+   order by p.created_at limit 1;
   select array_agg(id) into ids from (
     select p.id from public.profiles p
-     where p.deactivated_at is null and coalesce(p.is_banned,false) = false
+     where p.id <> me
+       and p.deactivated_at is null and coalesce(p.is_banned,false) = false
        and coalesce(p.shadow_banned,false) = false
        and p.onboarding_completed = true and p.discoverable = true
        and not exists (select 1 from public.swipes s
-                        where s.swiper_id = p.id or s.target_id = p.id)
+                        where s.swiper_id = me and s.target_id = p.id)
        and not exists (select 1 from public.matches m
-                        where m.user_low = p.id or m.user_high = p.id)
-     order by p.created_at limit 3
+                        where m.user_low = least(me, p.id)
+                          and m.user_high = greatest(me, p.id))
+     order by p.created_at limit 2
   ) s;
+  ids := array[me] || ids;
   me := ids[1]; l1 := ids[2]; l2 := ids[3];
   insert into public.notification_preferences (user_id, matches)
     select unnest(ids), true
@@ -434,8 +465,13 @@ begin
   end if;
 
   -- ---- 17. Preference off: nothing is created, and what exists resolves. --
+  -- Un-read exactly ONE row. Clearing read_at on all of them would try to make
+  -- several rows unread at once, which notifications_group_unique correctly
+  -- refuses — only one unread aggregate may exist per user per type.
   update public.notifications set read_at = null
-   where user_id = me and type = 'incoming_match_interest';
+   where id = (select id from public.notifications
+                where user_id = me and type = 'incoming_match_interest'
+                order by created_at desc limit 1);
   update public.notification_preferences set matches = false where user_id = me;
   perform public.reconcile_incoming_match_interest(me, false);
   select count(*) into n from public.notifications
@@ -492,17 +528,27 @@ begin
   -- Both likes inside one transaction is the strongest single-session
   -- approximation: the second reconcile must see the first swipe and land on 2,
   -- in ONE row.
+  -- Same relaxation as section 1: what matters is that the RECIPIENT has no
+  -- pending incoming likes and no existing relationship with the two chosen
+  -- likers — not that any account is pristine.
+  select p.id into me from public.profiles p
+   where p.deactivated_at is null and coalesce(p.is_banned,false) = false
+     and not exists (select 1 from public.swipes s where s.target_id = p.id)
+   order by p.created_at limit 1;
   select array_agg(id) into ids from (
     select p.id from public.profiles p
-     where p.deactivated_at is null and coalesce(p.is_banned,false) = false
+     where p.id <> me
+       and p.deactivated_at is null and coalesce(p.is_banned,false) = false
        and coalesce(p.shadow_banned,false) = false
        and p.onboarding_completed = true and p.discoverable = true
        and not exists (select 1 from public.swipes s
-                        where s.swiper_id = p.id or s.target_id = p.id)
+                        where s.swiper_id = me and s.target_id = p.id)
        and not exists (select 1 from public.matches m
-                        where m.user_low = p.id or m.user_high = p.id)
-     order by p.created_at limit 3
+                        where m.user_low = least(me, p.id)
+                          and m.user_high = greatest(me, p.id))
+     order by p.created_at limit 2
   ) s;
+  ids := array[me] || ids;
   me := ids[1]; l1 := ids[2]; l2 := ids[3];
   insert into public.notification_preferences (user_id, matches)
     select unnest(ids), true

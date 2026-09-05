@@ -86,12 +86,19 @@ begin
   end if;
   author := ids[1]; alice := ids[2]; bob := ids[3];
 
-  select coalesce(aura_score,0) into base from public.profiles where id = author;
+  -- MEASURE ONLY THE REASONS UNDER TEST. A first post also earns the `rookie`
+  -- badge (+5), which is a PERMANENT achievement by design — so total
+  -- aura_score does not return to its starting value after a create/delete
+  -- loop, and asserting on it would be asserting the wrong thing. The post and
+  -- comment rewards are what must net to zero.
+  select coalesce(sum(delta),0) into base from public.aura_transactions
+   where user_id = author and reason in ('post_created','comment_received');
 
   -- create awards once
   insert into public.posts (author_id, body, is_anonymous)
     values (author, 'aura fixture 1', false) returning id into p1;
-  select coalesce(aura_score,0) into v from public.profiles where id = author;
+  select coalesce(sum(delta),0) into v from public.aura_transactions
+   where user_id = author and reason in ('post_created','comment_received');
   if v <> base + 2 then
     raise exception 'FAIL: post create awarded % (want +2)', v - base;
   end if;
@@ -103,7 +110,8 @@ begin
   -- anonymous posts earn nothing
   insert into public.posts (author_id, body, is_anonymous)
     values (author, 'anonymous fixture', true) returning id into p2;
-  select coalesce(aura_score,0) into v from public.profiles where id = author;
+  select coalesce(sum(delta),0) into v from public.aura_transactions
+   where user_id = author and reason in ('post_created','comment_received');
   if v <> base + 2 then
     raise exception 'FAIL: an anonymous post earned Aura';
   end if;
@@ -119,7 +127,8 @@ begin
   insert into public.post_comments (post_id, author_id, body)
     values (p1, author, 'mine');
 
-  select coalesce(aura_score,0) into v from public.profiles where id = author;
+  select coalesce(sum(delta),0) into v from public.aura_transactions
+   where user_id = author and reason in ('post_created','comment_received');
   if v <> base + 2 + 4 then
     raise exception 'FAIL: two commenters gave % (want +4)', v - base - 2;
   end if;
@@ -129,7 +138,8 @@ begin
     insert into public.post_comments (post_id, author_id, body)
       values (p1, alice, 'spam ' || n);
   end loop;
-  select coalesce(aura_score,0) into v from public.profiles where id = author;
+  select coalesce(sum(delta),0) into v from public.aura_transactions
+   where user_id = author and reason in ('post_created','comment_received');
   if v <> base + 6 then
     raise exception 'FAIL: repeat comments earned more (%)', v - base;
   end if;
@@ -137,7 +147,8 @@ begin
   -- THE HOLE 0181 LEFT: deleting the post must reverse the post reward AND
   -- every active comment reward.
   delete from public.posts where id = p1;
-  select coalesce(aura_score,0) into v from public.profiles where id = author;
+  select coalesce(sum(delta),0) into v from public.aura_transactions
+   where user_id = author and reason in ('post_created','comment_received');
   if v <> base then
     raise exception 'FAIL: deleting the post left % unsupported Aura', v - base;
   end if;
@@ -152,7 +163,8 @@ begin
       values (author, 'loop ' || n, false) returning id into p1;
     delete from public.posts where id = p1;
   end loop;
-  select coalesce(aura_score,0) into v from public.profiles where id = author;
+  select coalesce(sum(delta),0) into v from public.aura_transactions
+   where user_id = author and reason in ('post_created','comment_received');
   if v <> base then
     raise exception 'FAIL: a create/delete loop netted % Aura', v - base;
   end if;
@@ -262,8 +274,8 @@ begin
 
   perform set_config('request.jwt.claims', json_build_object('sub', host)::text, true);
   for r in select * from public.check_in_attendee(ev, code) loop
-    if r.result <> 'checked_in' then
-      raise exception 'FAIL: check-in returned %', r.result;
+    if r.status <> 'checked_in' then
+      raise exception 'FAIL: check-in returned %', r.status;
     end if;
   end loop;
 
@@ -319,7 +331,7 @@ begin
   owner := ids[1]; h1 := ids[2]; h2 := ids[3];
 
   insert into public.help_requests (author_id, title, body, category)
-    values (owner, 'Aura fixture help', 'body', 'other') returning id into req;
+    values (owner, 'Aura fixture help', 'body', 'advice') returning id into req;
   insert into public.help_responses (request_id, author_id, body)
     values (req, h1, 'me') returning id into r1;
   insert into public.help_responses (request_id, author_id, body)
@@ -386,39 +398,20 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- 5. Profile completion — the race, and XP.
+-- 5. Profile completion — asserted ABSENT, not fixed.
 -- ---------------------------------------------------------------------------
+-- The bonus was removed wholesale in migration 0064 (function, helper and
+-- column). An earlier draft of 0187 recreated it from 0051 and it raised on
+-- first call; 0189 removed it again. This guards the resurrection.
 do $$
-declare
-  me uuid; base int; v int; n int;
 begin
-  select id into me from public.profiles
-   where deactivated_at is null and coalesce(is_banned,false)=false
-     and not exists (select 1 from public.aura_transactions t
-                      where t.user_id = profiles.id and t.reason='profile_completed')
-   order by created_at limit 1;
-  if me is null then
-    raise notice 'SKIP: no profile without an existing completion bonus';
-    return;
+  if exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public' and p.proname = 'award_completion_bonus'
+  ) then
+    raise exception 'FAIL: award_completion_bonus is back; it was dropped in 0064';
   end if;
-
-  select coalesce(aura_score,0) into base from public.profiles where id = me;
-  perform set_config('request.jwt.claims', json_build_object('sub', me)::text, true);
-
-  for n in 1..5 loop
-    perform public.award_completion_bonus();
-  end loop;
-
-  select coalesce(aura_score,0) into v from public.profiles where id = me;
-  if v <> base and v <> base + 25 then
-    raise exception 'FAIL: five completion calls moved % Aura', v - base;
-  end if;
-  if (select count(*) from public.aura_grants
-       where source_key = 'profile-completed:' || me::text and reversed_at is null) > 1 then
-    raise exception 'FAIL: more than one active completion grant';
-  end if;
-
-  raise notice 'OK: completion bonus is paid at most once';
+  raise notice 'OK: the dead profile-completion path stays dead';
 end $$;
 
 -- ---------------------------------------------------------------------------
@@ -431,6 +424,13 @@ begin
   select id into me from public.profiles
    where deactivated_at is null and coalesce(is_banned,false)=false
    order by created_at limit 1;
+
+  -- Settle any ONE-TIME achievement first (a first post earns `rookie`, which
+  -- is permanent by design), so the loop below measures only what must net to
+  -- zero rather than that one-off.
+  insert into public.posts (author_id, body, is_anonymous)
+    values (me, 'xp settle', false) returning id into p1;
+  delete from public.posts where id = p1;
 
   select coalesce(xp,0) into base_xp from public.profiles where id = me;
 
