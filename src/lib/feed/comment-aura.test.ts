@@ -131,20 +131,49 @@ describe("comment Aura — reconciliation on delete", () => {
     expect(ledger.balance(AUTHOR)).toBe(2);
   });
 
-  it("deleting the post moves no Aura and leaves no grants behind", () => {
+  it("deleting the post reverses every active comment reward", () => {
+    // This asserted the OPPOSITE until migration 0187. 0181 deliberately did
+    // nothing when the post was already gone, so an author could collect Aura
+    // from a well-commented post and then delete it, keeping the Aura for
+    // comments that no longer existed. The reversal now happens BEFORE the
+    // comments disappear, which is the only point at which the pairs to debit
+    // are still readable.
     const ledger = createCommentAuraLedger(authors);
     ledger.addComment(comment("c1", ALICE));
     ledger.addComment(comment("c2", BOB));
-    const before = ledger.balance(AUTHOR);
+    expect(ledger.balance(AUTHOR)).toBe(4);
 
-    expect(ledger.deletePost(POST)).toEqual([]);
-    expect(ledger.balance(AUTHOR)).toBe(before);
+    const reversals = ledger.deletePost(POST);
+    expect(reversals).toHaveLength(2);
+    expect(reversals.every((e) => e.delta === -2 && e.reversal)).toBe(true);
+    expect(ledger.balance(AUTHOR)).toBe(0);
     expect(ledger.grantCount()).toBe(0);
+  });
 
-    // And the cascaded comment deletes that follow debit nothing.
+  it("the cascaded comment deletes that follow debit nothing further", () => {
+    // aura_reverse is a no-op on an already-reversed source, so the comment
+    // cascade arriving after the post trigger cannot debit a second time.
+    const ledger = createCommentAuraLedger(authors);
+    ledger.addComment(comment("c1", ALICE));
+    ledger.addComment(comment("c2", BOB));
+    ledger.deletePost(POST);
+    const after = ledger.balance(AUTHOR);
+
     ledger.deleteComment("c1");
     ledger.deleteComment("c2");
-    expect(ledger.balance(AUTHOR)).toBe(before);
+    expect(ledger.balance(AUTHOR)).toBe(after);
+    expect(ledger.balance(AUTHOR)).toBe(0);
+  });
+
+  it("a create/comment/delete loop nets to zero however many times it runs", () => {
+    const ledger = createCommentAuraLedger(authors);
+    for (let i = 0; i < 5; i++) {
+      ledger.addComment(comment(`a${i}`, ALICE));
+      ledger.addComment(comment(`b${i}`, BOB));
+      ledger.deletePost(POST);
+    }
+    expect(ledger.balance(AUTHOR)).toBe(0);
+    expect(ledger.grantCount()).toBe(0);
   });
 });
 

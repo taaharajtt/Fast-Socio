@@ -1,9 +1,9 @@
 // ===========================================================================
 // A faithful model of the comment-Aura ledger rules.
 //
-// `public.award_comment_aura()` / `public.reconcile_comment_aura()` (migration
-// 0181) are AUTHORITATIVE — the invariant is enforced in the database, not
-// here. This is the same state machine expressed as a pure function so the
+// `public.award_comment_aura()` / `public.reconcile_comment_aura()` and the
+// BEFORE DELETE trigger on `posts` (migrations 0181 + 0187) are AUTHORITATIVE —
+// the invariant is enforced in the database, not here. This is the same state machine expressed as a pure function so the
 // rules ("+2 once per distinct commenter per post, reversed when that
 // commenter's last comment on the post goes") can be tested without a database,
 // the way `createBurstWindow` mirrors the SQL limiter. Keep the two in step.
@@ -31,7 +31,13 @@ export type CommentAuraLedger = {
   addComment(comment: CommentRef): AuraEntry[];
   /** AFTER DELETE on post_comments. Safe to call twice for the same id. */
   deleteComment(commentId: string): AuraEntry[];
-  /** DELETE of a post: comments cascade, grants cascade, no Aura moves. */
+  /**
+   * DELETE of a post. Every still-active comment reward it generated is
+   * reversed — the author does not keep Aura for comments that no longer
+   * exist. 0181 got this wrong (its reconcile saw the post already gone and
+   * deliberately did nothing); 0187's BEFORE DELETE trigger on `posts` reverses
+   * each pair while the comments are still readable.
+   */
   deletePost(postId: string): AuraEntry[];
   /** Net Aura currently held by `userId` from comment rewards. */
   balance(userId: string): number;
@@ -117,13 +123,29 @@ export function createCommentAuraLedger(
     },
 
     deletePost(postId) {
+      const written: AuraEntry[] = [];
+      // Reverse BEFORE dropping the comments, mirroring the trigger's timing:
+      // the pairs to debit are read from the comments that still exist.
+      for (const k of [...grants.keys()]) {
+        if (!k.startsWith(`${postId} `)) continue;
+        const author = grants.get(k)!;
+        const commenterId = k.slice(postId.length + 1);
+        grants.delete(k);
+        written.push(
+          write({
+            userId: author,
+            delta: -COMMENT_AURA_DELTA,
+            reason: "comment_received",
+            postId,
+            commenterId,
+            reversal: true,
+          })
+        );
+      }
       for (const [id, c] of [...comments]) {
         if (c.postId === postId) comments.delete(id);
       }
-      for (const k of [...grants.keys()]) {
-        if (k.startsWith(`${postId} `)) grants.delete(k);
-      }
-      return [];
+      return written;
     },
 
     balance(userId) {
