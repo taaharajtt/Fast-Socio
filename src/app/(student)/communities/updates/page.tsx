@@ -25,21 +25,25 @@ import { loadCommunityUpdates } from "@/lib/community/updates-data";
  */
 export default function CommunityUpdatesPage() {
   return (
-    <main className="mx-auto w-full max-w-md px-4 py-4">
-      <header className="mb-4 flex items-center gap-3">
+    // The shell already pays the top safe-area inset and reserves dock
+    // clearance (--shell-pb), so this page adds neither — it only needs enough
+    // bottom padding that the last row clears the dock's shadow comfortably.
+    <main className="mx-auto w-full max-w-md px-4 pb-10 pt-2">
+      {/* Bare chevron and a large title on one line. The back control lost its
+          glass disc: on a plain dark list there is no photo behind it to stay
+          legible against, so the disc was chrome for its own sake and competed
+          with the title for the corner. */}
+      <header className="mb-2 flex items-center gap-2">
         <Link
           href="/communities"
           aria-label="Back to Community"
-          className="glass flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-fg-muted"
+          className="pressable focus-ring -ml-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-fg"
         >
-          <ChevronLeft className="h-5 w-5" aria-hidden />
+          <ChevronLeft className="h-7 w-7" strokeWidth={2.25} aria-hidden />
         </Link>
-        <div className="min-w-0">
-          <h1 className="text-[22px] font-bold tracking-tight">Updates</h1>
-          <p className="text-xs text-fg-muted">
-            Requests, decisions and announcements from your spaces
-          </p>
-        </div>
+        <h1 className="type-display text-[30px] font-extrabold tracking-tight">
+          Updates
+        </h1>
       </header>
 
       <Suspense fallback={<SkeletonRows count={6} />}>

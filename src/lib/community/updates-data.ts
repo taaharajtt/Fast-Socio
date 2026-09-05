@@ -4,6 +4,7 @@ import { getAuthUserId } from "@/lib/auth/user";
 import { resolveAvatarUrl } from "@/lib/avatar";
 import { timeAgo } from "@/lib/time";
 import { notificationView } from "@/lib/notifications/view";
+import { isNotificationType, notificationSegments } from "@/lib/notifications/copy";
 import {
   isActionableUpdate,
   UPDATES_PAGE_SIZE,
@@ -208,10 +209,17 @@ function toUpdate(
     row.data ?? {},
     row.group_count ?? 1
   );
+  const count = row.group_count ?? 1;
   return {
     id: row.id,
     type: row.type,
     text: view.text,
+    // Emphasis is computed HERE, on the server, from the same centralized copy
+    // the text came from — so the client renders spans and never parses a
+    // sentence or builds markup from user-supplied names.
+    segments: isNotificationType(row.type)
+      ? notificationSegments(row.type, actor?.name ?? null, row.data ?? {}, count)
+      : [{ text: view.text, strong: false }],
     href: view.href,
     unread: row.read_at === null,
     actionable: isActionableUpdate(row.type),

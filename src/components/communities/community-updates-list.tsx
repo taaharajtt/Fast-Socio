@@ -2,67 +2,43 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import {
-  Bell,
-  CalendarClock,
-  CheckCheck,
-  Megaphone,
-  ShieldCheck,
-  UserPlus,
-  type LucideIcon,
-} from "lucide-react";
-import { AppImage } from "@/components/ui/app-image";
+import { Bell, CheckCheck } from "lucide-react";
 import { GlassButton } from "@/components/ui";
+import { UpdateAvatar } from "@/components/communities/update-avatar";
 import { setCommunityBadge } from "@/lib/community/badge-store";
 import {
   markAllCommunityUpdatesRead,
   markCommunityUpdateRead,
   loadMoreCommunityUpdates,
 } from "@/app/(student)/communities/updates/actions";
-import type { CommunityUpdate } from "@/lib/community/updates";
+import { groupUpdatesByDate, type CommunityUpdate } from "@/lib/community/updates";
 import { cn } from "@/lib/utils";
 
-/** One glyph per kind of update. Unknown types fall back to the bell rather
- *  than rendering nothing — `notifications.type` is untyped text. */
-const TYPE_ICON: Record<string, LucideIcon> = {
-  community_join_request: UserPlus,
-  community_post_review: ShieldCheck,
-  event_post_request: ShieldCheck,
-  community_join_approved: UserPlus,
-  community_join_rejected: UserPlus,
-  community_approved: ShieldCheck,
-  community_rejected: ShieldCheck,
-  community_post_approved: ShieldCheck,
-  community_post_rejected: ShieldCheck,
-  society_role: ShieldCheck,
-  society_role_removed: ShieldCheck,
-  society_announcement: Megaphone,
-  event_approved: CalendarClock,
-  event_rejected: CalendarClock,
-  event_updated: CalendarClock,
-  event_reminder: CalendarClock,
-  waitlist_promoted: CalendarClock,
-};
-
 /**
- * The Community Updates list.
+ * The Community Updates feed.
+ *
+ * A NOTIFICATION FEED, NOT A TABLE. The previous version drew every row inside
+ * a bordered list with hairline separators and a 44px avatar, which made six
+ * updates look like a settings screen. What replaces it is the shape the rest
+ * of the app already uses for people: a large circular photo, a small category
+ * badge notched into its corner, and a sentence whose important words carry the
+ * weight. Nothing separates the rows but space.
  *
  * READ IS A DELIBERATE ACT. Opening this screen marks nothing — that is the
- * behaviour the old badge got wrong, where merely landing on /communities
- * silenced whole categories the student had never looked at. A row becomes read
- * when the student opens THAT row, or when they press Mark all read. Opening
- * one community does not touch another's.
+ * behaviour the old badge got wrong, where landing on /communities silenced
+ * whole categories the student had never looked at. A row becomes read when the
+ * student opens THAT row, or presses Mark all as read.
  *
- * Each row is a real <Link>, so it keyboard-focuses, middle-clicks and
- * long-presses like a link; the mark-read is a side effect on the way out, not
- * a replacement for navigation. If the write fails the student still arrives at
- * the right screen and the row is simply still unread — the safe direction.
+ * Each row is a real <Link>: it keyboard-focuses, middle-clicks and
+ * long-presses like a link, and the mark-read is a side effect on the way out
+ * rather than a replacement for navigation. If the write fails the student
+ * still arrives at the right screen and the row is simply still unread — the
+ * safe direction.
  *
  * THE BADGE IS NEVER DECREMENTED HERE. Every mutation returns the authoritative
  * count from the server and that is what reaches the store, so a row that had
- * already stopped counting (resolved by another manager, subject deleted)
- * cannot push the dock number below what is really waiting, and no path can
- * produce a negative or a NaN.
+ * already stopped counting cannot push the dock number below what is really
+ * waiting, and no path can produce a negative or a NaN.
  */
 export function CommunityUpdatesList({
   initialItems,
@@ -81,11 +57,12 @@ export function CommunityUpdatesList({
   const [marking, startMarking] = useTransition();
 
   const unreadCount = items.filter((i) => i.unread).length;
+  // Grouped over the WHOLE accumulated list, so a second page of today's rows
+  // extends the TODAY section instead of emitting a second TODAY heading.
+  const sections = groupUpdatesByDate(items);
 
   function open(item: CommunityUpdate) {
     if (!item.unread) return;
-    // Optimistic locally so the row loses its highlight as it is left; the dock
-    // takes the server's number, not this one.
     setItems((prev) =>
       prev.map((i) => (i.id === item.id ? { ...i, unread: false } : i))
     );
@@ -131,12 +108,11 @@ export function CommunityUpdatesList({
 
   if (items.length === 0) {
     return (
-      <div className="mt-10 flex flex-col items-center gap-2 px-8 text-center">
-        <Bell className="h-8 w-8 text-fg-muted" aria-hidden />
+      <div className="mt-16 flex flex-col items-center gap-2 px-8 text-center">
+        <Bell className="h-8 w-8 text-fg-disabled" aria-hidden />
         <p className="font-semibold text-fg">Nothing waiting</p>
         <p className="-mt-1 text-sm text-fg-muted">
-          Join requests, announcements from your spaces and decisions about your
-          submissions land here.
+          Messages, posts and decisions from your spaces land here.
         </p>
       </div>
     );
@@ -145,10 +121,8 @@ export function CommunityUpdatesList({
   return (
     <div>
       {unreadCount > 0 && (
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <p className="text-xs text-fg-muted">
-            {unreadCount} unread
-          </p>
+        <div className="mb-1 flex items-center justify-between gap-3">
+          <p className="text-xs text-fg-muted">{unreadCount} unread</p>
           <GlassButton
             size="sm"
             onClick={markAll}
@@ -167,68 +141,80 @@ export function CommunityUpdatesList({
         </p>
       )}
 
-      <ul className="divide-y divide-glass-border border-y border-glass-border">
-        {items.map((item) => {
-          const Icon = TYPE_ICON[item.type] ?? Bell;
-          return (
-            <li key={item.id}>
-              <Link
-                href={item.href}
-                prefetch={false}
-                onClick={() => open(item)}
-                aria-label={
-                  item.unread ? `Unread: ${item.text}` : item.text
-                }
-                // 44px minimum tap target, and the whole row is the target.
-                className={cn(
-                  "pressable-subtle focus-ring flex min-h-[56px] items-center gap-3 px-1 py-3",
-                  item.unread && "bg-surface-active/40"
-                )}
-              >
-                <span className="relative shrink-0">
-                  <span className="glass flex h-10 w-10 items-center justify-center overflow-hidden rounded-full text-fg-muted">
-                    {item.avatar ? (
-                      <AppImage src={item.avatar} alt="" sizes="40px" />
-                    ) : (
-                      <Icon className="h-5 w-5" aria-hidden />
-                    )}
-                  </span>
-                  {/* Unread is carried by TWO channels, not colour alone: the
-                      dot, and the row's own tint + weight below. */}
-                  {item.unread && (
-                    <span
-                      aria-hidden
-                      className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-bg bg-aura"
-                    />
-                  )}
-                </span>
+      {sections.map((section) => (
+        <section key={section.bucket}>
+          {/* Uppercase, muted, letter-spaced — a label, not a divider. */}
+          <h2 className="mb-1 mt-7 text-[13px] font-semibold uppercase tracking-[0.08em] text-fg-muted first:mt-3">
+            {section.bucket}
+          </h2>
 
-                <span className="min-w-0 flex-1">
-                  <span
-                    className={cn(
-                      "block text-sm text-fg",
-                      item.unread ? "font-semibold" : "font-normal"
-                    )}
-                  >
-                    {item.text}
-                  </span>
-                  <span className="mt-0.5 flex items-center gap-1.5">
-                    <span className="text-xs text-fg-muted">{item.timeAgo}</span>
+          <ul>
+            {section.items.map((item) => (
+              <li key={item.id}>
+                <Link
+                  href={item.href}
+                  prefetch={false}
+                  onClick={() => open(item)}
+                  aria-label={item.unread ? `Unread: ${item.text}` : item.text}
+                  className={cn(
+                    "pressable-subtle focus-ring -mx-2 flex items-center gap-3.5 rounded-2xl px-2 py-4",
+                    // Unread is carried by tint + weight + the dot, never by a
+                    // border or a card.
+                    item.unread && "bg-surface-active/50"
+                  )}
+                >
+                  <UpdateAvatar src={item.avatar} alt="" type={item.type} />
+
+                  <span className="min-w-0 flex-1">
+                    <span
+                      className={cn(
+                        "block text-[15px] leading-snug",
+                        item.unread ? "text-fg" : "text-fg-muted"
+                      )}
+                    >
+                      {item.segments.map((seg, i) => (
+                        <span
+                          key={i}
+                          className={
+                            seg.strong ? "font-semibold text-fg" : undefined
+                          }
+                        >
+                          {seg.text}
+                        </span>
+                      ))}
+                    </span>
+
                     {item.actionable && (
-                      <span className="rounded-full bg-aura/15 px-1.5 py-0.5 text-[10px] font-bold text-aura">
+                      <span className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-aura">
+                        <span
+                          aria-hidden
+                          className="h-1.5 w-1.5 rounded-full bg-aura"
+                        />
                         Action needed
                       </span>
                     )}
                   </span>
-                </span>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
+
+                  {/* Right rail: the time, with the unread dot beneath it.
+                      `shrink-0` so a long name wraps rather than squeezing the
+                      timestamp into a truncated column. */}
+                  <span className="flex shrink-0 flex-col items-end gap-1.5 self-center">
+                    <span className="text-[13px] text-fg-muted">
+                      {item.timeAgo}
+                    </span>
+                    {item.unread && (
+                      <span aria-hidden className="h-2 w-2 rounded-full bg-aura" />
+                    )}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
 
       {hasMore && (
-        <div className="mt-4 flex justify-center">
+        <div className="mt-6 flex justify-center">
           <GlassButton size="sm" onClick={loadMore} disabled={pending}>
             {pending ? "Loading…" : "Load more"}
           </GlassButton>
