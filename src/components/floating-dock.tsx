@@ -8,6 +8,8 @@ import { AppImage } from "@/components/ui/app-image";
 import {
   HouseOutline,
   HouseSolid,
+  PaperPlaneOutline,
+  PaperPlaneSolid,
   TrophySolid,
 } from "@/components/dock-glyphs";
 import { useChatBadge } from "@/lib/chat/badge-store";
@@ -27,27 +29,32 @@ import { cn } from "@/lib/utils";
  * how lucide happens to have drawn it. All three were settled by rendering the
  * result, not by reading path data.
  *
- *   `fill`   MessageCircle and Users are single closed silhouettes, so plain
- *            `fill-current` on the whole SVG is exactly right.
+ *   `fill`   Users is a single closed silhouette, so plain `fill-current` on
+ *            the whole SVG is exactly right.
  *
  *            Compass is the same trick with a child selector: filling
  *            everything turns it into a white DISC, which is not a compass, so
  *            `circle` stays a stroked ring and only the needle `path` fills.
  *            The active state reads as "the needle lit up".
  *
- *   `solid`  House and Trophy cannot be filled at all. House draws its door as
- *            a SEPARATE path from its body, so filling the SVG paints the door
- *            the same colour as the wall behind it and the doorway vanishes.
- *            Trophy is six paths of which only the cup is closed — the
- *            handles, the two stem legs and the base rule are all open curves,
- *            and an open path fills by closing itself implicitly, which turned
- *            the whole glyph into a mushroom.
+ *   `solid`  House, Trophy and Send cannot be filled at all. House draws its
+ *            door as a SEPARATE path from its body, so filling the SVG paints
+ *            the door the same colour as the wall behind it and the doorway
+ *            vanishes. Trophy is six paths of which only the cup is closed —
+ *            the handles, the two stem legs and the base rule are all open
+ *            curves, and an open path fills by closing itself implicitly,
+ *            which turned the whole glyph into a mushroom. Send's fold is an
+ *            open LINE, which has no area to fill and whose stroke then
+ *            matches the body it lies on, so the filled plane came out as a
+ *            featureless white triangle.
  *
- *            Both are hand-authored in `dock-glyphs.tsx` instead: same 24x24
- *            grid, same lucide path data, same caps and joins — the doorway
- *            becomes an evenodd hole, and the stand becomes one closed shape
- *            walked down lucide's left leg and back up its right. The inactive
- *            state still uses the real lucide icon, so the silhouettes match.
+ *            All three are hand-authored in `dock-glyphs.tsx` instead: same
+ *            24x24 grid, same lucide path data, same caps and joins — the
+ *            doorway becomes an evenodd hole, the stand becomes one closed
+ *            shape walked down lucide's left leg and back up its right, and
+ *            the plane's fold becomes a mask that cuts the line back out of
+ *            the fill. The inactive state still uses the real lucide icon, so
+ *            the silhouettes match.
  *
  * Sizes and stroke weights are per-icon on purpose. A solid shape carries far
  * more ink than its outline at the same bounding box, so the filled glyphs sit
@@ -73,6 +80,15 @@ const ACTIVE_GLYPH: Record<
     /** Hand-authored outline, used instead of the lucide icon when INACTIVE. */
     outline?: Glyph;
     size: number;
+    /**
+     * Box for the INACTIVE glyph, where 22 is not right for it. Only the
+     * paper plane needs this: its silhouette is a triangle, so it covers
+     * barely half of the box it is given, and at the shared 22 it read a
+     * couple of pixels smaller than the five glyphs around it even though
+     * the boxes matched. Both of its states take 24 so the correction is
+     * the same on each side of a tab switch.
+     */
+    outlineSize?: number;
     stroke: number;
   }
 > = {
@@ -85,21 +101,35 @@ const ACTIVE_GLYPH: Record<
   "/discover": { fill: "[&>path]:fill-current", size: 22, stroke: 2 },
   "/leaderboard": { solid: TrophySolid, size: 21, stroke: 1.8 },
   "/communities": { fill: "fill-current", size: 20, stroke: 1.5 },
-  "/chat": { fill: "fill-current", size: 21, stroke: 1.5 },
+  "/chat": {
+    solid: PaperPlaneSolid,
+    outline: PaperPlaneOutline,
+    size: 24,
+    outlineSize: 24,
+    stroke: 1.5,
+  },
 };
 
 /**
  * Bottom navigation bar. A translucent blurred material pinned to the screen
- * edge that content scrolls *under*, with a 1px top hairline, 56px of visible
- * height plus the safe-area inset, and six equal tabs (Home · Discover · Ranks
- * · Community · Chat · Me). Under `prefers-reduced-transparency` the material
- * resolves to a solid bar (handled in globals.css, not here).
+ * edge that content scrolls *under*, with a 1px top hairline, 52px of visible
+ * height plus the safe-area inset, and six equal ICON-ONLY tabs (Home ·
+ * Discover · Ranks · Community · Chat · Me). Under
+ * `prefers-reduced-transparency` the material resolves to a solid bar
+ * (handled in globals.css, not here).
+ *
+ * There are no text labels. Each destination names itself to assistive tech
+ * through the link's `aria-label` (the former visible label, plus the unread
+ * count when there is one) while the glyph itself is `aria-hidden` — so the
+ * accessible name survives the labels being removed, and nothing is announced
+ * twice. Height came down from 56px to 52px when the label row went away, so
+ * the single glyph sits optically centred rather than floating over a gap.
  *
  * Selection is expressed as OUTLINE → SOLID, not as colour: an inactive tab is
- * a thin grey outline glyph over grey text, an active tab is the same glyph
- * filled white over white text. Nothing sits behind the active tab — no
- * capsule, no tile, no underline, no glow. The glyph and the label are the
- * whole selected state.
+ * a thin grey outline glyph, an active tab is the same glyph filled white.
+ * Nothing sits behind the active tab — no capsule, no tile, no underline, no
+ * glow. The glyph IS the whole selected state, which is why the outline/solid
+ * pair below matters more now that no label backs it up.
  *
  * That is also why it works without colour at all: desaturate the bar and the
  * active tab is still obvious, because the silhouette changed, not the hue.
@@ -205,12 +235,12 @@ export function FloatingDock({
               aria-label={badge ? `${label}, ${badge} unread` : label}
               aria-current={active ? "page" : undefined}
               // `min-w-0` is what actually makes the six tabs equal. `flex-1`
-              // alone still honours each item's automatic minimum size, so at
-              // 320px "Community" — the longest label — refused to shrink and
-              // took 19.6% of the bar while the other five were squeezed to
-              // 16.1%. With the minimum released, every tab is exactly 1/6 at
-              // every width.
-              className="pressable focus-ring flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl"
+              // alone honours each item's automatic minimum size, which is now
+              // the glyph box rather than a word — but the release is kept so
+              // the six stay exactly 1/6 each at every width, including the
+              // 320px floor (53.3px per tab, comfortably over the 44px touch
+              // minimum in both axes: the tab is the full 52px dock row tall).
+              className="pressable focus-ring flex min-w-0 flex-1 items-center justify-center rounded-xl"
             >
               {/* A 28px glyph box, not the old 44px one. The tap target comes
                   from this Link (full dock height x one sixth of the width),
@@ -253,7 +283,9 @@ export function FloatingDock({
                     // override falls through to the real lucide icon, so the
                     // two states stay the same drawing.
                     const Shape = (active ? g?.solid : g?.outline) || Icon;
-                    const size = active ? (g?.size ?? 22) : 22;
+                    const size = active
+                      ? (g?.size ?? 22)
+                      : (g?.outlineSize ?? 22);
                     return (
                       <Shape
                         className={cn(
@@ -268,35 +300,23 @@ export function FloatingDock({
                   })()
                 )}
                 {badge > 0 && (
-                  <span className="absolute -right-1.5 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[9px] font-bold text-white">
+                  // The badge hangs off the corner of the ICON box, and which
+                  // corner depends on where the glyph actually has ink. Five
+                  // of the six are roughly symmetric and take the top-right.
+                  // The paper plane does not: its tip reaches into the very
+                  // top-right of the 24x24 grid (21.9, 2.1) while its top-LEFT
+                  // is empty, so a top-right badge landed on the tip and a
+                  // two-glyph count ("9+") buried it. Chat flips to the left,
+                  // where even the widest badge clears the silhouette.
+                  <span
+                    className={cn(
+                      "absolute -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[9px] font-bold text-white",
+                      href === "/chat" ? "-left-1.5" : "-right-1.5"
+                    )}
+                  >
                     {badge > 9 ? "9+" : badge}
                   </span>
                 )}
-              </span>
-              {/*
-                Inactive is `fg-muted`, not `fg-subtle`: subtle is dark enough
-                against the bar to fall under 4.5:1, and the brief asks for a
-                medium grey that still names every destination clearly. Active
-                gains weight and full contrast — and nothing else. No purple,
-                no size jump.
-
-                The size is fluid rather than the flat 11px of `type-footnote`.
-                Once every tab is a true sixth of the bar, a 320px screen gives
-                each label 53.3px, and "Community" — the longest of the six —
-                measures 62.6px at 11px. Labels are never hidden or truncated
-                here, so the type gives way instead: 11px from 390px up (the
-                design size), easing to 9px on the narrowest phone we support,
-                where the same word measures 51.4px and fits with room to
-                spare.
-              */}
-              <span
-                className={cn(
-                  "text-[clamp(0.55rem,2.8vw,0.6875rem)] leading-[1.2] tracking-[0.01em]",
-                  "transition-colors duration-150",
-                  active ? "font-semibold text-fg" : "font-medium text-fg-muted"
-                )}
-              >
-                {label}
               </span>
             </Link>
           );

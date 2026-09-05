@@ -20,6 +20,8 @@
  * same optical box as the outline they replace.
  */
 
+import { useId } from "react";
+
 type GlyphProps = {
   className?: string;
   style?: React.CSSProperties;
@@ -168,6 +170,130 @@ export function TrophySolid({ className, style, strokeWidth = 1.8 }: GlyphProps)
       />
       {/* Base. */}
       <path d="M4 22h16" />
+    </svg>
+  );
+}
+
+/**
+ * The paper plane, drawn twice — outline and solid — with the corners rounded.
+ *
+ * lucide's Send is the right silhouette but the wrong finish: its three corners
+ * carry a 0.5-unit radius, which at 22px is a hairline and reads as three sharp
+ * points, the tip especially. The reference plane is visibly soft — the corners
+ * are arcs you can see, not chamfers.
+ *
+ * So the shape is rebuilt on lucide's own geometry with a bigger radius. The
+ * three corner VERTICES are recovered from Send's path by extending each pair
+ * of straight edges to where they actually meet — (22.3, 1.7) at the tip,
+ * (1.08, 8.96) at the left, (15.04, 22.94) at the bottom — and the edges are
+ * then re-cornered at r=2 instead of r=0.5. Same three vertices, same four
+ * edges, same proportions: only the corner treatment changes. The concave notch
+ * where the wings meet is already r=2 in lucide and is kept verbatim, so the
+ * one curve the eye reads as "folded paper" is untouched.
+ *
+ * r=2 is the practical ceiling here, not a taste call. A corner arc's chord
+ * cannot exceed 2r, and at r=2 the two tightest corners already run 3.71 and
+ * 3.75 against a 4.0 limit — anything larger and the arcs stop fitting between
+ * the vertices and the path degenerates.
+ *
+ * `PLANE` is shared by both states, which is the whole point of authoring them
+ * together: the silhouette cannot drift between outline and solid, because
+ * there is only one silhouette.
+ */
+const PLANE =
+  "M18.442 3.018 L6.122 7.237 A2 2 0 0 0 6.026 10.948 L10.244 12.643 " +
+  "A2 2 0 0 1 11.356 13.755 L13.032 17.937 A2 2 0 0 0 16.78 17.84 " +
+  "L20.982 5.558 A2 2 0 0 0 18.442 3.018 Z";
+
+/**
+ * The fold, running from just inside the blunted tip down INTO the notch.
+ *
+ * lucide's fold starts at the old sharp tip (21.85, 2.15). With the tip now
+ * rounded away, a line starting there would begin outside the paper, so it is
+ * pulled back along the same diagonal to where the body actually is.
+ *
+ * The far end lands on the notch's own vertex (11.04, 12.96) rather than
+ * stopping short of it. Ending early left a visible gap between the fold and
+ * the V where the wings meet, and the plane read as an outline with a stray
+ * diagonal floating inside it instead of a sheet folded down its middle.
+ */
+const PLANE_FOLD = "M20.04 3.96 11.04 12.96";
+
+/** Outlined paper plane — the inactive Chat tab. */
+export function PaperPlaneOutline({ className, style, strokeWidth = 1.8 }: GlyphProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      style={style}
+      aria-hidden
+    >
+      <path d={PLANE} />
+      <path d={PLANE_FOLD} />
+    </svg>
+  );
+}
+
+/**
+ * Solid paper plane, with the fold cut back OUT of it.
+ *
+ * Filling the outline the way Chat's old MessageCircle was filled does not
+ * work here. The body fills correctly, but the fold is an open LINE: it has no
+ * area, so it fills to nothing, and its stroke is then the same white as the
+ * body it lies on. The result was a blank white triangle — the plane loses the
+ * one line that makes it read as a plane rather than an arrowhead.
+ *
+ * So the fold is subtracted instead of drawn. The body is filled, and a mask
+ * knocks the fold's stroke back out of it, leaving a transparent slot that the
+ * dock's own background shows through — which is exactly the dark diagonal in
+ * the reference. Because the cut is transparency rather than a painted colour,
+ * it needs no knowledge of what is behind the dock and stays correct if that
+ * surface ever changes.
+ *
+ * The outer path keeps a stroke in the fill colour, the way TrophySolid does:
+ * a bare fill occupies the bounding box while the inactive outline occupies
+ * that box plus half a stroke, and without the payback the plane would sit
+ * visibly smaller than the five icons beside it.
+ *
+ * `useId` gives the mask a document-unique name. The dock renders once, but
+ * the id is generated rather than hardcoded so a second instance (the layout's
+ * Suspense fallback dock renders alongside the real one for a frame) cannot
+ * collide — two elements sharing a mask id is a silent, render-order-dependent
+ * bug, and SVG ids are global to the document, not scoped to the SVG.
+ */
+export function PaperPlaneSolid({ className, style, strokeWidth = 1.5 }: GlyphProps) {
+  const maskId = useId();
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      className={className}
+      style={style}
+      aria-hidden
+    >
+      <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
+        {/* White keeps, black cuts. */}
+        <rect width="24" height="24" fill="white" />
+        <path
+          d={PLANE_FOLD}
+          stroke="black"
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+        />
+      </mask>
+      <path
+        mask={`url(#${maskId})`}
+        fill="currentColor"
+        stroke="currentColor"
+        strokeWidth={strokeWidth}
+        strokeLinejoin="round"
+        d={PLANE}
+      />
     </svg>
   );
 }

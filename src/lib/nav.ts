@@ -2,7 +2,7 @@ import {
   Home,
   Compass,
   Users,
-  MessageCircle,
+  Send,
   Trophy,
   User,
   type LucideIcon,
@@ -30,7 +30,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/discover", label: "Discover", icon: Compass },
   { href: "/leaderboard", label: "Ranks", icon: Trophy },
   { href: "/communities", label: "Community", icon: Users },
-  { href: "/chat", label: "Chat", icon: MessageCircle },
+  { href: "/chat", label: "Chat", icon: Send },
   { href: "/profile", label: "Me", icon: User },
 ];
 
