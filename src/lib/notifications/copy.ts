@@ -83,14 +83,18 @@ export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
  * reaches the Notifications surface, even if a future migration starts emitting
  * it.
  *
- * MIGRATION 0192 NARROWED THIS AGAIN. Everything that happens inside a space —
- * room and event messages, society broadcasts, community posts, the whole
- * community/society/event lifecycle, and direct messages — now belongs to
- * Community → Updates and is NOT rendered here. The database is authoritative:
- * this page reads `public.activity_notifications`, the complement of
- * `community_updates`, so a community-scoped post_like is excluded by SUBJECT
- * even though its type still appears below. This list is the second gate, not
- * the only one.
+ * MIGRATION 0192 NARROWED THIS, AND 0195 CORRECTED IT. Everything that happens
+ * inside a SPACE — room and event messages, society broadcasts, community
+ * posts, the whole community/society/event lifecycle — belongs to Community →
+ * Updates and is NOT rendered here. Everything that happens in a private CHAT
+ * conversation — DMs, DM requests and accepts, DM reactions — belongs to Chat
+ * and is not rendered here either. 0192 wrongly filed that second group under
+ * Community; `public.notification_domain()` now gives chat its own domain.
+ *
+ * The database is authoritative: this page reads
+ * `public.activity_notifications`, which is the `general_notifications` domain
+ * — so a community-scoped post_like is excluded by SUBJECT even though its type
+ * still appears below. This list is the second gate, not the only one.
  *
  * The previous policy, kept for the record:
  *

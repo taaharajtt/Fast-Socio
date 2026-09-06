@@ -36,7 +36,7 @@
   */
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --dock-h: 3.5rem; /* matches FloatingDock's h-14 row */
+  --dock-h: 3.25rem; /* matches FloatingDock icon-only row (52px) */
   --dock-total: calc(var(--dock-h) + var(--safe-bottom));
 
   /*

@@ -21,6 +21,10 @@ const DOCK = code("src/components/floating-dock.tsx");
 const LAYOUT = code("src/app/(student)/layout.tsx");
 const DATA = code("src/lib/community/updates-data.ts");
 const MIGRATION = read("supabase/migrations/0183_community_updates.sql");
+/** The routing correction. 0192 claimed the DM family for Community; this is
+ *  the migration that gives Chat its own domain and takes them back. */
+const MIG195 = read("supabase/migrations/0195_notification_domain_routing.sql");
+const CHAT_BADGE = code("src/lib/chat/badge-count.ts");
 
 /**
  * Wiring and semantics, asserted at the source level.
@@ -220,5 +224,88 @@ describe("chat is untouched", () => {
   it("keeps community chat out of the Community badge", () => {
     expect(MIGRATION).not.toContain("community_chat_messages");
     expect(MIGRATION).not.toContain("'community_message'");
+  });
+});
+
+/**
+ * THE ROUTING CORRECTION (migration 0195).
+ *
+ * 0192 put `message`, `message_request`, `message_request_accepted` and
+ * `message_reaction` in `community_update_types()`, so private chat traffic
+ * rendered inside Community → Updates and counted towards the Community dock
+ * badge. These assertions are the source-level half of the fence; the
+ * behavioural half is supabase/tests/notification_domain_routing.sql, and the
+ * pure classification is covered in lib/notifications/domain.test.ts.
+ */
+describe("DMs are Chat, and only Chat", () => {
+  it("removes the DM family from the community type list", () => {
+    const body =
+      MIG195.split(
+        "create or replace function public.community_update_types()"
+      )[1]?.split("$$;")[0] ?? "";
+    expect(body).not.toContain("'message'");
+    expect(body).not.toContain("'message_request'");
+    expect(body).not.toContain("'message_request_accepted'");
+    expect(body).not.toContain("'message_reaction'");
+    // ...while the SPACE conversations stay, which is the distinction the fix
+    // must not overshoot.
+    expect(body).toContain("'community_message'");
+    expect(body).toContain("'event_message'");
+    expect(body).toContain("'society_announcement'");
+  });
+
+  it("gives chat its own domain rather than folding it into another", () => {
+    expect(MIG195).toContain("create or replace function public.chat_notification_types()");
+    expect(MIG195).toContain("then 'chat'");
+    expect(MIG195).toContain("create or replace view public.chat_notifications");
+  });
+
+  it("classifies by subject, never by URL or display copy", () => {
+    // The domain rule takes the four SUBJECT columns and nothing else.
+    expect(MIG195).toContain("p_conversation uuid");
+    expect(MIG195).toContain("n.subject_conversation_id");
+    expect(MIG195).not.toContain("href");
+    expect(MIG195).not.toMatch(/like '%\/chat/);
+  });
+
+  it("drops the three-argument rule so nothing can ask the blind version", () => {
+    expect(MIG195).toContain(
+      "drop function if exists public.notification_domain(text, uuid, uuid)"
+    );
+  });
+
+  it("counts the Community badge off the view, so DMs contribute zero", () => {
+    expect(MIG195).toContain(
+      "select count(*) from public.community_updates u where u.read_at is null"
+    );
+  });
+
+  it("leaves the Chat badge on messages, not on notification rows", () => {
+    // The two badges measure different things out of different tables, which is
+    // why nothing Community does to a notification row can move Chat's number.
+    expect(CHAT_BADGE).toContain("chat_badge_count");
+    expect(CHAT_BADGE).not.toContain("community_updates");
+    expect(CHAT_BADGE).not.toContain("notification");
+  });
+
+  it("bounds every mark-read to its own surface", () => {
+    // Community's two RPCs test membership of the community_updates VIEW...
+    expect(MIG195).toContain(
+      "exists (select 1 from public.community_updates u where u.id = n.id)"
+    );
+    // ...and the Notifications page's auto-mark-read, which used to clear
+    // EVERY unread row of the caller's (including the Community badge and
+    // every chat row), is now scoped to its own domain.
+    const markAll =
+      MIG195.split(
+        "create or replace function public.mark_notifications_read()"
+      )[1]?.split("$$;")[0] ?? "";
+    expect(markAll).toContain("= 'general_notifications'");
+  });
+
+  it("deletes no DM rows and rewrites no message history", () => {
+    expect(MIG195).not.toMatch(/delete\s+from\s+public\.notifications/i);
+    expect(MIG195).not.toMatch(/update\s+public\.messages/i);
+    expect(MIG195).not.toMatch(/update\s+public\.message_requests/i);
   });
 });

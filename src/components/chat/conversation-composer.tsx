@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   BarChart3,
   Camera,
-  ImagePlus,
   Mic,
   Paperclip,
   Send,
@@ -23,11 +22,20 @@ import { cn } from "@/lib/utils";
  * outside the pill, the safe-area padding — with the per-surface extras
  * expressed ONLY as capabilities:
  *
- *   direct message        { media, camera, voice }
- *   community / room      { media, camera, poll, anonymous }
- *   Discover team room    { media, camera, poll }              (no anonymity)
- *   event discussion      { media, camera }                    (no poll, no anonymity)
- *   society broadcast     { media, camera, poll, anonymous? }  (anonymity by role)
+ *   direct message        { attach, camera, voice }
+ *   community / room      { camera, poll, anonymous }
+ *   Discover team room    { camera, poll }              (no anonymity)
+ *   event discussion      { camera }                    (no poll, no anonymity)
+ *   society broadcast     { camera, poll, anonymous? }  (anonymity by role)
+ *
+ * `attach` IS A DIRECT-MESSAGE CAPABILITY. The paperclip — the general
+ * "attach a file" control — belongs to a private conversation between two
+ * people. On the community surfaces it was a second button opening the same
+ * image picker as the camera beside it, so it added a control without adding
+ * an ability; those surfaces keep the camera and lose the paperclip. Note the
+ * consequence, because it is the design and not an oversight: on a community
+ * surface an image is attached from an EMPTY composer (the camera is the
+ * idle-state control, as in Messages), not mid-sentence.
  *
  * WHAT IS NOT A CAPABILITY. Whether someone may post AT ALL is not decided
  * here: a surface that must not accept a message does not render a composer,
@@ -40,8 +48,12 @@ import { cn } from "@/lib/utils";
  */
 
 export type ComposerCapabilities = {
-  /** Attach an image (paperclip). */
-  media?: boolean;
+  /**
+   * The general attachment control (paperclip), available at any draft length.
+   * Direct messages only — see the header. A surface that wants images but not
+   * a paperclip asks for `camera` alone.
+   */
+  attach?: boolean;
   /** Camera shortcut, shown only while the draft is empty (as in Messages). */
   camera?: boolean;
   /** Mic replaces Send while the draft is empty. DMs only — voice notes are a
@@ -153,7 +165,9 @@ export function ConversationComposer({
     if (!ok) setDraft(text);
   }
 
-  const showMedia = Boolean(capabilities.media && onFilePicked);
+  // Both controls open the SAME picker below, so neither can be shown without
+  // a handler to receive what it picks.
+  const showAttach = Boolean(capabilities.attach && onFilePicked);
   const showCamera = Boolean(capabilities.camera && onFilePicked);
 
   return (
@@ -169,7 +183,10 @@ export function ConversationComposer({
       {/* items-end keeps the side buttons anchored to the textarea's last line
           as it grows, matching the WhatsApp composer feel. */}
       <div className="flex items-end gap-2">
-        {onFilePicked && (
+        {/* One picker for both the camera and the paperclip. It is rendered
+            whenever EITHER can open it — never for a surface that has neither,
+            so no unreachable input is left in the tree. */}
+        {(showAttach || showCamera) && (
           <input
             ref={fileRef}
             type="file"
@@ -222,7 +239,11 @@ export function ConversationComposer({
             />
 
             {/* The capability cluster sits INSIDE the field's right edge, in
-                the order poll -> anonymous -> camera -> attach. */}
+                the order poll -> anonymous -> camera -> attach. It is a plain
+                flex row with no placeholders: a capability the surface does not
+                have renders nothing at all, so the textarea (flex-1) simply
+                takes the width back and there is no gap where a button used to
+                be. */}
             <div
               className="flex shrink-0 items-center gap-0.5"
               style={{ marginBottom: (MIN_H - 28) / 2 }}
@@ -272,7 +293,7 @@ export function ConversationComposer({
                   <Camera className="h-5 w-5" aria-hidden />
                 </button>
               )}
-              {showMedia && (
+              {showAttach && (
                 <button
                   type="button"
                   aria-label="Attach image"
@@ -280,11 +301,7 @@ export function ConversationComposer({
                   disabled={inert}
                   className="flex h-7 w-7 items-center justify-center text-fg-muted disabled:opacity-40"
                 >
-                  {capabilities.voice ? (
-                    <Paperclip className="h-5 w-5" aria-hidden />
-                  ) : (
-                    <ImagePlus className="h-[18px] w-[18px]" aria-hidden />
-                  )}
+                  <Paperclip className="h-5 w-5" aria-hidden />
                 </button>
               )}
             </div>

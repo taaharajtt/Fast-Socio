@@ -2,6 +2,9 @@
 
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { shouldAutoScroll } from "@/lib/chat/scroll-anchor";
+import { LoadEarlier } from "@/components/chat/load-earlier";
+import { useMessageHistory } from "@/components/chat/use-message-history";
+import { loadEarlierEventMessages } from "@/app/(student)/events/history-actions";
 import {
   dropOptimistic,
   mergeMessage,
@@ -127,6 +130,7 @@ export function EventDiscussion({
   canModerate = false,
   initialMessages,
   initialReactions = {},
+  hasMoreHistory = false,
 }: {
   eventId: string;
   meId: string;
@@ -136,6 +140,8 @@ export function EventDiscussion({
   canModerate?: boolean;
   initialMessages: EventMessage[];
   initialReactions?: Record<string, MessageReaction[]>;
+  /** The server saw older rows beyond the first page of ten. */
+  hasMoreHistory?: boolean;
 }) {
   const [messages, setMessages] = useState<EventMessage[]>(initialMessages);
   const [error, setError] = useState<string | null>(null);
@@ -315,10 +321,33 @@ export function EventDiscussion({
   //
   // Now: scroll the list container itself, and only when the reader is already
   // at the bottom or sent the message. Same rule, same helper, as the DM thread.
+  // Paged history. The hook prepends and restores the scroll offset; the effect
+  // below must stand down while it does, which is what `suppressAutoScroll` is.
+  const fetchEarlier = useCallback(
+    async (cursor: { createdAt: string; id: string }) => {
+      const page = await loadEarlierEventMessages(eventId, cursor);
+      // The older rows bring their own reaction chips.
+      if (Object.keys(page.reactions).length > 0) {
+        setReactions((prev) => ({ ...page.reactions, ...prev }));
+      }
+      return { messages: page.messages, hasMore: page.hasMore };
+    },
+    [eventId, setReactions]
+  );
+
+  const history = useMessageHistory({
+    messages,
+    setMessages,
+    listRef,
+    hasMore: hasMoreHistory,
+    fetchPage: fetchEarlier,
+  });
+
   const didInitialScroll = useRef(false);
   const newest = messages.length > 0 ? messages[messages.length - 1] : null;
   const newestId = newest?.id ?? null;
   const newestIsMine = newest?.sender_id === meId;
+  const suppressAutoScroll = history.suppressAutoScroll;
   useEffect(() => {
     const el = listRef.current;
     if (!el) return;
@@ -327,6 +356,10 @@ export function EventDiscussion({
       didInitialScroll.current = true;
       return;
     }
+    // A history prepend changes `messages.length` and would otherwise be read
+    // as "something new arrived" — scrolling a reader who is at the bottom to
+    // the newest message and undoing the compensation just applied.
+    if (suppressAutoScroll) return;
     if (
       !shouldAutoScroll({
         metrics: {
@@ -340,7 +373,7 @@ export function EventDiscussion({
       return;
     }
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [newestId, newestIsMine, messages.length]);
+  }, [newestId, newestIsMine, messages.length, suppressAutoScroll]);
 
   // Sign any attachment not signed yet — the bucket is private, so a raw path
   // is useless without this.
@@ -679,6 +712,7 @@ export function EventDiscussion({
         // scrolls).
         className="max-h-[50vh] flex-1 space-y-2 overflow-y-auto overscroll-contain py-2"
       >
+        <LoadEarlier status={history.status} onLoad={history.loadEarlier} />
         {messages.length === 0 && (
           <div className="flex flex-col items-center gap-2 py-8 text-center">
             <MessagesSquare className="h-7 w-7 text-fg-muted" aria-hidden />
@@ -795,8 +829,9 @@ export function EventDiscussion({
           <ChatComposer
             placeholder="Message attendees…"
             // No poll and no anonymity here: attendees coordinate openly, and
-            // a poll belongs to a community's own tooling.
-            capabilities={{ media: true }}
+            // a poll belongs to a community's own tooling. Camera, not
+            // paperclip: images come from the idle composer.
+            capabilities={{ camera: true }}
             onFilePicked={(e) => {
               const file = e.target.files?.[0];
               e.target.value = "";

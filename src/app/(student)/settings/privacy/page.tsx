@@ -11,7 +11,7 @@ export default async function PrivacySettingsPage() {
   const { data: p } = await supabase
     .from("profiles")
     .select(
-      "discoverable, searchable, show_online, read_receipts, show_aura, show_department, show_semester, show_matches, profile_visibility"
+      "discoverable, searchable, show_online, read_receipts, show_aura, show_department, show_semester, show_matches, disable_message_requests, profile_visibility"
     )
     .eq("id", userId!)
     .single();
@@ -40,6 +40,9 @@ export default async function PrivacySettingsPage() {
           show_semester: p?.show_semester ?? true,
           // mig 0182 — defaults open, like every other privacy column.
           show_matches: p?.show_matches ?? true,
+          // mig 0196 — the one flag whose OFF state is the open one, so it
+          // falls back to false rather than true.
+          disable_message_requests: p?.disable_message_requests ?? false,
         }}
         initialVisibility={
           (p?.profile_visibility as "public" | "university") ?? "public"

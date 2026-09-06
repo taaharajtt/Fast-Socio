@@ -87,19 +87,19 @@ export default async function ActivityPage() {
   const me = (await getAuthUserId())!;
 
   // An allow-list, not a deny-list (ACTIVITY_VISIBLE_TYPES): this page shows the
-  // nine activity categories and nothing else. Conversation traffic — DMs, DM
-  // requests and accepts, DM reactions, community/chatroom and event chat — lives
-  // in Chat with its own dock badge and only fires as push; society/community
-  // broadcasts and admin announcements (delivered as a cold-open modal, UAT-012)
-  // are likewise not rows to read here.
+  // nine activity categories and nothing else. DMs, DM requests and accepts and
+  // DM reactions belong to Chat, which has its own dock badge; community and
+  // event room chat, society broadcasts and the whole space lifecycle belong to
+  // Community → Updates; admin announcements are a cold-open modal (UAT-012).
+  // None of the three is a row to read here.
   const { data: rows } = await supabase
-    // `activity_notifications` (mig 0192) is the COMPLEMENT of
-    // community_updates over notifications_live: it hides rows whose subject
-    // has been deleted (0132) AND every row the Community Updates inbox owns.
-    // The type allow-list alone could not do this — a like on a community post
-    // and a like on a feed post are both `post_like`, and only the SUBJECT
-    // separates them — so the surface split is decided in SQL and this page
-    // keeps the list as a second gate.
+    // `activity_notifications` is the `general_notifications` domain of
+    // `notification_domain()` (migs 0192, 0195): rows whose subject still
+    // exists (0132) and which belong neither to Community Updates, nor to
+    // Chat, nor to the announcement modal. The type allow-list alone could not
+    // do this — a like on a community post and a like on a feed post are both
+    // `post_like`, and only the SUBJECT separates them — so the surface split
+    // is decided in SQL and this page keeps the list as a second gate.
     .from("activity_notifications")
     .select("id, actor_id, type, data, group_count, read_at, created_at")
     .eq("user_id", me)

@@ -117,7 +117,15 @@ async function CommunityConversationPageBody({
   // Only a joined member can read the room, so the fetch is skipped entirely
   // for a follower — they get the join gate below instead of an empty thread.
   // The SAME loader the room page uses, so both surfaces show one history.
-  const { messages, polls, reactions } = await loadCommunityChat(id, rel.isMember);
+  // A Discover team room is explicitly out of scope for paged history and
+  // keeps its single unpaged load; a community room gets the newest ten.
+  const { messages, polls, reactions, hasMore } = await loadCommunityChat(
+    id,
+    rel.isMember,
+    // `community.is_discover_group` rather than the `isDiscoverGroup` const,
+    // which is declared below this fetch.
+    { paginated: !community.is_discover_group }
+  );
 
   const image = community.avatar_url ?? community.cover_url;
   const isDiscoverGroup = Boolean(community.is_discover_group);
@@ -206,6 +214,8 @@ async function CommunityConversationPageBody({
         // there already knows who is on the team.
         allowAnonymous={!isDiscoverGroup}
         canModerate={rel.canModerateChat}
+        paginated={!isDiscoverGroup}
+        hasMoreHistory={hasMore}
       />
     </div>
   );

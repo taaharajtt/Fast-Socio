@@ -7,6 +7,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * the very rows /communities/updates renders. If the badge says 6, six rows are
  * waiting there, and reading them takes it to zero. Nothing else can move it.
  *
+ * DIRECT MESSAGES CONTRIBUTE ZERO. Migration 0192 briefly routed the DM family
+ * into this view, so five unread DMs and three unread updates rendered as 8;
+ * 0195 gave chat its own domain. Chat's number comes from `messages.read_at`
+ * via `chat_badge_count()` and has never had anything to do with these rows.
+ *
  * This replaces migration 0170's six-part grouped count, which summed
  * communities, memberships, per-space collapses and platform-wide creation
  * events into a single integer that answered no single question and had no list

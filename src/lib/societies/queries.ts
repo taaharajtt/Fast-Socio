@@ -5,6 +5,9 @@ import {
   groupReactionsByMessage,
   type MessageReaction,
 } from "@/lib/chat/reactions";
+import { HISTORY_PAGE_SIZE } from "@/lib/chat/history";
+import { olderThanFilter } from "@/lib/chat/keyset";
+import type { MessageCursor } from "@/lib/chat/message-merge";
 import type { OfficerVM, AnnouncementRow } from "@/lib/societies/types";
 
 export type SocietyEvent = {
@@ -131,14 +134,43 @@ export async function getSocietyAnnouncements(
   id: string,
   limit = 30
 ): Promise<AnnouncementRow[]> {
+  return (await getSocietyAnnouncementPage(id, { limit })).items;
+}
+
+/**
+ * One page of broadcasts, newest-first, with the flag that drives the
+ * "Load earlier messages" capsule.
+ *
+ * `id` is the second sort key and the tiebreaker in the cursor: two broadcasts
+ * posted in the same microsecond would otherwise swap places between requests,
+ * and a timestamp-only cursor would either serve one of them twice or step over
+ * it. Access is unchanged — `society_announcement_feed` is the definer feed view
+ * that already enforces broadcast visibility, and the cursor only narrows rows
+ * the caller can see. Nothing here touches who may POST or moderate.
+ */
+export async function getSocietyAnnouncementPage(
+  id: string,
+  options: { limit?: number; before?: MessageCursor | null } = {}
+): Promise<{ items: AnnouncementRow[]; hasMore: boolean }> {
+  const { limit = HISTORY_PAGE_SIZE, before = null } = options;
   const supabase = await createClient();
-  const { data } = await supabase
+
+  let query = supabase
     .from("society_announcement_feed")
     .select("*")
     .eq("society_id", id)
     .order("created_at", { ascending: false })
-    .limit(limit);
-  return (data ?? []) as AnnouncementRow[];
+    .order("id", { ascending: false })
+    .limit(limit + 1);
+
+  if (before) query = query.or(olderThanFilter(before));
+
+  const { data } = await query;
+  const fetched = (data ?? []) as AnnouncementRow[];
+  const hasMore = fetched.length > limit;
+  // Newest-first is this function's contract — the thread reverses it — so the
+  // extra probe row is dropped from the END.
+  return { items: hasMore ? fetched.slice(0, limit) : fetched, hasMore };
 }
 
 /**

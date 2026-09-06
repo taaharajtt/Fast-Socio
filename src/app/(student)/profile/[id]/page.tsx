@@ -68,7 +68,9 @@ async function PublicProfilePageBody({
     supabase
       .from("profiles")
       .select(
-        "id, full_name, username, department, degree, bio, avatar_url, gender, cover_url, aura_score, verified, show_online, show_aura, show_department, show_semester, show_matches, deactivated_at"
+        // `disable_message_requests` (mig 0196) is the ONLY thing added here,
+        // and it decides one thing: whether the first-contact button renders.
+        "id, full_name, username, department, degree, bio, avatar_url, gender, cover_url, aura_score, verified, show_online, show_aura, show_department, show_semester, show_matches, disable_message_requests, deactivated_at"
       )
       .eq("id", id)
       .single(),
@@ -93,6 +95,18 @@ async function PublicProfilePageBody({
   const showDept = isSelf || profile.show_department !== false;
   const showSem = isSelf || profile.show_semester !== false;
   const deactivated = !isSelf && Boolean(profile.deactivated_at);
+
+  /**
+   * Does this person still take first-contact requests? (mig 0196)
+   *
+   * `!== true` rather than `=== false`, so a row read before the column existed
+   * — or one whose select was narrowed by a future edit — falls back to the
+   * OPEN state and simply shows the button. The database is what actually
+   * refuses the send, so failing open here costs a friendly error at worst,
+   * while failing closed would silently hide first contact for everyone the
+   * moment this column stopped being selected.
+   */
+  const acceptsRequests = profile.disable_message_requests !== true;
 
   // Are we matched? Only then do we surface a Message action.
   let matched = false;
@@ -275,7 +289,7 @@ async function PublicProfilePageBody({
                 <Check className="h-4 w-4" aria-hidden />
                 Blocked
               </span>
-            ) : (
+            ) : acceptsRequests ? (
               // UAT-01, path 2. This used to read "Match to chat" — an inert
               // caption naming a requirement that was never actually the rule:
               // message_requests has been the first-contact path since mig 0004
@@ -284,7 +298,7 @@ async function PublicProfilePageBody({
                 recipientId={profile.id}
                 name={profile.full_name}
               />
-            )}
+            ) : null}
             {!isSelf && (
               <ProfileActionsMenu
                 targetId={profile.id}

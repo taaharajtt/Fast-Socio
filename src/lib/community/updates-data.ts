@@ -15,10 +15,12 @@ import {
  * Reading the Community Updates list.
  *
  * THE SOURCE IS THE VIEW, NOT A HAND-BUILT QUERY. `public.community_updates`
- * (migration 0183) is the same set `community_badge_count()` counts, and it
- * already applies:
+ * (migrations 0183, 0192, 0195) is the same set `community_badge_count()`
+ * counts, and it already applies:
  *
- *   * the type allow-list — chat and platform-wide creation events are absent;
+ *   * the domain rule — private chat (DMs, DM requests, DM reactions) and
+ *     platform-wide activity are absent, while community room chat, event
+ *     discussion and society broadcasts are present;
  *   * the subject cascade — an update never outlives the community, event, post
  *     or announcement it points at (it is built on `notifications_live`);
  *   * liveness — a join request that another manager has since decided, a post

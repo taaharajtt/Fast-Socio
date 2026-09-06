@@ -118,8 +118,8 @@ async function CommunityPageBody({
   // SECURITY INVOKER and filters on a live community_members row, so read
   // access is revoked the moment membership is (leave / remove / ban).
   const chat = !pending && rel.isMember
-    ? await loadCommunityChat(id, true)
-    : { messages: [], polls: {}, reactions: {} };
+    ? await loadCommunityChat(id, true, { paginated: true })
+    : { messages: [], polls: {}, reactions: {}, hasMore: false };
 
   type Row = {
     user_id: string;
@@ -182,6 +182,8 @@ async function CommunityPageBody({
           initialPolls={chat.polls}
           initialReactions={chat.reactions}
           canModerate={rel.canModerateChat}
+          paginated
+          hasMoreHistory={chat.hasMore}
         />
       ),
     });

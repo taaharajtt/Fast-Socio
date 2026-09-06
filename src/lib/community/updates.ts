@@ -1,4 +1,4 @@
-import type { CopySegment, NotificationType } from "@/lib/notifications/copy";
+import type { CopySegment } from "@/lib/notifications/copy";
 
 /**
  * What counts as a Community update.
@@ -9,104 +9,39 @@ import type { CopySegment, NotificationType } from "@/lib/notifications/copy";
  * renders exactly the same rows — so "why does it say 6" is answered by opening
  * it and reading six lines.
  *
- * This list mirrors `public.community_update_types()` (migration 0183), which
- * is what the database's view and RPCs actually use. Two copies exist because
- * neither side can import the other; `updates.test.ts` asserts they match by
- * parsing the migration, so a type added on one side and forgotten on the other
- * fails the test run rather than quietly under- or over-counting.
+ * THE CLASSIFICATION ITSELF LIVES IN `lib/notifications/domain.ts`, and the
+ * database's `public.notification_domain()` (migration 0195) is authoritative
+ * over both. This file re-exports the Community half so the existing callers
+ * keep their import, and adds the presentation concerns — actionability, date
+ * bucketing, the row shape — that only this screen has.
  *
- * TYPE ALONE DOES NOT DECIDE. A like on a community post and a like on a feed
- * post are both `post_like`; what separates them is the SUBJECT. The types
- * below always belong to Updates; the generic social types below that belong
- * there only when the notification carries a space subject. Both halves are
- * mirrored from `public.notification_domain()` (migration 0192), which is what
- * the database actually routes on.
+ * WHY IT MOVED. Migration 0192 asked one question, "is this a Community
+ * update?", and treated everything else as a leftover; the answer it gave for a
+ * direct message was "yes", which put private chat traffic on a community
+ * screen and into the Community badge. The four domains — community_updates,
+ * chat, general_notifications, system — are now peers, and DMs belong to chat.
  *
  * Nothing counts an action the reader took themselves: `create_notification`
  * returns early when recipient = actor, so there is no row to exclude.
  */
-export const COMMUNITY_UPDATE_TYPES = [
-  // Work waiting on the reader as a manager of a space.
-  "community_join_request",
-  "community_post_review",
-  "event_post_request",
-  // Decisions about the reader, made inside a space.
-  "community_join_approved",
-  "community_join_rejected",
-  "community_approved",
-  "community_rejected",
-  "community_post_approved",
-  "community_post_rejected",
-  "society_role",
-  "society_role_removed",
-  // Spaces the reader follows or has joined.
-  "society_announcement",
-  "community_post",
-  // Conversation inside a space. Grouped by room/event, so a busy channel is
-  // one row carrying a count, never one row per message.
-  "community_message",
-  "event_message",
-  // Events the reader hosts or is going to.
-  "event_approved",
-  "event_rejected",
-  "event_updated",
-  "event_reminder",
-  "waitlist_promoted",
-  "event_organizer_added",
-  "event_organizer_removed",
-  // Direct messages, by explicit product decision. Grouped by conversation.
-  // The Chat dock badge is unaffected: it counts unread MESSAGES, not
-  // notifications, so the two are independent numbers of different things.
-  "message",
-  "message_request",
-  "message_request_accepted",
-  "message_reaction",
-] as const satisfies readonly NotificationType[];
+export {
+  COMMUNITY_UPDATE_TYPES,
+  CHAT_NOTIFICATION_TYPES,
+  SOCIAL_NOTIFICATION_TYPES,
+  isCommunityUpdateType,
+  isChatNotificationType,
+  communityUpdateTypeList,
+  chatNotificationTypeList,
+  notificationDomain,
+} from "@/lib/notifications/domain";
+export type {
+  CommunityUpdateType,
+  ChatNotificationType,
+  NotificationDomain,
+  NotificationSubject,
+} from "@/lib/notifications/domain";
 
-export type CommunityUpdateType = (typeof COMMUNITY_UPDATE_TYPES)[number];
-
-const TYPE_SET: ReadonlySet<string> = new Set(COMMUNITY_UPDATE_TYPES);
-
-export function isCommunityUpdateType(
-  value: string
-): value is CommunityUpdateType {
-  return TYPE_SET.has(value);
-}
-
-/**
- * Generic social types that live in EITHER surface depending on where they
- * happened. Mirrors `public.social_notification_types()`.
- */
-export const SOCIAL_NOTIFICATION_TYPES = [
-  "post_like",
-  "comment_like",
-  "comment",
-  "comment_reply",
-  "mention",
-] as const satisfies readonly NotificationType[];
-
-const SOCIAL_SET: ReadonlySet<string> = new Set(SOCIAL_NOTIFICATION_TYPES);
-
-/**
- * Which surface owns a notification. The TypeScript mirror of
- * `public.notification_domain()`; the database is authoritative and both
- * surfaces read views built on it, so this exists for tests and for any client
- * that needs to reason about a row it already holds.
- */
-export function notificationDomain(
-  type: string,
-  subject: { communityId?: string | null; eventId?: string | null }
-): "community" | "activity" {
-  if (TYPE_SET.has(type)) return "community";
-  if (SOCIAL_SET.has(type) && (subject.communityId || subject.eventId))
-    return "community";
-  return "activity";
-}
-
-/** The allow-list as a plain array, for PostgREST `.in("type", …)`. */
-export function communityUpdateTypeList(): string[] {
-  return [...COMMUNITY_UPDATE_TYPES];
-}
+import type { CommunityUpdateType } from "@/lib/notifications/domain";
 
 /**
  * The types that represent WORK — something the reader is expected to go and

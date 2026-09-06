@@ -24,6 +24,8 @@ export function CommunityThread({
   initialReactions,
   allowAnonymous = true,
   canModerate = false,
+  paginated = false,
+  hasMoreHistory = false,
 }: {
   communityId: string;
   meId: string;
@@ -37,6 +39,13 @@ export function CommunityThread({
   allowAnonymous?: boolean;
   /** Viewer may delete anyone's message here (fix-051). */
   canModerate?: boolean;
+  /**
+   * Ten-at-a-time history with the "Load earlier messages" capsule. TRUE for
+   * community chat rooms, FALSE for Discover team rooms — the same split as
+   * `allowAnonymous`, decided by the route rather than here.
+   */
+  paginated?: boolean;
+  hasMoreHistory?: boolean;
 }) {
   if (!isMember) {
     return (
@@ -66,6 +75,8 @@ export function CommunityThread({
       initialReactions={initialReactions}
       allowAnonymous={allowAnonymous}
       canModerate={canModerate}
+      paginated={paginated}
+      hasMoreHistory={hasMoreHistory}
     />
   );
 }

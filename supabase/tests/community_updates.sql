@@ -78,11 +78,16 @@ begin
     raise exception 'FAIL: notifications is not in the realtime publication';
   end if;
 
-  -- Chat must not be in the domain, at all.
-  if 'community_message' = any (public.community_update_types())
-     or 'event_message' = any (public.community_update_types())
-     or 'message' = any (public.community_update_types()) then
-    raise exception 'FAIL: a chat type is in the Community update domain';
+  -- PRIVATE chat must not be in the domain, at all. (This assertion once
+  -- covered community_message/event_message too; migration 0192 deliberately
+  -- moved SPACE conversation into Updates — it belongs to the room, not to
+  -- Chat — and 0195 drew the line where it belongs, at the DM family.)
+  if public.community_update_types() && public.chat_notification_types() then
+    raise exception 'FAIL: a direct-message type is in the Community update domain';
+  end if;
+  if not ('community_message' = any (public.community_update_types()))
+     or not ('event_message' = any (public.community_update_types())) then
+    raise exception 'FAIL: space conversation fell out of the Community update domain';
   end if;
 
   raise notice 'OK: structure, grants, publication and domain';
