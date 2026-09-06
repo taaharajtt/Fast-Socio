@@ -17,6 +17,11 @@ const BOOL_PRIVACY = [
   // mig 0182. Only your CURRENT matches could ever open your list; turning this
   // off means nobody but you can. Enforced in get_matches_of(), not here.
   "show_matches",
+  // mig 0196. THE ONE INVERTED FLAG on this list: true means "off to others".
+  // It is named for what the toggle says so the switch, the column and the RPC
+  // all read the same way round. Enforced in send_message_request(), not here —
+  // this only records the preference.
+  "disable_message_requests",
 ] as const;
 
 export type PrivacyKey = (typeof BOOL_PRIVACY)[number];
@@ -43,6 +48,12 @@ export async function setPrivacy(
   // this profile, so the profile surfaces have to be re-rendered too.
   if (key === "show_matches") {
     revalidatePath("/profile");
+    revalidatePath(`/profile/${userId}`);
+  }
+  // Whether "Request to chat" renders is read from this column on every OTHER
+  // student's copy of this profile, so the profile route has to be re-rendered
+  // for the change to be visible without a hard reload.
+  if (key === "disable_message_requests") {
     revalidatePath(`/profile/${userId}`);
   }
 }
