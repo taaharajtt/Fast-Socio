@@ -18,12 +18,17 @@ import {
  * implementations that drift. What survives here is the per-surface capability
  * wiring and this note:
  *
- *   community / chat room   { poll: true,  anonymous: true,  media: true }
- *   Discover team room      { poll: true,  anonymous: false, media: true }
- *   event discussion        { poll: false, anonymous: false, media: true }
- *   announcements           { poll: true,  anonymous: by role, media: true }
+ *   community / chat room   { poll: true,  anonymous: true,     camera: true }
+ *   Discover team room      { poll: true,  anonymous: false,    camera: true }
+ *   event discussion        { poll: false, anonymous: false,    camera: true }
+ *   announcements           { poll: true,  anonymous: by role,  camera: true }
  *
  * Discover deliberately has no anonymous option — that was decided in fix-018.
+ *
+ * NONE of them asks for `attach`, and this wrapper will not add it: the
+ * paperclip is a direct-message control. These surfaces keep the camera, which
+ * opens the same image picker, so images still work — they are attached from an
+ * empty composer rather than mid-sentence. See <ConversationComposer/>.
  */
 
 export type { ComposerCapabilities };
@@ -63,10 +68,10 @@ export function ChatComposer({
   return (
     <ConversationComposer
       placeholder={placeholder}
-      // The camera shortcut travels with media everywhere: it is the same
-      // picker, and its absence was one of the visible differences between
-      // these surfaces and Messages.
-      capabilities={{ ...capabilities, camera: capabilities.media }}
+      // Spread as given, then the paperclip is closed off explicitly rather
+      // than by omission: a call site that starts passing `attach` should not
+      // silently grow one on a community surface.
+      capabilities={{ ...capabilities, attach: false }}
       anonymous={anonymous}
       onToggleAnonymous={onToggleAnonymous}
       pollActive={pollActive}

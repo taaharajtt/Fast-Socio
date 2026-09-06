@@ -795,8 +795,9 @@ export function EventDiscussion({
           <ChatComposer
             placeholder="Message attendees…"
             // No poll and no anonymity here: attendees coordinate openly, and
-            // a poll belongs to a community's own tooling.
-            capabilities={{ media: true }}
+            // a poll belongs to a community's own tooling. Camera, not
+            // paperclip: images come from the idle composer.
+            capabilities={{ camera: true }}
             onFilePicked={(e) => {
               const file = e.target.files?.[0];
               e.target.value = "";

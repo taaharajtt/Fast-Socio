@@ -1019,7 +1019,7 @@ export function AnnouncementThread({
               }
               capabilities={{
                 poll: true,
-                media: true,
+                camera: true,
                 anonymous: canPostAnonymously,
               }}
               anonymous={anon}

@@ -1023,7 +1023,7 @@ export function CommunityChat({
              component with `allowAnonymous={false}`. */
           <ChatComposer
             placeholder={anon ? "Message anonymously..." : "Message..."}
-            capabilities={{ poll: true, anonymous: allowAnonymous, media: true }}
+            capabilities={{ poll: true, anonymous: allowAnonymous, camera: true }}
             anonymous={anon}
             onToggleAnonymous={() => setAnon((a) => !a)}
             pollActive={composingPoll}

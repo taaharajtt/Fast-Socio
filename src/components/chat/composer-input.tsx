@@ -45,8 +45,10 @@ export function ComposerInput({
     <ConversationComposer
       // Voice notes are a `messages`-table feature: no group surface has a
       // column to store one, which is why this is the only call site that asks
-      // for the mic.
-      capabilities={{ media: true, camera: true, voice: true }}
+      // for the mic. It is also the only one that asks for the paperclip —
+      // `attach` is a private-conversation control, and the community surfaces
+      // deliberately have only the camera.
+      capabilities={{ attach: true, camera: true, voice: true }}
       busy={busy}
       replyPreview={replyPreview}
       replyActive={replyActive}
