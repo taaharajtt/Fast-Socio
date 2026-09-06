@@ -4,7 +4,12 @@ import { describe, expect, it } from "vitest";
 import { messageRequestError } from "@/lib/chat/message-request";
 
 const ROOT = process.cwd();
-const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
+/** Source text with line endings NORMALISED. A Windows checkout converts
+ *  LF to CRLF, so an assertion spanning a newline would pass on one
+ *  machine and fail on another - which is exactly what happened when this
+ *  branch was merged and the files were re-checked-out. */
+const read = (rel: string) =>
+  readFileSync(join(ROOT, rel), "utf8").replace(/\r\n/g, "\n");
 /** Code only — these files explain at length what they deliberately do NOT do,
  *  and an assertion that reads the prose passes on the explanation. */
 const code = (rel: string) =>
