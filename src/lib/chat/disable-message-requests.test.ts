@@ -22,6 +22,14 @@ const MIGRATION_SQL = MIGRATION.replace(/^\s*--.*$/gm, "");
 const POLICY_MIGRATION = read(
   "supabase/migrations/0197_message_request_insert_policy.sql"
 );
+/** 0198 — the column-level UPDATE grant, without which the write is refused
+ *  before RLS is ever consulted. */
+const GRANT_MIGRATION = read(
+  "supabase/migrations/0198_privacy_column_update_grants.sql"
+);
+/** Its statements, without the prose — the header explains why it does NOT
+ *  grant the whole table, naming that very statement. */
+const GRANT_SQL = GRANT_MIGRATION.replace(/^\s*--.*$/gm, "");
 const PROFILE = code("src/app/(student)/profile/[id]/page.tsx");
 const PRIVACY_UI = code("src/components/settings/privacy-settings.tsx");
 const PRIVACY_ACTIONS = code("src/app/(student)/settings/privacy-actions.ts");
@@ -218,6 +226,71 @@ describe("the stale-profile case", () => {
     );
     expect(messageRequestError("not authenticated")).toContain("Sign in");
     expect(messageRequestError(null)).toContain("try again");
+  });
+});
+
+/**
+ * THE FAILURE THIS SUITE MISSED, and the reason it did.
+ *
+ * `profiles` has no table-level UPDATE grant for `authenticated` — it has
+ * COLUMN-level grants, named one at a time. A column added by a migration is
+ * therefore unwritable by a student until it is granted, and the failure is a
+ * `42501 permission denied for table profiles` raised BEFORE RLS is consulted,
+ * naming the table rather than the column actually missing.
+ *
+ * 0196 checked the RLS policy and the protect_profile_columns() trigger, and
+ * both were fine. Nothing about `add column` suggests a third gate. The switch
+ * flipped, the write was refused, and the toggle rolled back with "Couldn't
+ * save that" — which is how it was reported.
+ *
+ * These assertions exist so the next privacy column cannot repeat it.
+ */
+describe("the new column is actually writable", () => {
+  it("is granted UPDATE at the column level", () => {
+    expect(GRANT_MIGRATION).toContain(
+      "grant update (disable_message_requests) on public.profiles to authenticated"
+    );
+  });
+
+  it("also fixes show_matches, broken the same way since 0182", () => {
+    expect(GRANT_MIGRATION).toContain("grant update (show_matches)");
+  });
+
+  it("does NOT widen the grant to the whole table", () => {
+    // The column list is a second, independent defence alongside
+    // protect_profile_columns(). A table-level grant would collapse them.
+    expect(GRANT_SQL).not.toMatch(
+      /grant update on public\.profiles to authenticated/i
+    );
+  });
+
+  it("grants nothing privileged", () => {
+    for (const col of [
+      "aura_score",
+      "admin_role",
+      "is_admin",
+      "is_banned",
+      "verified",
+      "shadow_banned",
+    ]) {
+      expect(GRANT_SQL).not.toContain(`grant update (${col})`);
+    }
+  });
+
+  it("covers every boolean the settings page can write", () => {
+    // BOOL_PRIVACY is the app's list; anything on it must be granted somewhere.
+    // The eight older ones were granted when they were added; these two were
+    // the gaps, so the union has to cover the whole list.
+    const listed = PRIVACY_ACTIONS.slice(
+      PRIVACY_ACTIONS.indexOf("const BOOL_PRIVACY"),
+      PRIVACY_ACTIONS.indexOf("] as const")
+    );
+    const keys = [...listed.matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
+    expect(keys).toContain("disable_message_requests");
+    expect(keys).toContain("show_matches");
+    for (const gap of ["disable_message_requests", "show_matches"]) {
+      expect(GRANT_MIGRATION).toContain(`grant update (${gap})`);
+    }
   });
 });
 

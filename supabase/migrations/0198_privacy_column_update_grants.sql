@@ -1,0 +1,84 @@
+-- =============================================================================
+-- 0198 — grant UPDATE on the two privacy columns that never got one.
+--
+-- THE BUG, and why 0196 did not catch it.
+--
+-- `public.profiles` does NOT carry a table-level UPDATE grant for
+-- `authenticated`. It carries COLUMN-LEVEL grants — 26 of them, named one by
+-- one. A column added by a later migration is therefore NOT writable by a
+-- student even though:
+--
+--   * the RLS policy `id = auth.uid()` admits the row, and
+--   * `protect_profile_columns()` has no objection to the column.
+--
+-- Both of those were checked when 0196 was written. The grant was not, because
+-- nothing about `alter table ... add column` suggests a privilege is missing —
+-- the failure is a plain `42501: permission denied for table profiles`, raised
+-- before RLS is ever consulted, and it names the TABLE rather than the column
+-- that is actually missing from the grant.
+--
+-- Symptom: the "Disable message requests" switch flips, the write is refused,
+-- and the toggle rolls back with "Couldn't save that — try again." Reported
+-- from the UI; reproduced by running the app's exact UPDATE as `authenticated`
+-- against production inside a rolled-back transaction.
+--
+-- ---------------------------------------------------------------------------
+-- AND ONE THAT HAS BEEN BROKEN SINCE 0182.
+--
+-- `show_matches` is missing from the same list. It has been in the privacy
+-- page's toggle list and in `BOOL_PRIVACY` since mig 0182, and it has never
+-- been writable — the write failed, the old fire-and-forget UI ignored the
+-- error, and the switch simply reverted on the next page load. It is fixed
+-- here because it is the identical defect, one line away, and the new
+-- rollback-and-report UI would otherwise start surfacing a months-old failure
+-- as a fresh one.
+--
+-- These two are the ONLY gaps: every other column the settings surface writes
+-- (discoverable, searchable, show_online, read_receipts, show_aura,
+-- show_department, show_semester, profile_visibility) is already granted.
+--
+-- ---------------------------------------------------------------------------
+-- WHY NOT JUST GRANT THE WHOLE TABLE.
+--
+-- `grant update on public.profiles to authenticated` would fix this and every
+-- future instance of it — and would also hand students write access to every
+-- column the column list deliberately withholds. `protect_profile_columns()`
+-- pins the privileged ones (aura_score, admin_role, is_admin, is_banned,
+-- verified, xp, level, shadow_banned, …) but it is a trigger, i.e. one
+-- mechanism; the column grants are a second, independent one, and the pair is
+-- why the 2026-07-15 privilege-escalation incident could not be repeated
+-- through a plain UPDATE. Widening the grant would collapse two defences into
+-- one. So: name the columns, as the existing grants do.
+--
+-- A COLUMN GRANT IS NOT A PERMISSION TO WRITE ANYONE'S ROW. It says which
+-- columns MAY be written; the RLS policy still decides WHICH ROW, and that is
+-- unchanged (`id = auth.uid()` in both USING and WITH CHECK).
+-- =============================================================================
+
+grant update (disable_message_requests) on public.profiles to authenticated;
+grant update (show_matches)             on public.profiles to authenticated;
+
+-- =============================================================================
+-- VERIFY
+--   select column_name
+--     from information_schema.column_privileges
+--    where table_schema='public' and table_name='profiles'
+--      and grantee='authenticated' and privilege_type='UPDATE'
+--      and column_name in ('disable_message_requests','show_matches');
+--   -- must return BOTH rows.
+--
+--   -- and the table-level grant must still be absent, or the column list has
+--   -- stopped being a boundary at all:
+--   select count(*) from information_schema.table_privileges
+--    where table_schema='public' and table_name='profiles'
+--      and grantee='authenticated' and privilege_type='UPDATE';   -- must be 0
+--
+--   -- end to end, as a student, on their own row (roll this back):
+--   --   set local role authenticated;
+--   --   update public.profiles set disable_message_requests = true where id = <self>;
+--
+-- ROLLBACK
+--   revoke update (disable_message_requests) on public.profiles from authenticated;
+--   revoke update (show_matches)             on public.profiles from authenticated;
+--   (Revoking show_matches restores a bug, not a safeguard.)
+-- =============================================================================
