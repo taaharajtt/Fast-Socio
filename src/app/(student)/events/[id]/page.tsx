@@ -6,7 +6,6 @@ import { EventOverviewTab } from "@/components/events/tabs/event-overview-tab";
 import { EventMembersTab } from "@/components/events/tabs/event-members-tab";
 import type { RsvpState } from "@/components/events/rsvp-button";
 import type { Organizer } from "@/components/events/event-host-controls";
-import type { EventMessage } from "@/components/events/event-discussion";
 import type { Attendee } from "@/components/events/attendee-list";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUserId } from "@/lib/auth/user";
@@ -14,28 +13,13 @@ import { formatEventDate } from "@/lib/events/format";
 import { EVENT_TIMEZONE_LABEL, hasEndedNow } from "@/lib/events/time-state";
 import { getSocialProof } from "@/lib/communities/social-proof";
 import { checkInQrDataUrl } from "@/lib/events/qr";
-import { resolveAvatarUrl } from "@/lib/avatar";
-import { groupReactionsByMessage } from "@/lib/chat/reactions";
+import { loadEventDiscussion } from "@/lib/events/discussion-data";
 
 // UAT-10: the local `hasEnded` that lived here is gone. It read `Date.now()`
 // inside itself (so the boundary was untestable) and treated a null `ends_at`
 // as "ended at the start time", which marked every open-ended event as over the
 // moment it began. `lib/events/time-state` is now the single definition, shared
 // with the client badge that re-evaluates it at the boundary.
-
-type DiscussionRow = {
-  id: string;
-  sender_id: string;
-  body: string;
-  created_at: string;
-  // mig 0179 — reply/edit/unsend/attachment on the attendee discussion.
-  edited_at: string | null;
-  deleted_at: string | null;
-  reply_to_id: string | null;
-  attachment_url: string | null;
-  attachment_type: string | null;
-  sender: { full_name: string | null; avatar_url: string | null; gender: string | null } | null;
-};
 
 type AttendeeRow = {
   user_id: string;
@@ -104,7 +88,7 @@ async function EventPageBody({
     { data: community },
     { data: rating },
     { data: myFeedback },
-    { data: discussionRows },
+    discussion,
     { data: organizerRows },
     { data: attendeeRows },
   ] = await Promise.all([
@@ -137,14 +121,10 @@ async function EventPageBody({
           .eq("user_id", me)
           .maybeSingle()
       : Promise.resolve({ data: null }),
-    supabase
-      .from("event_messages")
-      .select(
-        "id, sender_id, body, created_at, edited_at, deleted_at, reply_to_id, attachment_url, attachment_type, sender:profiles(full_name, avatar_url, gender)"
-      )
-      .eq("event_id", id)
-      .order("created_at", { ascending: true })
-      .limit(100),
+    // The discussion is read by its own loader (paged, newest-first) — see
+    // `lib/events/discussion-data`. It stays inside this Promise.all so the
+    // page still costs one round of parallel queries.
+    loadEventDiscussion(id),
     supabase
       .from("event_organizers")
       .select(
@@ -179,42 +159,11 @@ async function EventPageBody({
       ? await checkInQrDataUrl(attendance.check_in_code)
       : null;
 
-  const discussionMessages: EventMessage[] = ((discussionRows as unknown as DiscussionRow[]) ?? []).map(
-    (r) => ({
-      id: r.id,
-      sender_id: r.sender_id,
-      body: r.body,
-      created_at: r.created_at,
-      edited_at: r.edited_at,
-      deleted_at: r.deleted_at,
-      reply_to_id: r.reply_to_id,
-      attachment_url: r.attachment_url,
-      attachment_type: r.attachment_type,
-      sender_name: r.sender?.full_name ?? null,
-      sender_avatar: resolveAvatarUrl(r.sender?.avatar_url, r.sender?.gender),
-    })
-  );
-
-  // Reactions for the first paint. Read here rather than on the client so the
-  // thread does not open with no chips and grow them a round trip later, which
-  // reads as the reactions having been lost. RLS scopes these to people who can
-  // read the thread at all.
-  const discussionIds = discussionMessages.map((m) => m.id);
-  const { data: discussionReactionRows } =
-    discussionIds.length > 0
-      ? await supabase
-          .from("event_message_reactions")
-          .select("message_id, emoji, user_id")
-          .in("message_id", discussionIds)
-      : { data: [] as { message_id: string; emoji: string; user_id: string }[] };
-  const discussionReactions = groupReactionsByMessage(
-    (discussionReactionRows ?? []) as {
-      message_id: string;
-      emoji: string;
-      user_id: string;
-    }[],
-    discussionIds
-  );
+  const {
+    messages: discussionMessages,
+    reactions: discussionReactions,
+    hasMore: discussionHasMore,
+  } = discussion;
 
   const attendees: Attendee[] = ((attendeeRows as unknown as AttendeeRow[]) ?? [])
     .filter((r) => r.user)
@@ -267,6 +216,7 @@ async function EventPageBody({
           }}
           discussionMessages={discussionMessages}
           discussionReactions={discussionReactions}
+          discussionHasMore={discussionHasMore}
           canDiscuss={!pending && (attending || isOrganizer)}
           // Posting needs an attendee row on an approved event — the INSERT
           // policy's own rule. An organizer who never registered may moderate

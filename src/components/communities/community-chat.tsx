@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState, Fragment } from "react";
 import { shouldAutoScroll } from "@/lib/chat/scroll-anchor";
+import { LoadEarlier } from "@/components/chat/load-earlier";
+import { useMessageHistory } from "@/components/chat/use-message-history";
+import { loadEarlierCommunityMessages } from "@/app/(student)/communities/history-actions";
 import {
   dropOptimistic,
   mergeMessage,
@@ -110,6 +113,8 @@ export function CommunityChat({
   initialReactions = {},
   allowAnonymous = true,
   canModerate = false,
+  paginated = false,
+  hasMoreHistory = false,
 }: {
   communityId: string;
   meId: string;
@@ -117,6 +122,15 @@ export function CommunityChat({
   initialPolls: Record<string, PollOptionResult[]>;
   /** messageId -> reactions, for the first paint (mig 0179). */
   initialReactions?: Record<string, MessageReaction[]>;
+  /**
+   * Ten-at-a-time history with the "Load earlier messages" capsule. TRUE for
+   * community chat rooms; FALSE for Discover team rooms, which are explicitly
+   * out of scope for that feature and keep their single unpaged load. Same
+   * component, one more per-surface capability.
+   */
+  paginated?: boolean;
+  /** The server saw older rows beyond the first page. */
+  hasMoreHistory?: boolean;
   /**
    * fix-058: Discover team rooms pass false. Anonymous posting is deliberately
    * absent there — decided in fix-018 — while community chat and campus chat
@@ -392,10 +406,37 @@ export function CommunityChat({
   // scrolling the LIST container (never scrollIntoView, which walks every
   // scrollable ancestor including the page behind the fixed shell on iOS) is
   // what stops the page jumping when the keyboard opens.
+  // Paged history. The hook prepends and restores the scroll offset; the effect
+  // below must stand down while it does, which is what `suppressAutoScroll` is.
+  const fetchEarlier = useCallback(
+    async (cursor: { createdAt: string; id: string }) => {
+      const page = await loadEarlierCommunityMessages(communityId, cursor);
+      // The older rows bring their own poll tallies and reaction chips.
+      if (Object.keys(page.polls).length > 0) {
+        setPolls((prev) => ({ ...page.polls, ...prev }));
+      }
+      if (Object.keys(page.reactions).length > 0) {
+        setReactions((prev) => ({ ...page.reactions, ...prev }));
+      }
+      return { messages: page.messages, hasMore: page.hasMore };
+    },
+    [communityId, setPolls, setReactions]
+  );
+
+  const history = useMessageHistory({
+    messages,
+    setMessages,
+    listRef,
+    hasMore: hasMoreHistory,
+    enabled: paginated,
+    fetchPage: fetchEarlier,
+  });
+
   const didInitialScroll = useRef(false);
   const newest = messages.length > 0 ? messages[messages.length - 1] : null;
   const newestId = newest?.id ?? null;
   const newestIsMine = newest?.sender_id === meId;
+  const suppressAutoScroll = history.suppressAutoScroll;
   useEffect(() => {
     const el = listRef.current;
     if (!el) return;
@@ -404,6 +445,10 @@ export function CommunityChat({
       didInitialScroll.current = true;
       return;
     }
+    // A history prepend changes `messages.length` and would otherwise be read
+    // as "something new arrived" — scrolling a reader who is at the bottom to
+    // the newest message and undoing the compensation just applied.
+    if (suppressAutoScroll) return;
     if (
       !shouldAutoScroll({
         metrics: {
@@ -417,7 +462,7 @@ export function CommunityChat({
       return;
     }
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [newestId, newestIsMine, messages.length]);
+  }, [newestId, newestIsMine, messages.length, suppressAutoScroll]);
 
   // Resolve signed URLs for any attachment we haven't signed yet. The bucket is
   // private, so a raw path is useless without this.
@@ -879,6 +924,9 @@ export function CommunityChat({
       )}
 
       <div ref={listRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto py-4">
+        {paginated && (
+          <LoadEarlier status={history.status} onLoad={history.loadEarlier} />
+        )}
         {messages.length === 0 && (
           <div className="mt-8 flex flex-col items-center gap-2 text-center">
             <MessageCircle className="h-7 w-7 text-fg-muted" aria-hidden />

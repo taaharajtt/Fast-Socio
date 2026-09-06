@@ -24,6 +24,7 @@ export function BroadcastTab({
   canManage,
   canPostAnonymously = false,
   canReveal = false,
+  hasMoreHistory = false,
 }: {
   societyId: string;
   /** The reader's id, so their own reaction chip can be flagged. */
@@ -36,6 +37,8 @@ export function BroadcastTab({
   /** UAT-04 capability flags, resolved server-side from `society_capabilities`. */
   canPostAnonymously?: boolean;
   canReveal?: boolean;
+  /** The server saw older broadcasts beyond the first page of ten. */
+  hasMoreHistory?: boolean;
 }) {
   return (
     <AnnouncementThread
@@ -47,6 +50,7 @@ export function BroadcastTab({
       canManage={canManage}
       canPostAnonymously={canPostAnonymously}
       canReveal={canReveal}
+      hasMoreHistory={hasMoreHistory}
     />
   );
 }

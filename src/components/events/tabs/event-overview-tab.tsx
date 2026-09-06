@@ -42,6 +42,7 @@ export function EventOverviewTab({
   feedback,
   discussionMessages,
   discussionReactions,
+  discussionHasMore = false,
   canDiscuss,
   canPostInDiscussion,
   canModerateDiscussion = false,
@@ -70,6 +71,8 @@ export function EventOverviewTab({
   discussionMessages: EventMessage[];
   /** messageId -> reactions, for the first paint (mig 0179). */
   discussionReactions?: Record<string, MessageReaction[]>;
+  /** The server saw older discussion rows beyond the first page of ten. */
+  discussionHasMore?: boolean;
   /** The thread is shown at all. */
   canDiscuss: boolean;
   /** Registered attendee: may send, reply, react, edit their own. Defaults to
@@ -206,6 +209,7 @@ export function EventOverviewTab({
             canModerate={canModerateDiscussion}
             initialMessages={discussionMessages}
             initialReactions={discussionReactions}
+            hasMoreHistory={discussionHasMore}
           />
         </section>
       )}

@@ -13,7 +13,7 @@ import {
   getSocietyOfficers,
   getUpcomingSocietyEvents,
   getPastSocietyEvents,
-  getSocietyAnnouncements,
+  getSocietyAnnouncementPage,
   getAnnouncementReactions,
 } from "@/lib/societies/queries";
 import { canManageSociety, canPostAnnouncement } from "@/lib/societies/logic";
@@ -80,12 +80,13 @@ async function SocietyPageBody({
 
   const supabase = await createClient();
 
-  const [officers, upcoming, past, announcements, memberRows, pendingRows] =
+  const [officers, upcoming, past, announcementPage, memberRows, pendingRows] =
     await Promise.all([
       getSocietyOfficers(id),
       getUpcomingSocietyEvents(id, 40),
       getPastSocietyEvents(id, 20),
-      getSocietyAnnouncements(id, 50),
+      // The newest ten; older ones arrive through the capsule's server action.
+      getSocietyAnnouncementPage(id),
       supabase
         .from("community_members")
         .select(
@@ -110,7 +111,7 @@ async function SocietyPageBody({
   // with the messages rather than a round trip later.
   const [joinRequests, announcementReactions] = await Promise.all([
     canManage ? getJoinRequests(id) : Promise.resolve([]),
-    getAnnouncementReactions(announcements.map((a) => a.id)),
+    getAnnouncementReactions(announcementPage.items.map((a) => a.id)),
   ]);
 
   const officerIds = new Set(officers.map((o) => o.user_id));
@@ -159,8 +160,9 @@ async function SocietyPageBody({
         <BroadcastTab
           societyId={id}
           meId={viewer.me}
-          announcements={announcements}
+          announcements={announcementPage.items}
           reactions={announcementReactions}
+          hasMoreHistory={announcementPage.hasMore}
           canPost={canPost}
           canManage={canManage}
           canPostAnonymously={caps.can_post_anonymously}

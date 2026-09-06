@@ -2,11 +2,14 @@
 
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { shouldAutoScroll } from "@/lib/chat/scroll-anchor";
+import { reconcileWithServerWindow } from "@/lib/chat/history";
+import { LoadEarlier } from "@/components/chat/load-earlier";
+import { useMessageHistory } from "@/components/chat/use-message-history";
+import { loadEarlierAnnouncements } from "@/app/(student)/societies/history-actions";
 import {
   dropOptimistic,
   mergeMessage,
   mergeMessages,
-  sortMessages,
 } from "@/lib/chat/message-merge";
 import {
   Check,
@@ -113,6 +116,7 @@ export function AnnouncementThread({
   canManage,
   canPostAnonymously = false,
   canReveal = false,
+  hasMoreHistory = false,
 }: {
   societyId: string;
   /** The reader's id, so their own reaction chip can be flagged. */
@@ -127,6 +131,8 @@ export function AnnouncementThread({
   canPostAnonymously?: boolean;
   /** UAT-04: president, owner or admin only. */
   canReveal?: boolean;
+  /** The server saw older broadcasts beyond the first page of ten. */
+  hasMoreHistory?: boolean;
 }) {
   // Display oldest -> newest, like a chat thread.
   const [messages, setMessages] = useState<ThreadRow[]>(() =>
@@ -144,11 +150,14 @@ export function AnnouncementThread({
   const [seen, setSeen] = useState(announcements);
   if (seen !== announcements) {
     setSeen(announcements);
+    // The server's page is authoritative over ITS OWN WINDOW only. Replacing
+    // the list wholesale — which is what this used to do — would collapse any
+    // history the reader had loaded through the capsule back to the newest ten,
+    // under them, mid-scroll. `reconcileWithServerWindow` keeps rows older than
+    // the server's window, lets the server win inside it (so an edit, delete or
+    // pin still lands), and carries optimistic bubbles over regardless.
     setMessages((prev) =>
-      sortMessages([
-        ...[...announcements].reverse(),
-        ...prev.filter((m) => m.id.startsWith("temp-")),
-      ])
+      reconcileWithServerWindow(prev, [...announcements].reverse() as ThreadRow[])
     );
   }
 
@@ -424,10 +433,38 @@ export function AnnouncementThread({
   // or when the newest is their own. Scroll the list container directly, not
   // scrollIntoView (which also scrolls ancestors). Shared with the DM thread
   // via `lib/chat/scroll-anchor` and unit-tested there.
+  // Paged history. The hook prepends and restores the scroll offset; the effect
+  // below must stand down while it does, which is what `suppressAutoScroll` is.
+  const fetchEarlier = useCallback(
+    async (cursor: { createdAt: string; id: string }) => {
+      const page = await loadEarlierAnnouncements(societyId, cursor);
+      if (Object.keys(page.reactions).length > 0) {
+        setReactions((prev) => ({ ...page.reactions, ...prev }));
+      }
+      // The action returns newest-first, like every other broadcast read; the
+      // merge sorts, so the order handed in does not matter, but the cast does:
+      // a feed row IS a thread row plus the client-only fields.
+      return {
+        messages: page.items as ThreadRow[],
+        hasMore: page.hasMore,
+      };
+    },
+    [societyId, setReactions]
+  );
+
+  const history = useMessageHistory({
+    messages,
+    setMessages,
+    listRef,
+    hasMore: hasMoreHistory,
+    fetchPage: fetchEarlier,
+  });
+
   const didInitialScroll = useRef(false);
   const newest = messages.length > 0 ? messages[messages.length - 1] : null;
   const newestId = newest?.id ?? null;
   const newestIsMine = newest?.is_mine === true;
+  const suppressAutoScroll = history.suppressAutoScroll;
   useEffect(() => {
     const el = listRef.current;
     if (!el) return;
@@ -436,6 +473,10 @@ export function AnnouncementThread({
       didInitialScroll.current = true;
       return;
     }
+    // A history prepend changes `messages.length` and would otherwise be read
+    // as "something new arrived" — scrolling a reader who is at the bottom to
+    // the newest message and undoing the compensation just applied.
+    if (suppressAutoScroll) return;
     if (
       !shouldAutoScroll({
         metrics: {
@@ -449,7 +490,7 @@ export function AnnouncementThread({
       return;
     }
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [newestId, newestIsMine, messages.length]);
+  }, [newestId, newestIsMine, messages.length, suppressAutoScroll]);
 
   const react = useCallback(
     async (messageId: string, emoji: string) => {
@@ -851,6 +892,7 @@ export function AnnouncementThread({
           ref={listRef}
           className="flex max-h-[70vh] min-h-[240px] flex-col gap-2 overflow-y-auto rounded-[14px] bg-card/60 p-3"
         >
+          <LoadEarlier status={history.status} onLoad={history.loadEarlier} />
           {messages.map((row, i) => {
             const m = fromAnnouncementRow(row);
             const prev = i > 0 ? messages[i - 1] : null;
